@@ -1,0 +1,19 @@
+{
+  "name": "ai-control-plane-sdk",
+  "version": "1.0.0",
+  "description": "SDK for AI Control Plane - Autonomous runtime control for microservices",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "microservices",
+    "control-plane",
+    "performance",
+    "caching",
+    "circuit-breaker",
+    "monitoring"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
