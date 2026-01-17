@@ -1,8 +1,19 @@
+/**
+ * Generate a unique tenant ID
+ * @param {string} prefix - Optional prefix for the tenant ID (e.g., 'user', 'org', 'customer')
+ * @returns {string} Unique tenant identifier
+ */
+function generateTenantId(prefix = 'tenant') {
+  const crypto = require('crypto');
+  const uuid = crypto.randomUUID();
+  return `${prefix}-${uuid}`;
+}
 
 class ControlPlaneSDK {
   constructor(config = {}) {
     this.controlPlaneUrl = config.controlPlaneUrl || 'http://localhost:8000';
     this.serviceName = config.serviceName || 'unknown-service';
+    this.tenantId = config.tenantId || 'null';
     this.configCache = {};
     this.configCacheTTL = config.configCacheTTL || 30000; // 30 seconds
   }
@@ -19,7 +30,8 @@ class ControlPlaneSDK {
           service_name: this.serviceName,
           endpoint: endpoint,
           latency_ms: latencyMs,
-          status: status
+          status: status,
+          tenant_id: this.tenantId
         }),
         timeout: 1000
       });
@@ -42,11 +54,13 @@ class ControlPlaneSDK {
     }
 
     try {
-      const response = await fetch(
-        `${this.controlPlaneUrl}/api/config/${this.serviceName}${endpoint}`,
-        { method: 'GET', timeout: 1000 }
-      );
-      
+    // Build URL with tenant_id if provided
+      let url = `${this.controlPlaneUrl}/api/config/${this.serviceName}${endpoint}`;
+      if (this.tenantId) {
+        url += `?tenant_id=${this.tenantId}`;
+      }
+    
+      const response = await fetch(url, { method: 'GET', timeout: 1000 });
       const config = await response.json();
       
       // Cache it
@@ -101,3 +115,4 @@ class ControlPlaneSDK {
 }
 
 export default ControlPlaneSDK
+export { generateTenantId }
