@@ -52,11 +52,11 @@ async def get_all_signals(db:Session = Depends(get_db)):
 
 
 @app.get("/api/config/{service_name}/{endpoint:path}")
-async def get_config(service_name: str, endpoint: str):
+async def get_config(service_name: str, endpoint: str, tenant_id: str = None, db: Session = Depends(get_db)):
     """
     Services request their runtime configuration
     
-    Example: GET /api/config/demo-service/login
+    Example: GET /api/config/demo-service/login?tenant_id=tenant123
     
     Returns the decision (cache enabled or not)
     """
@@ -65,13 +65,14 @@ async def get_config(service_name: str, endpoint: str):
     if not endpoint.startswith('/'):
         endpoint = '/' + endpoint
     
-    # Get decision
-    decision = make_decision(service_name, endpoint)
+    # Get decision with tenant_id
+    decision = make_decision(service_name, endpoint, tenant_id, db)
     
     # Return config
     return {
         'service_name': service_name,
         'endpoint': endpoint,
+        'tenant_id': tenant_id,
         'cache_enabled': decision['cache_enabled'],
         'circuit_breaker': decision['circuit_breaker'],
         'reason': decision['reason']

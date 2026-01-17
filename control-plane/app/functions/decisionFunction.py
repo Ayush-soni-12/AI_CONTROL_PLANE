@@ -9,22 +9,34 @@ make_ai_decision = ai_engine.make_ai_decision
 
 
 
-def make_decision(service_name, endpoint, db:Session = Depends(get_db)):
+def make_decision(service_name, endpoint, tenant_id=None, db: Session = None):
     """
     Decide if cache should be enabled for this endpoint
     
     Rule: If average latency > 500ms, enable cache
     
+    Args:
+        service_name: Name of the service
+        endpoint: API endpoint path
+        tenant_id: Optional tenant identifier for multi-tenant filtering
+        db: Database session
+    
     Returns: dictionary with decision
     """
 
-
-    signals = db.query(models.Signal).filter(
+    # Build query with service_name and endpoint filters
+    query = db.query(models.Signal).filter(
         models.Signal.service_name == service_name,
         models.Signal.endpoint == endpoint
-    ).order_by(models.Signal.timestamp.desc()).limit(10).all()
+    )
+    
+    # Add tenant_id filter if provided
+    if tenant_id:
+        query = query.filter(models.Signal.tenant_id == tenant_id)
+    
+    signals = query.order_by(models.Signal.timestamp.desc()).limit(10).all()
 
-    print(f"fetch signals for {service_name}{endpoint} : {signals}")
+    print(f"fetch signals for {service_name}{endpoint} (tenant: {tenant_id or 'all'}): {signals}")
 
     if len(signals) < 3:
         return {
@@ -55,3 +67,4 @@ def make_decision(service_name, endpoint, db:Session = Depends(get_db)):
         'circuit_breaker': ai_decision.get('circuit_breaker', False),
         'reason': ai_decision['reasoning']
     }
+

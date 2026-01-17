@@ -12,3 +12,4 @@ class SignalBase(BaseModel):
     endpoint: str
     latency_ms: float
     status: str
+    tenant_id: str
