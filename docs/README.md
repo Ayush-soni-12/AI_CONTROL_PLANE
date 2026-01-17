@@ -7,6 +7,7 @@ Autonomous runtime control system for microservices.
 A service that monitors your microservices and automatically applies performance optimizations without code changes or redeployment.
 
 ## How It Works
+
 ```
 1. Your service sends performance signals → Control Plane
 2. Control Plane analyzes patterns with AI
@@ -33,6 +34,7 @@ A service that monitors your microservices and automatically applies performance
 - [Use Cases](USE_CASES.md) - Real-world examples
 
 ## Architecture
+
 ```
 ┌─────────────────────────────────────────────┐
 │          Your Microservices                 │
@@ -67,41 +69,35 @@ A service that monitors your microservices and automatically applies performance
 
 ## Installation
 
-### Control Plane (Self-Hosted)
-```bash
-# Clone repository
-git clone https://github.com/your-org/ai-control-plane
-cd ai-control-plane/control-plane
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Setup database
-createdb control_plane
-python database.py
-
-# Run
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
 ### SDK (In Your Service)
+
 ```bash
 npm install ai-control-plane-sdk
 ```
+
+#### Basic Setup
+
+The SDK provides a `generateTenantId()` helper function to create unique tenant identifiers:
+
 ```javascript
-const ControlPlane = require('ai-control-plane-sdk');
+
+
+const ControlPlane = require("ai-control-plane-sdk");
+const { generateTenantId } = require("ai-control-plane-sdk");
 
 const controlPlane = new ControlPlane({
-  serviceName: 'my-service',
-  controlPlaneUrl: 'http://control-plane:8000'
+  tenantId: generateTenantId("user"), // Static tenant ID
+  serviceName: "my-service",
+  controlPlaneUrl: "http://control-plane:8000",
 });
 
-app.get('/api/users',
-  controlPlane.middleware('/api/users'),
+app.get(
+  "/api/users",
+  controlPlane.middleware("/api/users"),
   async (req, res) => {
     // Your code - automatic tracking!
     res.json(users);
-  }
+  },
 );
 ```
 
