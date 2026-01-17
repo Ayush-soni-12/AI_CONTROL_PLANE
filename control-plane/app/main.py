@@ -73,5 +73,6 @@ async def get_config(service_name: str, endpoint: str):
         'service_name': service_name,
         'endpoint': endpoint,
         'cache_enabled': decision['cache_enabled'],
+        'circuit_breaker': decision['circuit_breaker'],
         'reason': decision['reason']
     }
