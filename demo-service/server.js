@@ -1,198 +1,245 @@
-import express from "express";
-const app = express();
+const express = require('express');
+const ControlPlane = require('ai-control-plane-sdk');
 
-// Middleware to parse JSON
+const app = express();
 app.use(express.json());
 
-// Simple home route
-app.get('/', (req, res) => {
-  res.json({ message: 'Demo Service is running!' });
+// Initialize SDK
+const controlPlane = new ControlPlane({
+  serviceName: 'demo-service',
+  controlPlaneUrl: 'http://localhost:8000'
 });
-
 
 // Simple in-memory cache
 const cache = {};
 
-// Simulate slow database call
+// Helper functions
 function slowDatabaseWork() {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     setTimeout(() => {
       resolve({ userId: 123, username: 'testuser' });
-    }, 600); // 600ms delay
+    }, 600);
   });
 }
 
-// Simulate slow product fetch
 function getProductsFromDatabase() {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     setTimeout(() => {
       resolve([
         { id: 1, name: 'Laptop', price: 999 },
         { id: 2, name: 'Mouse', price: 29 },
-        { id: 3, name: 'Keyboard', price: 79 },
-        { id: 4, name: 'Monitor', price: 299 },
-        { id: 5, name: 'Headphones', price: 149 }
+        { id: 3, name: 'Keyboard', price: 79 }
       ]);
-    }, 800); // 800ms delay (slow database)
+    }, 800);
   });
 }
 
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Demo Service with SDK',
+    endpoints: {
+      middleware: ['/login', '/products'],
+      manual: ['/checkout', '/search']
+    }
+  });
+});
 
-// Function to send signal to control plane
-async function sendSignalToControlPlane(endpoint, latency, status) {
-  try {
-    const response = await fetch('http://localhost:8000/api/signals', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        service_name: 'demo-service',
-        endpoint: endpoint,
-        latency_ms: latency,
-        status: status
-      })
+// =====================================
+// MIDDLEWARE APPROACH (Automatic)
+// =====================================
+
+app.post('/login', 
+  controlPlane.middleware('/login'),
+  async (req, res) => {
+    console.log('📧 Login request (using middleware)');
+    
+    if (req.controlPlane.shouldSkip) {
+      return res.json({
+        message: 'Service in degraded mode',
+        token: 'cached-token'
+      });
+    }
+    
+    const user = await slowDatabaseWork();
+    const token = 'token-' + Date.now();
+    
+    res.json({
+      success: true,
+      token: token,
+      user: user
     });
-    
-    const data = await response.json();
-    console.log(`📤 Signal sent: ${endpoint} ${latency}ms - ${data.status}`);
-    
-  } catch (error) {
-    // Don't crash if control plane is down
-    console.log('⚠️  Control plane unavailable:', error.message);
   }
-}
+);
 
-// Function to get configuration from control plane
-async function getConfigFromControlPlane(endpoint) {
-  try {
-    const response = await fetch(
-      `http://localhost:8000/api/config/demo-service${endpoint}`,
-      { method: 'GET' }
-    );
+app.get('/products',
+  controlPlane.middleware('/products'),
+  async (req, res) => {
+    console.log('🛍️ Products request (using middleware)');
     
-    const config = await response.json();
-    console.log(`⚙️  Config received: cache=${config.cache_enabled} (${config.reason})`);
+    if (req.controlPlane.shouldCache && cache.products) {
+      console.log('⚡ Cache hit!');
+      return res.json({
+        cached: true,
+        products: cache.products
+      });
+    }
     
-    return config;
+    if (req.controlPlane.shouldSkip) {
+      return res.json({
+        circuit_breaker_active: true,
+        products: cache.products || []
+      });
+    }
     
-  } catch (error) {
-    console.log('⚠️  Control plane unavailable, using defaults');
-    // Return safe defaults if control plane is down
-    return {
-      cache_enabled: false,
-      reason: 'Control plane unavailable'
-    };
+    console.log('💾 Fetching from database...');
+    const products = await getProductsFromDatabase();
+    
+    if (req.controlPlane.shouldCache) {
+      cache.products = products;
+      console.log('💾 Cached for future requests');
+    }
+    
+    res.json({
+      cached: false,
+      products: products
+    });
   }
-}
+);
 
+// =====================================
+// MANUAL TRACKING APPROACH
+// =====================================
 
-
-
-// Login endpoint
-// Better approach - cache system config
-app.post('/login', async (req, res) => {
-  console.log('📧 Login request received');
+app.post('/checkout', async (req, res) => {
+  console.log('🛒 Checkout request (manual tracking)');
+  
   const startTime = Date.now();
   
-  const config = await getConfigFromControlPlane('/login');
+  // Manual: Get config
+  const config = await controlPlane.getConfig('/checkout');
+  console.log(`⚙️ Config: cache=${config.cache_enabled}, circuit_breaker=${config.circuit_breaker}`);
   
-  // Cache system configuration (SAFE!)
-  let systemConfig;
-  if (config.cache_enabled && cache['system_config']) {
-    console.log('⚡ Using cached system config');
-    systemConfig = cache['system_config'];
-  } else {
-    console.log('💾 Fetching system config from DB...');
-    // Simulate fetching system config (slow)
-    await new Promise(resolve => setTimeout(resolve, 300));
-    systemConfig = {
-      passwordMinLength: 8,
-      allowedDomains: ['example.com', 'test.com'],
-      sessionTimeout: 3600
+  // Manual: Check circuit breaker
+  if (config.circuit_breaker) {
+    console.log('⚠️ Circuit breaker active');
+    
+    const latency = Date.now() - startTime;
+    await controlPlane.track('/checkout', latency, 'success');
+    
+    return res.json({
+      success: false,
+      message: 'Checkout temporarily unavailable',
+      circuit_breaker_active: true
+    });
+  }
+  
+  // Manual: Check cache
+  if (config.cache_enabled && cache.checkout) {
+    console.log('⚡ Using cached checkout data');
+    
+    const latency = Date.now() - startTime;
+    await controlPlane.track('/checkout', latency, 'success');
+    
+    return res.json({
+      success: true,
+      cached: true,
+      order: cache.checkout
+    });
+  }
+  
+  // Do work
+  console.log('💳 Processing checkout...');
+  
+  try {
+    await new Promise(resolve => setTimeout(resolve, 700));
+    
+    const order = {
+      orderId: 'ORD-' + Date.now(),
+      total: 1299,
+      items: ['Laptop', 'Mouse'],
+      status: 'confirmed'
     };
     
     if (config.cache_enabled) {
-      cache['system_config'] = systemConfig;
-      console.log('💾 System config cached');
+      cache.checkout = order;
+      console.log('💾 Checkout result cached');
     }
+    
+    const latency = Date.now() - startTime;
+    await controlPlane.track('/checkout', latency, 'success');
+    
+    res.json({
+      success: true,
+      cached: false,
+      order: order
+    });
+    
+  } catch (error) {
+    console.error('❌ Checkout failed:', error.message);
+    
+    const latency = Date.now() - startTime;
+    await controlPlane.track('/checkout', latency, 'error');
+    
+    res.status(500).json({
+      success: false,
+      error: 'Checkout failed'
+    });
   }
-  
-  // Validate against system config
-  const { email, password } = req.body;
-  const domain = email.split('@')[1];
-  
-  if (!systemConfig.allowedDomains.includes(domain)) {
-    return res.status(400).json({ error: 'Domain not allowed' });
-  }
-  
-  // User authentication (NEVER cached - always fresh!)
-  console.log('🔐 Authenticating user (not cached)...');
-  const user = await slowDatabaseWork();
-  
-  // Generate unique token (NEVER cached!)
-  const token = 'unique-token-' + Date.now() + '-' + Math.random();
-  
-  const latency = Date.now() - startTime;
-  await sendSignalToControlPlane('/login', latency, 'success');
-  
-  res.json({
-    success: true,
-    token: token,  // Unique per user
-    user: user
-  });
 });
 
-
-
-// Products endpoint - PERFECT for caching!
-app.get('/products', async (req, res) => {
-  console.log('🛍️  Products request received');
+app.get('/search', async (req, res) => {
+  const query = req.query.q || '';
+  console.log(`🔍 Search request: "${query}" (manual tracking)`);
   
   const startTime = Date.now();
   
-  // Get config from control plane
-  const config = await getConfigFromControlPlane('/products');
+  // Manual: Get config
+  const config = await controlPlane.getConfig('/search');
   
-  // Check cache if enabled
-  if (config.cache_enabled && cache['/products']) {
-    console.log('⚡ CACHE HIT - Returning cached products!');
+  // Manual: Check cache
+  const cacheKey = `search:${query}`;
+  if (config.cache_enabled && cache[cacheKey]) {
+    console.log('⚡ Returning cached search results');
     
     const latency = Date.now() - startTime;
-    await sendSignalToControlPlane('/products', latency, 'success');
+    await controlPlane.track('/search', latency, 'success');
     
     return res.json({
+      query: query,
       cached: true,
-      products: cache['/products']
+      results: cache[cacheKey]
     });
   }
   
-  // Cache miss - fetch from database
-  console.log('💾 CACHE MISS - Fetching products from database...');
-  const products = await getProductsFromDatabase();
+  // Simulate search
+  console.log('🔍 Searching database...');
+  await new Promise(resolve => setTimeout(resolve, 650));
   
-  // Store in cache if enabled
+  const results = [
+    { id: 1, title: 'Laptop Pro', price: 999 },
+    { id: 2, title: 'Laptop Air', price: 799 }
+  ];
+  
   if (config.cache_enabled) {
-    cache['/products'] = products;
-    console.log('💾 Products cached for future requests');
+    cache[cacheKey] = results;
+    console.log('💾 Search results cached');
   }
   
   const latency = Date.now() - startTime;
-  console.log(`⏱️  Request took ${latency}ms`);
-  await sendSignalToControlPlane('/products', latency, 'success');
+  await controlPlane.track('/search', latency, 'success');
   
   res.json({
+    query: query,
     cached: false,
-    products: products
+    results: results
   });
 });
 
-
-
-
-// Start server
 const PORT = 3001;
 app.listen(PORT, () => {
-  console.log(`🚀 Demo Service running on http://localhost:${PORT}`);
+  console.log(`🚀 Demo Service running on port ${PORT}`);
+  console.log(`📦 Using AI Control Plane SDK`);
+  console.log(`\nEndpoints:`);
+  console.log(`  Middleware: POST /login, GET /products`);
+  console.log(`  Manual: POST /checkout, GET /search?q=laptop`);
 });
-
