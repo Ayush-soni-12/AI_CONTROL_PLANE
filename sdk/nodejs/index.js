@@ -1,10 +1,11 @@
+import crypto from 'crypto';
+
 /**
  * Generate a unique tenant ID
  * @param {string} prefix - Optional prefix for the tenant ID (e.g., 'user', 'org', 'customer')
  * @returns {string} Unique tenant identifier
  */
 function generateTenantId(prefix = 'tenant') {
-  const crypto = require('crypto');
   const uuid = crypto.randomUUID();
   return `${prefix}-${uuid}`;
 }
