@@ -1,11 +1,12 @@
-const express = require('express');
-const ControlPlane = require('ai-control-plane-sdk');
+import express from 'express';
+import ControlPlaneSDK, { generateTenantId } from "ai-control-plane-sdk";
 
 const app = express();
 app.use(express.json());
 
 // Initialize SDK
-const controlPlane = new ControlPlane({
+const controlPlane = new ControlPlaneSDK({
+  tenantId: generateTenantId('user'),
   serviceName: 'demo-service',
   controlPlaneUrl: 'http://localhost:8000'
 });
