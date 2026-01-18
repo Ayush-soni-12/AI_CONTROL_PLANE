@@ -16,7 +16,22 @@ class ControlPlaneSDK {
     this.serviceName = config.serviceName || 'unknown-service';
     this.tenantId = config.tenantId || 'null';
     this.configCache = {};
-    this.configCacheTTL = config.configCacheTTL || 30000; // 30 seconds
+    // Reduced default TTL to 10s for faster adaptation to changing performance
+    // Control plane makes decisions based on average of last 10 requests,
+    // so we need to refresh config more frequently
+    this.configCacheTTL = config.configCacheTTL || 10000; // 10 seconds (was 30s)
+  }
+
+  /**
+   * Invalidate cache for a specific endpoint
+   * This forces the next getConfig call to fetch fresh data
+   */
+  invalidateCache(endpoint) {
+    const cacheKey = `${this.serviceName}:${endpoint}:${this.tenantId}`;
+    if (this.configCache[cacheKey]) {
+      console.log(`[ControlPlane] Cache invalidated for ${cacheKey}`);
+      delete this.configCache[cacheKey];
+    }
   }
 
   /**
@@ -24,6 +39,15 @@ class ControlPlaneSDK {
    */
   async track(endpoint, latencyMs, status = 'success') {
     try {
+      // Invalidate cache only on errors
+      // Note: We don't invalidate on individual high latency because the control plane
+      // makes decisions based on AVERAGE latency across multiple requests (last 10).
+      // A single slow request doesn't mean the average is high yet.
+      if (status === 'error') {
+        console.log(`[ControlPlane] Error detected - invalidating cache`);
+        this.invalidateCache(endpoint);
+      }
+
       await fetch(`${this.controlPlaneUrl}/api/signals`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -46,11 +70,13 @@ class ControlPlaneSDK {
    * Get runtime configuration from control plane
    */
   async getConfig(endpoint) {
-    const cacheKey = `${this.serviceName}:${endpoint}`;
+    // Include tenant_id in cache key for proper multi-tenant isolation
+    const cacheKey = `${this.serviceName}:${endpoint}:${this.tenantId}`;
     const cached = this.configCache[cacheKey];
     
     // Return cached config if still fresh
     if (cached && Date.now() - cached.timestamp < this.configCacheTTL) {
+      console.log(`[ControlPlane] Using cached config for ${cacheKey}`);
       return cached.config;
     }
 
@@ -61,10 +87,11 @@ class ControlPlaneSDK {
         url += `?tenant_id=${this.tenantId}`;
       }
     
+      console.log(`[ControlPlane] Fetching fresh config for ${cacheKey}`);
       const response = await fetch(url, { method: 'GET', timeout: 1000 });
       const config = await response.json();
       
-      // Cache it
+      // Cache it with tenant-aware key
       this.configCache[cacheKey] = {
         config: config,
         timestamp: Date.now()
