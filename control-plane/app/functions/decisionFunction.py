@@ -2,7 +2,7 @@ from ..database import get_db
 from  ..import models
 from fastapi import Depends
 from sqlalchemy.orm import Session
-from  ...ai_engine import ai_engine
+from ..ai_engine import ai_engine
 
 make_ai_decision = ai_engine.make_ai_decision
 
@@ -41,6 +41,7 @@ def make_decision(service_name, endpoint, tenant_id=None, db: Session = None):
     if len(signals) < 3:
         return {
             'cache_enabled': False,
+            'circuit_breaker': False,
             'reason': 'Not enough data yet (need 3+ signals)'
         }
     
