@@ -429,11 +429,10 @@ See [CONTRIBUTOR_WORKFLOW.md](./CONTRIBUTOR_WORKFLOW.md) for detailed instructio
 
 ## 📚 Documentation
 
-- [Docker Setup Explained](./DOCKER_EXPLAINED.md) - Detailed Docker documentation
 - [Contributor Workflow](./CONTRIBUTOR_WORKFLOW.md) - How to contribute
-- [GitHub Fork Workflow](./GITHUB_FORK_WORKFLOW.md) - Fork and PR process
 - [SDK Quick Reference](./SDK_QUICK_REFERENCE.md) - SDK usage guide
-- [Cache Strategy](./CACHE_STRATEGY_UPDATED.md) - Caching implementation details
+- [Cache Strategy](./REDIS_GUIDE.md) - Caching implementation details
+- [Cache Flow Diagram](./CACHE_FLOW_DIAGRAM.md) - How caching work 
 
 ---
 
@@ -537,8 +536,8 @@ MIT License - feel free to use this project!
 
 ## 📧 Contact
 
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Email: your.email@example.com
+- GitHub: [@AyushSoni](https://github.com/Ayush-soni-12)
+- Email: sudhirsoni9889@gmail.com
 
 ---
 

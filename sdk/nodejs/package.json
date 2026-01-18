@@ -1,7 +1,7 @@
 {
   "name": "ai-control-plane-sdk",
   "version": "1.0.0",
-  "description": "SDK for AI Control Plane - Autonomous runtime control for microservices",
+  "description": "AI-powered SDK for autonomous microservices optimization with dynamic caching, circuit breaking, and intelligent decision-making",
   "main": "index.js",
   "types": "index.d.ts",
   "type": "module",
@@ -9,13 +9,37 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
+    "ai",
     "microservices",
     "control-plane",
     "performance",
+    "optimization",
     "caching",
     "circuit-breaker",
-    "monitoring"
+    "monitoring",
+    "langgraph",
+    "intelligent",
+    "autonomous",
+    "multi-tenant",
+    "express",
+    "middleware"
   ],
-  "author": "Your Name",
-  "license": "MIT"
+  "author": "Ayush",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/ai-control-plane.git"
+  },
+  "homepage": "https://github.com/yourusername/ai-control-plane#readme",
+  "bugs": {
+    "url": "https://github.com/yourusername/ai-control-plane/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ]
 }
