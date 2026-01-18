@@ -1,0 +1,157 @@
+# Docker Compose version
+version: '3.8'
+
+# Define all services (containers) that make up the application
+services:
+  
+  # PostgreSQL Database Service
+  postgres:
+    # Use official PostgreSQL 15 image from Docker Hub
+    image: postgres:15
+    
+    # Container name (easier to identify)
+    container_name: ai-control-plane-db
+    
+    # Environment variables for PostgreSQL
+    environment:
+      # Database credentials
+      POSTGRES_USER: controlplane # your username
+      POSTGRES_PASSWORD: password123 # your password
+      POSTGRES_DB: controlplane # your database name
+    
+    # Port mapping: host:container
+    # Access PostgreSQL at localhost:5432 from your computer
+    ports:
+      - "5433:5432"
+    
+    # Volume for persistent data
+    # Data survives even if container is deleted
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    
+    # Health check to ensure database is ready
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U controlplane"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+    # Restart policy
+    restart: unless-stopped
+
+  # Control Plane Service (FastAPI)
+  control-plane:
+    # Build from Dockerfile in ./control-plane directory
+    build:
+      context: ./control-plane
+      dockerfile: Dockerfile
+    
+    # Container name
+    container_name: ai-control-plane-api
+    
+    # Port mapping: host:container#
+    # Access API at http://localhost:8000
+    ports:
+      - "8000:8000"
+    
+    # Environment variables
+    environment:
+      # Database connection string
+      # Note: Use 'postgres' as hostname (service name in docker-compose)
+      DATABASE_URL: postgresql://controlplane:password123@postgres:5432/controlplane # set the database connection string using username, password, hostname, port, and database name
+      
+      # Optional: Gemini API key (if needed)
+      # GEMINI_API_KEY: ${GEMINI_API_KEY}
+    #
+    # Volume mounting for development
+    # Maps local ./control-plane to /app in container
+    # Changes to code on your computer reflect immediately in container!
+    volumes:
+      - ./control-plane:/app
+      # Exclude these directories (keep them in container)
+      - /app/__pycache__
+      - /app/venv
+    
+    # Wait for postgres to be healthy before starting
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    # Restart policy
+    restart: unless-stopped
+
+  # Demo Service (Express/Node.js)
+  demo-service:
+    # Build from Dockerfile in ./demo-service directory
+    build:
+      context: ./demo-service
+      dockerfile: Dockerfile
+    
+    # Container name
+    container_name: ai-control-plane-demo
+    
+    # Port mapping: host:container
+    # Access demo service at http://localhost:3001
+    ports:
+      - "3001:3001"
+    
+    # Environment variables
+    environment:
+      # Control plane URL
+      # Note: Use 'control-plane' as hostname (service name in docker-compose)
+      CONTROL_PLANE_URL: http://control-plane:8000
+    
+    # Volume mounting for development
+    # Maps local ./demo-service to /app in container
+    volumes:
+      - ./demo-service:/app
+      # Exclude node_modules (keep them in container)
+      - /app/node_modules
+    
+    # Wait for control-plane to start
+    depends_on:
+      - control-plane
+    
+    # Restart policy
+    restart: unless-stopped
+
+  # pgAdmin Service (Database Management UI)
+  pgadmin:
+    # Use official pgAdmin 4 image
+    image: dpage/pgadmin4:latest
+    
+    # Container name
+    container_name: ai-control-plane-pgadmin
+    
+    # Environment variables for pgAdmin
+    environment:
+      # Login credentials for pgAdmin web interface
+      PGADMIN_DEFAULT_EMAIL: sudhirsoni9889@gmail.com # your email
+      PGADMIN_DEFAULT_PASSWORD: admin123 # your password
+      # Disable master password prompt
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    
+    # Port mapping: host:container
+    # Access pgAdmin at http://localhost:5050
+    ports:
+      - "5051:80"
+    
+    # Volume for persistent pgAdmin data
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    
+    # Wait for postgres to start
+    depends_on:
+      - postgres
+    
+    # Restart policy
+    restart: unless-stopped
+
+# Named volumes
+# These persist data even when containers are deleted
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
