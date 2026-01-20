@@ -39,7 +39,7 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Demo Service with SDK',
     endpoints: {
-      middleware: ['/login', '/products'],
+      middleware: ['/login', '/products', '/products/:id'],
       manual: ['/checkout', '/search']
     }
   });
@@ -103,6 +103,65 @@ app.get('/products',
     res.json({
       cached: false,
       products: products
+    });
+  }
+);
+
+
+// =====================================
+// MIDDLEWARE APPROACH (Automatic) with custom endpoint
+// =====================================
+
+// Get specific product by ID
+app.get('/products/:id',
+  // Custom middleware wrapper to track each product separately
+  (req, res, next) => {
+    const productId = req.params.id;
+    const endpoint = `/products/${productId}`;
+    console.log(`🔍 [DEBUG] Middleware endpoint: ${endpoint}`);
+    // Dynamically create middleware with the actual product ID
+    return controlPlane.middleware(endpoint)(req, res, next);
+  },
+  async (req, res) => {
+    const productId = parseInt(req.params.id);
+    console.log(`🛍️ Product detail request for ID: ${productId} (using middleware)`);
+    
+    // Check cache for this specific product
+    const cacheKey = `product:${productId}`;
+    if (req.controlPlane.shouldCache && cache[cacheKey]) {
+      console.log('⚡ Cache hit for product!');
+      return res.json({
+        cached: true,
+        product: cache[cacheKey]
+      });
+    }
+    
+    if (req.controlPlane.shouldSkip) {
+      return res.json({
+        circuit_breaker_active: true,
+        product: cache[cacheKey] || null
+      });
+    }
+    
+    console.log('💾 Fetching product from database...');
+    const products = await getProductsFromDatabase();
+    const product = products.find(p => p.id === productId);
+    
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found'
+      });
+    }
+    
+    if (req.controlPlane.shouldCache) {
+      cache[cacheKey] = product;
+      console.log(`💾 Product ${productId} cached for future requests`);
+    }
+    
+    res.json({
+      cached: false,
+      product: product
     });
   }
 );
@@ -241,6 +300,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Demo Service running on port ${PORT}`);
   console.log(`📦 Using AI Control Plane SDK`);
   console.log(`\nEndpoints:`);
-  console.log(`  Middleware: POST /login, GET /products`);
+  console.log(`  Middleware: POST /login, GET /products, GET /products/:id`);
   console.log(`  Manual: POST /checkout, GET /search?q=laptop`);
 });
