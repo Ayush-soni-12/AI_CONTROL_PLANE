@@ -13,7 +13,6 @@ import {
   BarChart3,
   Menu,
   X,
-  ChevronRight,
   Sparkles,
 } from "lucide-react";
 import { useCheckAuth, useLogout } from "@/hooks/useSignals";
@@ -66,7 +65,7 @@ export function DashboardSidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-screen w-72 bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 border-r border-gray-800/50 z-40
+          fixed top-0 left-0 h-screen w-72 bg-linear-to-b from-gray-950 via-gray-900 to-gray-950 border-r border-gray-800/50 z-40
           transform transition-transform duration-300 ease-in-out
           lg:translate-x-0
           ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
@@ -78,13 +77,13 @@ export function DashboardSidebar() {
             <Link href="/dashboard" className="block">
               <div className="flex items-center gap-3 mb-2">
                 <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl blur-md opacity-50"></div>
-                  <div className="relative p-2.5 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+                  <div className="absolute inset-0 bg-linear-to-br from-purple-500 to-pink-500 rounded-xl blur-md opacity-50"></div>
+                  <div className="relative p-2.5 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
                     <Server className="w-6 h-6 text-purple-400" />
                   </div>
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+                  <h1 className="text-xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
                     AI Control Plane
                   </h1>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -101,12 +100,12 @@ export function DashboardSidebar() {
           {/* User Profile Card */}
           <div className="px-6 pb-6">
             <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 to-pink-600/20 rounded-2xl blur-sm group-hover:blur-md transition-all"></div>
+              <div className="absolute inset-0 bg-linear-to-r from-purple-600/20 to-pink-600/20 rounded-2xl blur-sm group-hover:blur-md transition-all"></div>
               <div className="relative p-4 rounded-2xl bg-gray-900/80 backdrop-blur-sm border border-gray-800 group-hover:border-purple-500/30 transition-all duration-300">
                 <div className="flex items-center gap-3">
                   <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full blur-sm"></div>
-                    <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center ring-2 ring-gray-900">
+                    <div className="absolute inset-0 bg-linear-to-br from-purple-500 to-pink-500 rounded-full blur-sm"></div>
+                    <div className="relative w-12 h-12 rounded-full bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center ring-2 ring-gray-900">
                       <span className="text-white font-bold text-lg">
                         {user?.name?.charAt(0).toUpperCase() || "U"}
                       </span>
@@ -141,20 +140,20 @@ export function DashboardSidebar() {
                       group relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300
                       ${
                         active
-                          ? "bg-gradient-to-r from-purple-600/20 to-pink-600/20 text-white shadow-lg shadow-purple-500/10"
+                          ? "bg-linear-to-r from-purple-600/20 to-pink-600/20 text-white shadow-lg shadow-purple-500/10"
                           : "text-gray-400 hover:text-white hover:bg-gray-800/50"
                       }
                     `}
                   >
                     {active && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-purple-600/10 to-pink-600/10 rounded-xl blur-sm"></div>
+                      <div className="absolute inset-0 bg-linear-to-r from-purple-600/10 to-pink-600/10 rounded-xl blur-sm"></div>
                     )}
                     <div
                       className={`
                       relative p-2 rounded-lg transition-all duration-300
                       ${
                         active
-                          ? "bg-gradient-to-br from-purple-500/20 to-pink-500/20"
+                          ? "bg-linear-to-br from-purple-500/20 to-pink-500/20"
                           : "bg-gray-800/50 group-hover:bg-gray-800"
                       }
                     `}
@@ -185,9 +184,9 @@ export function DashboardSidebar() {
             <button
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="group relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-gradient-to-r from-red-900/20 to-red-800/20 border border-red-500/20 hover:border-red-500/40 hover:from-red-900/30 hover:to-red-800/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+              className="group relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-linear-to-r from-red-900/20 to-red-800/20 border border-red-500/20 hover:border-red-500/40 hover:from-red-900/30 hover:to-red-800/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-red-600/0 via-red-600/5 to-red-600/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+              <div className="absolute inset-0 bg-linear-to-r from-red-600/0 via-red-600/5 to-red-600/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
               <div className="relative p-2 rounded-lg bg-red-900/30">
                 <LogOut className="w-4 h-4 text-red-400" />
               </div>

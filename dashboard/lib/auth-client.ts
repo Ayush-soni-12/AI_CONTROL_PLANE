@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
-import type { SignupRequest, LoginRequest, AuthResponse, User, AuthError } from './types';
+import type { SignupRequest, LoginRequest, AuthResponse, User, AuthError, ApiKeyData, ApiKeyGenerateResponse } from './types';
+
 
 const CONTROL_PLANE_URL = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000';
 
@@ -86,6 +87,60 @@ export async function logout(): Promise<void> {
     // Even if logout fails, we can consider the user logged out on client
   }
 }
+
+
+
+/**
+ * Get all API keys for the current user
+ * 
+ * @returns Promise with array of API keys
+ */
+export async function getApiKeys(): Promise<ApiKeyData[]> {
+  try {
+    const response = await authClient.get<ApiKeyData[]>('/api_keys');
+    return response.data;
+  } catch (error) {
+    console.error('Get API keys error:', error);
+    return [];
+  }
+}
+
+/**
+ * Generate a new API key
+ * 
+ * @param name - Optional name for the API key
+ * @returns Promise with generated API key response
+ */
+export async function generateApiKey(name?: string): Promise<ApiKeyGenerateResponse | null> {
+  try {
+    const response = await authClient.post<ApiKeyGenerateResponse>('/generate_api_key', { name });
+    console.log(response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Generate API key error:', error);
+    return null;
+  }
+}
+
+/**
+ * Delete an API key
+ * 
+ * @param keyId - ID of the API key to delete
+ * @returns Promise with success status
+ */
+export async function deleteApiKey(keyId: number): Promise<boolean> {
+  try {
+    await authClient.delete(`/api_keys/${keyId}`);
+    return true;
+  } catch (error) {
+    console.error('Delete API key error:', error);
+    return false;
+  }
+}
+
+
+
+
 
 /**
  * Check if user is authenticated (alias for authenticate)

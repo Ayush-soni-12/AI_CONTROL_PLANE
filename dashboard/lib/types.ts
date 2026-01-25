@@ -61,6 +61,25 @@ export interface User {
   created_at: string;
 }
 
+export interface ApiKeyData {
+  id: number;
+  key: string;
+  name: string | null;
+  created_at: string;
+  last_used: string | null;
+  is_active: boolean;
+}
+
+export interface ApiKeyGenerateResponse {
+  api_key: ApiKeyData;
+  message: string;
+}
+
+export interface ApiKeyCreateRequest {
+  name?: string;
+}
+
+
 export interface SignupRequest {
   name: string;
   email: string;
