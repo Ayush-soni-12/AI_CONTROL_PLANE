@@ -1,15 +1,56 @@
 "use client";
 
-import { useSignals } from "@/hooks/useSignals";
+import { useSignals, useCheckAuth } from "@/hooks/useSignals";
 import { aggregateServices } from "@/lib/function";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { ServiceCard } from "@/components/cards/ServiceCard";
 import { LatencyChart } from "@/components/cards/LatencyChart";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Zap, AlertTriangle, TrendingUp, Server } from "lucide-react";
+import {
+  Activity,
+  Zap,
+  AlertTriangle,
+  TrendingUp,
+  Server,
+  LogIn,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function DashboardPage() {
-  const { data: signals, isLoading, error } = useSignals();
+  const router = useRouter();
+
+  // Check authentication (validates token)
+  const { data: user, isLoading: isAuthLoading } = useCheckAuth();
+
+  // Fetch signals data
+  const { data: signals, isLoading: isSignalsLoading, error } = useSignals();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isAuthLoading && !user) {
+      router.push("/auth/login");
+    }
+  }, [user, isAuthLoading, router]);
+
+  // Show loading while checking auth
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-purple-950/5 to-background">
+        <div className="text-center">
+          <div className="inline-block p-4 rounded-2xl bg-purple-500/10 mb-4">
+            <LogIn className="w-12 h-12 text-purple-400 animate-pulse" />
+          </div>
+          <p className="text-gray-400 text-lg">Verifying authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated, show nothing (will redirect)
+  if (!user) {
+    return null;
+  }
 
   if (error) {
     return (
@@ -30,7 +71,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (isLoading || !signals) {
+  if (isSignalsLoading || !signals) {
     return (
       <div className="min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">

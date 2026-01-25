@@ -16,11 +16,13 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
-import { useTransition } from "react";
+import { useSignup } from "@/hooks/useSignals";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 function SignupPage() {
-
-  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const { mutate: signup, isPending, isError, error, isSuccess } = useSignup();
 
   const form = useForm<z.infer<typeof signupSchema>>({
     resolver: zodResolver(signupSchema),
@@ -33,14 +35,19 @@ function SignupPage() {
     },
   });
 
+  // Redirect to dashboard on successful signup
+  useEffect(() => {
+    if (isSuccess) {
+      router.push("/dashboard");
+    }
+  }, [isSuccess, router]);
+
   const onSubmit = async (data: z.infer<typeof signupSchema>) => {
-    startTransition(async () => {
-      try {
-        console.log("Form data:", data);
-        // Add your signup API call here
-      } catch (error) {
-        console.error("Signup error:", error);
-      }
+    signup({
+      name: data.name,
+      email: data.email,
+      password: data.password,
+      confirmPassword: data.confirmPassword,
     });
   };
 
@@ -59,6 +66,15 @@ function SignupPage() {
         </CardHeader>
 
         <CardContent className="space-y-6">
+          {/* Error Alert */}
+          {isError && error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-sm text-red-500 font-medium">
+                {error.message || "Signup failed. Please try again."}
+              </p>
+            </div>
+          )}
+
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             {/* Name Field */}
             <Controller
@@ -75,7 +91,6 @@ function SignupPage() {
                     type="text"
                     placeholder="John Doe"
                     aria-invalid={fieldState.invalid}
-                    
                     className="h-11"
                   />
                   {fieldState.invalid && (
@@ -101,7 +116,6 @@ function SignupPage() {
                     placeholder="you@example.com"
                     aria-invalid={fieldState.invalid}
                     autoComplete="email"
-                    
                     className="h-11"
                   />
                   {fieldState.invalid && (
@@ -130,7 +144,6 @@ function SignupPage() {
                     placeholder="••••••••"
                     aria-invalid={fieldState.invalid}
                     autoComplete="new-password"
-                    
                     className="h-11"
                   />
                   {fieldState.invalid && (
@@ -159,7 +172,6 @@ function SignupPage() {
                     placeholder="••••••••"
                     aria-invalid={fieldState.invalid}
                     autoComplete="new-password"
-                    
                     className="h-11"
                   />
                   {fieldState.invalid && (
@@ -197,8 +209,6 @@ function SignupPage() {
               </span>
             </div>
           </div>
-
-
 
           {/* Sign In Link */}
           <div className="text-center pt-4">
