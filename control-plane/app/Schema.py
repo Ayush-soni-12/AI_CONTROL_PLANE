@@ -53,3 +53,25 @@ class TokenResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# API Key Schemas
+class ApiKeyResponse(BaseModel):
+    id: int
+    key: str
+    name: Optional[str]
+    created_at: datetime
+    last_used: Optional[datetime]
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
+
+class ApiKeyCreate(BaseModel):
+    name: Optional[str] = None
+
+
+class ApiKeyGenerateResponse(BaseModel):
+    api_key: ApiKeyResponse
+    message: str

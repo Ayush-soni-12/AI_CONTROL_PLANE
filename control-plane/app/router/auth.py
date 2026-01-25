@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from .. import models, Schema
 from ..database import get_db
 from ..utils import get_password_hash, verify_password
-from .token import create_access_token, get_current_user 
+from .token import create_access_token, get_current_user
+import secrets
+import hashlib 
 
 router = APIRouter(
     prefix="/api/auth",
@@ -12,7 +14,7 @@ router = APIRouter(
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED, response_model=Schema.TokenResponse)
-async def signup(new_user: Schema.SignupRequest, db: Session = Depends(get_db)):
+async def signup(response: Response, new_user: Schema.SignupRequest, db: Session = Depends(get_db)):
     """
     Create a new user account
     
@@ -40,7 +42,7 @@ async def signup(new_user: Schema.SignupRequest, db: Session = Depends(get_db)):
     # Hash password
     hashed_password = get_password_hash(new_user.password)
     
-    # Create new user (exclude confirmPassword from database)
+    # Create new user (exclud, ine confirmPassword from database)
     user = models.User(
         email=new_user.email.lower(),
         name=new_user.name,
@@ -53,6 +55,18 @@ async def signup(new_user: Schema.SignupRequest, db: Session = Depends(get_db)):
     
     # Create access token (use user.id, not new_user.id)
     access_token = create_access_token(data={"user_id": str(user.id)})
+
+
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,      # HTTPS only
+        samesite="lax",   # or "strict"
+        max_age=60 * 60   # 1 hour
+    )
+
+
 
     return {
         "access_token": access_token,
@@ -132,3 +146,85 @@ async def logout(response: Response):
     )
     
     return {"message": "Successfully logged out"}
+
+
+def generate_secure_api_key() -> str:
+    """
+    Generate a secure API key using secrets module
+    Format: acp_<40 character hex string>
+    """
+    random_bytes = secrets.token_bytes(32)
+    api_key = hashlib.sha256(random_bytes).hexdigest()[:40]
+    return f"acp_{api_key}"
+
+
+@router.get("/api_keys", response_model=list[Schema.ApiKeyResponse])
+async def get_api_keys(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all API keys for the current authenticated user
+    """
+    current_user = get_current_user(request, db)
+    return current_user.api_keys
+
+
+@router.post("/generate_api_key", response_model=Schema.ApiKeyGenerateResponse)
+async def generate_api_key(
+    request: Request,
+    key_data: Schema.ApiKeyCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a new API key for the current authenticated user
+    """
+    current_user = get_current_user(request, db)
+    
+    # Generate new API key
+    new_key = generate_secure_api_key()
+    
+    # Create new API key record
+    api_key = models.ApiKey(
+        user_id=current_user.id,
+        key=new_key,
+        name=key_data.name or f"API Key {len(current_user.api_keys) + 1}"
+    )
+    
+    db.add(api_key)
+    db.commit()
+    db.refresh(api_key)
+    
+    return {
+        "api_key": api_key,
+        "message": "API key generated successfully"
+    }
+
+
+@router.delete("/api_keys/{key_id}")
+async def delete_api_key(
+    key_id: int,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a specific API key
+    """
+    current_user = get_current_user(request, db)
+    
+    # Find the API key
+    api_key = db.query(models.ApiKey).filter(
+        models.ApiKey.id == key_id,
+        models.ApiKey.user_id == current_user.id
+    ).first()
+    
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found"
+        )
+    
+    db.delete(api_key)
+    db.commit()
+    
+    return {"message": "API key deleted successfully"}
