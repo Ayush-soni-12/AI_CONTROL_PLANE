@@ -8,12 +8,15 @@ class Signal(Base):
     __tablename__ = "signals"
     
     id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     service_name = Column(String, nullable=False,index=True)
     tenant_id = Column(String, nullable=False, index=True) 
     endpoint = Column(String, nullable=False,index=True)
     latency_ms = Column(Float, nullable=False)
     status = Column(String, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True),nullable=False, server_default=text('now()'),index=True)
+
+    user  = relationship("User", back_populates= "signals")
 
 
 
@@ -28,6 +31,9 @@ class User(Base):
     
     # Relationship to API keys
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
+
+    # Relationship to signals
+    signals = relationship("Signal", back_populates="user", cascade="all, delete-orphan")
 
 
 class ApiKey(Base):

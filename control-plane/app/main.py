@@ -1,19 +1,20 @@
-from fastapi import FastAPI ,Depends ,HTTPException,status,Response
+from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from .functions.decisionFunction import make_decision
-from . import models ,Schema
-from .database import engine
+from . import models, Schema
+from .database import engine, Base
 from .database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from .router import signals ,auth
+from .router import signals, auth
 
 # Create the app
 app = FastAPI()
 
 # signals_memory = []
 
-models.Signal.metadata.create_all(bind=engine)
+# Create all tables (Signal, User, ApiKey)
+Base.metadata.create_all(bind=engine)
 
 
 
