@@ -15,11 +15,14 @@ class ControlPlaneSDK {
     this.controlPlaneUrl = config.controlPlaneUrl || 'http://localhost:8000';
     this.serviceName = config.serviceName || 'unknown-service';
     this.tenantId = config.tenantId || 'null';
+    this.apiKey = config.apiKey || null; // API key for authentication
     this.configCache = {};
-    // Reduced default TTL to 10s for faster adaptation to changing performance
-    // Control plane makes decisions based on average of last 10 requests,
-    // so we need to refresh config more frequently
     this.configCacheTTL = config.configCacheTTL || 10000; // 10 seconds (was 30s)
+    
+    // Warn if API key is not provided
+    if (!this.apiKey) {
+      console.warn('[ControlPlane] ⚠️  No API key provided. Please initialize the SDK with an API key.');
+    }
   }
 
   /**
@@ -48,9 +51,17 @@ class ControlPlaneSDK {
         this.invalidateCache(endpoint);
       }
 
+      // Prepare headers
+      const headers = { 'Content-Type': 'application/json' };
+      
+      // Add Authorization header if API key is provided
+      if (this.apiKey) {
+        headers['Authorization'] = `Bearer ${this.apiKey}`;
+      }
+
       await fetch(`${this.controlPlaneUrl}/api/signals`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({
           service_name: this.serviceName,
           endpoint: endpoint,

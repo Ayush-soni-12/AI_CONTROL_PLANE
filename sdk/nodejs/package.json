@@ -1,7 +1,7 @@
 {
-  "name": "ai-control-plane-sdk",
-  "version": "1.0.0",
-  "description": "AI-powered SDK for autonomous microservices optimization with dynamic caching, circuit breaking, and intelligent decision-making",
+  "name": "@ayushsoni12/ai-control-plane-sdk",
+  "version": "2.0.0",
+  "description": "AI-powered SDK for autonomous microservices optimization with secure API key authentication, dynamic caching, circuit breaking, and intelligent decision-making",
   "main": "index.js",
   "types": "index.d.ts",
   "type": "module",
@@ -22,17 +22,20 @@
     "autonomous",
     "multi-tenant",
     "express",
-    "middleware"
+    "middleware",
+    "authentication",
+    "api-key",
+    "security"
   ],
   "author": "Ayush",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/ai-control-plane.git"
+    "url": "https://github.com/Ayush-soni-12/AI_CONTROL_PLANE.git"
   },
-  "homepage": "https://github.com/yourusername/ai-control-plane#readme",
+  "homepage": "https://github.com/Ayush-soni-12/AI_CONTROL_PLANE#readme",
   "bugs": {
-    "url": "https://github.com/yourusername/ai-control-plane/issues"
+    "url": "https://github.com/Ayush-soni-12/AI_CONTROL_PLANE/issues"
   },
   "engines": {
     "node": ">=18.0.0"
