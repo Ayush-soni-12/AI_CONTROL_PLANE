@@ -1,14 +1,19 @@
 import express from 'express';
-import ControlPlaneSDK, { generateTenantId } from "ai-control-plane-sdk";
+import ControlPlaneSDK, { generateTenantId } from "@ayushsoni12/ai-control-plane-sdk";
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 app.use(express.json());
 
-// Initialize SDK
+// Initialize SDK with API key
 const controlPlane = new ControlPlaneSDK({
+  apiKey: 'acp_ed9323c29fba04b28187c987bc194f5fd2a44549' ,// API key from environment
   tenantId: generateTenantId('user'),
-  serviceName: 'demo-service',
-  controlPlaneUrl: 'http://localhost:8000'
+  serviceName: process.env.SERVICE_NAME || 'demo-service',
+  controlPlaneUrl: process.env.CONTROL_PLANE_URL || 'http://localhost:8000'
 });
 
 // Simple in-memory cache
@@ -295,10 +300,11 @@ app.get('/search', async (req, res) => {
   });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Demo Service running on port ${PORT}`);
   console.log(`📦 Using AI Control Plane SDK`);
+  console.log(`🔑 API Key: ${process.env.CONTROL_PLANE_API_KEY ? '✓ Configured' : '✗ Missing (set CONTROL_PLANE_API_KEY)'}`);
   console.log(`\nEndpoints:`);
   console.log(`  Middleware: POST /login, GET /products, GET /products/:id`);
   console.log(`  Manual: POST /checkout, GET /search?q=laptop`);
