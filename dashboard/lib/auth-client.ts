@@ -20,7 +20,7 @@ const authClient = axios.create({
  * @returns Promise with auth response (token + user)
  * @throws AuthError if signup fails
  */
-export async function signup(data: SignupRequest): Promise<AuthResponse> {
+export const signup = async (data: SignupRequest): Promise<AuthResponse> => {
   try {
     const response = await authClient.post<AuthResponse>('/signup', data);
     return response.data;
@@ -31,7 +31,7 @@ export async function signup(data: SignupRequest): Promise<AuthResponse> {
     }
     throw new Error('An unexpected error occurred during signup');
   }
-}
+};
 
 /**
  * Login with email and password
@@ -40,7 +40,7 @@ export async function signup(data: SignupRequest): Promise<AuthResponse> {
  * @returns Promise with auth response (token + user)
  * @throws AuthError if login fails
  */
-export async function login(data: LoginRequest): Promise<AuthResponse> {
+export const login = async (data: LoginRequest): Promise<AuthResponse> => {
   try {
     const response = await authClient.post<AuthResponse>('/login', data);
     console.log(response.data);
@@ -52,7 +52,7 @@ export async function login(data: LoginRequest): Promise<AuthResponse> {
     }
     throw new Error('An unexpected error occurred during login');
   }
-}
+};
 
 /**
  * Check if user is authenticated by calling /me endpoint
@@ -62,7 +62,7 @@ export async function login(data: LoginRequest): Promise<AuthResponse> {
  * 
  * @returns Promise with User if authenticated, null if not
  */
-export async function authenticate(): Promise<User | null> {
+export const authenticate = async (): Promise<User | null> => {
   try {
     const response = await authClient.get<User>('/me');
     return response.data;
@@ -70,7 +70,7 @@ export async function authenticate(): Promise<User | null> {
     // If 401 or any error, user is not authenticated
     return null;
   }
-}
+};
 
 /**
  * Logout the current user
@@ -79,14 +79,14 @@ export async function authenticate(): Promise<User | null> {
  * 
  * @returns Promise that resolves when logout is complete
  */
-export async function logout(): Promise<void> {
+export const logout = async (): Promise<void> => {
   try {
     await authClient.post('/logout');
   } catch (error) {
     console.error('Logout error:', error);
     // Even if logout fails, we can consider the user logged out on client
   }
-}
+};
 
 
 
@@ -95,7 +95,7 @@ export async function logout(): Promise<void> {
  * 
  * @returns Promise with array of API keys
  */
-export async function getApiKeys(): Promise<ApiKeyData[]> {
+export const getApiKeys = async (): Promise<ApiKeyData[]> => {
   try {
     const response = await authClient.get<ApiKeyData[]>('/api_keys');
     return response.data;
@@ -103,7 +103,7 @@ export async function getApiKeys(): Promise<ApiKeyData[]> {
     console.error('Get API keys error:', error);
     return [];
   }
-}
+};
 
 /**
  * Generate a new API key
@@ -111,7 +111,7 @@ export async function getApiKeys(): Promise<ApiKeyData[]> {
  * @param name - Optional name for the API key
  * @returns Promise with generated API key response
  */
-export async function generateApiKey(name?: string): Promise<ApiKeyGenerateResponse | null> {
+export const generateApiKey = async (name?: string): Promise<ApiKeyGenerateResponse | null> => {
   try {
     const response = await authClient.post<ApiKeyGenerateResponse>('/generate_api_key', { name });
     console.log(response.data);
@@ -120,7 +120,7 @@ export async function generateApiKey(name?: string): Promise<ApiKeyGenerateRespo
     console.error('Generate API key error:', error);
     return null;
   }
-}
+};
 
 /**
  * Delete an API key
@@ -128,7 +128,7 @@ export async function generateApiKey(name?: string): Promise<ApiKeyGenerateRespo
  * @param keyId - ID of the API key to delete
  * @returns Promise with success status
  */
-export async function deleteApiKey(keyId: number): Promise<boolean> {
+export const deleteApiKey = async (keyId: number): Promise<boolean> => {
   try {
     await authClient.delete(`/api_keys/${keyId}`);
     return true;
@@ -136,7 +136,7 @@ export async function deleteApiKey(keyId: number): Promise<boolean> {
     console.error('Delete API key error:', error);
     return false;
   }
-}
+};
 
 
 
@@ -147,10 +147,10 @@ export async function deleteApiKey(keyId: number): Promise<boolean> {
  * 
  * @returns Promise with boolean indicating auth status
  */
-export async function isAuthenticated(): Promise<boolean> {
+export const isAuthenticated = async (): Promise<boolean> => {
   const user = await authenticate();
   return user !== null;
-}
+};
 
 /**
  * Get current authenticated user
@@ -158,10 +158,10 @@ export async function isAuthenticated(): Promise<boolean> {
  * @returns Promise with User if authenticated
  * @throws Error if not authenticated
  */
-export async function getCurrentUser(): Promise<User> {
+export const getCurrentUser = async (): Promise<User> => {
   const user = await authenticate();
   if (!user) {
     throw new Error('Not authenticated');
   }
   return user;
-}
+};

@@ -186,7 +186,7 @@ export function DashboardSidebar() {
               disabled={isLoggingOut}
               className="group relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-linear-to-r from-red-900/20 to-red-800/20 border border-red-500/20 hover:border-red-500/40 hover:from-red-900/30 hover:to-red-800/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
             >
-              <div className="absolute inset-0 bg-linear-to-r from-red-600/0 via-red-600/5 to-red-600/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
+              <div className="absolute inset-0 bg-linear-to-r from-red-600/0 via-red-600/5 to-red-600/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
               <div className="relative p-2 rounded-lg bg-red-900/30">
                 <LogOut className="w-4 h-4 text-red-400" />
               </div>

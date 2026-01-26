@@ -55,7 +55,6 @@ export default function ApiKeysPage() {
     setIsGenerating(true);
     try {
       const result = await generateApiKey();
-      console.log(result);
 
       if (result && result.api_key) {
         setApiKeys((prev) => [...prev, result.api_key]);
