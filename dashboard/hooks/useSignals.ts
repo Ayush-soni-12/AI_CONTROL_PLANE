@@ -18,6 +18,28 @@ export const useSignals = () => {
 }
 
 /**
+ * Hook to fetch aggregated services with pre-calculated metrics from backend
+ */
+export const useServices = () => {
+  return useQuery({
+    queryKey: ["services"],
+    queryFn: async () => {
+      const response = await fetch('http://localhost:8000/api/services', {
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch services');
+      }
+      
+      return response.json();
+    },
+    refetchInterval: 10000, // Refresh every 10 seconds
+    staleTime: 7000
+  });
+}
+
+/**
  * Hook to handle user signup
  */
 export const useSignup = () => {
