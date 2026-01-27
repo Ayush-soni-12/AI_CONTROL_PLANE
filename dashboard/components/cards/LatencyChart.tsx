@@ -20,7 +20,7 @@ interface LatencyChartProps {
 
 export function LatencyChart({ signals }: LatencyChartProps) {
   // Get last 20 signals and format with both date and time
-  const chartData = signals.slice(-20).map((signal, idx) => {
+  const chartData = signals.slice(0,20).map((signal, idx) => {
     const date = new Date(signal.timestamp);
     return {
       index: idx,
@@ -28,7 +28,7 @@ export function LatencyChart({ signals }: LatencyChartProps) {
       // Format as "HH:MM:SS" for better readability
       time: date.toLocaleTimeString("en-US", {
         hour: "2-digit",
-        minute: "2-digit",
+        minute: "2-digit",  
         second: "2-digit",
         hour12: false,
       }),
@@ -42,6 +42,10 @@ export function LatencyChart({ signals }: LatencyChartProps) {
       }),
     };
   });
+
+  // Calculate smart interval to avoid label overlap
+  // Show ~5-7 labels max
+  const xAxisInterval = Math.max(0, Math.floor(chartData.length / 6));
 
   return (
     <Card className="border-purple-500/20 bg-linear-to-br from-card to-purple-950/10">
@@ -67,13 +71,17 @@ export function LatencyChart({ signals }: LatencyChartProps) {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
             <XAxis
-              dataKey="time"
+              dataKey="index"
               stroke="#666"
               tick={{ fill: "#999", fontSize: 11 }}
               angle={-45}
               textAnchor="end"
               height={80}
-              interval="preserveStartEnd"
+              interval={xAxisInterval}
+              tickFormatter={(index) => {
+                const dataPoint = chartData[index];
+                return dataPoint ? dataPoint.time : "";
+              }}
             />
             <YAxis
               stroke="#666"
@@ -105,6 +113,14 @@ export function LatencyChart({ signals }: LatencyChartProps) {
                 }
                 return label;
               }}
+              cursor={{
+                stroke: "#8b5cf6",
+                strokeWidth: 1,
+                strokeDasharray: "5 5",
+              }}
+              animationDuration={0}
+              allowEscapeViewBox={{ x: false, y: true }}
+              position={{ y: 0 }}
             />
             <Area
               type="monotone"
@@ -112,13 +128,15 @@ export function LatencyChart({ signals }: LatencyChartProps) {
               stroke="#8b5cf6"
               strokeWidth={3}
               fill="url(#latencyGradient)"
-              dot={{ fill: "#8b5cf6", r: 3, strokeWidth: 2, stroke: "#1a1a1a" }}
+              dot={{ fill: "#8b5cf6", r: 4, strokeWidth: 2, stroke: "#1a1a1a" }}
               activeDot={{
-                r: 6,
+                r: 7,
                 fill: "#a78bfa",
                 stroke: "#8b5cf6",
-                strokeWidth: 2,
+                strokeWidth: 3,
               }}
+              isAnimationActive={false}
+              connectNulls
             />
           </AreaChart>
         </ResponsiveContainer>

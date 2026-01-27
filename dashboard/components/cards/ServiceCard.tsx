@@ -74,9 +74,9 @@ export function ServiceCard({ service }: ServiceCardProps) {
                 <p className="text-xs font-medium text-gray-400">Avg Latency</p>
               </div>
               <p
-                className={`text-2xl font-bold ${service.avgLatency > 500 ? "text-yellow-400" : "text-green-400"}`}
+                className={`text-2xl font-bold ${service.avg_latency > 500 ? "text-yellow-400" : "text-green-400"}`}
               >
-                {formatLatency(service.avgLatency)}
+                {formatLatency(service.avg_latency)}
               </p>
             </div>
 
@@ -86,9 +86,9 @@ export function ServiceCard({ service }: ServiceCardProps) {
                 <p className="text-xs font-medium text-gray-400">Error Rate</p>
               </div>
               <p
-                className={`text-2xl font-bold ${service.errorRate > 0.1 ? "text-red-400" : "text-green-400"}`}
+                className={`text-2xl font-bold ${service.error_rate > 0.1 ? "text-red-400" : "text-green-400"}`}
               >
-                {(service.errorRate * 100).toFixed(1)}%
+                {(service.error_rate * 100).toFixed(1)}%
               </p>
             </div>
           </div>
@@ -100,13 +100,13 @@ export function ServiceCard({ service }: ServiceCardProps) {
               {service.endpoints.length !== 1 ? "s" : ""}
             </span>
             <span className="text-gray-400 font-medium">
-              {service.totalSignals} signals
+              {service.total_signals} signals
             </span>
           </div>
 
           <div className="mt-3 text-xs text-gray-500 flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
-            Last signal: {formatTimestamp(service.lastSignal)}
+            Last signal: {formatTimestamp(service.last_signal)}
           </div>
         </CardContent>
       </Card>
