@@ -1,7 +1,6 @@
 "use client";
 
-import { useSignals, useCheckAuth } from "@/hooks/useSignals";
-import { aggregateServices } from "@/lib/function";
+import { useServices, useCheckAuth, useSignals } from "@/hooks/useSignals";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { ServiceCard } from "@/components/cards/ServiceCard";
 import { LatencyChart } from "@/components/cards/LatencyChart";
@@ -18,14 +17,22 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 
+
 export default function DashboardPage() {
   const router = useRouter();
 
   // Check authentication (validates token)
   const { data: user, isLoading: isAuthLoading } = useCheckAuth();
 
-  // Fetch signals data
-  const { data: signals, isLoading: isSignalsLoading, error } = useSignals();
+  // Fetch services with pre-calculated metrics from backend
+  const {
+    data: servicesData,
+    isLoading: isServicesLoading,
+    error: servicesError,
+  } = useServices();
+
+  // Still fetch signals for the latency chart
+  const { data: signals } = useSignals();
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -53,7 +60,7 @@ export default function DashboardPage() {
     return null;
   }
 
-  if (error) {
+  if (servicesError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="text-center p-8 rounded-2xl border border-red-500/20 bg-card/50 backdrop-blur-sm">
@@ -72,7 +79,7 @@ export default function DashboardPage() {
     );
   }
 
-  if (isSignalsLoading || !signals) {
+  if (isServicesLoading || !servicesData) {
     return (
       <div className="min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
@@ -99,17 +106,12 @@ export default function DashboardPage() {
     );
   }
 
-  const services = aggregateServices(signals);
-  const totalSignals = signals.length;
-  const avgLatency =
-    signals.length > 0
-      ? signals.reduce((sum, s) => sum + s.latency_ms, 0) / signals.length
-      : 0;
-  const errorRate =
-    signals.length > 0
-      ? signals.filter((s) => s.status === "error").length / signals.length
-      : 0;
-  const activeServices = services.length;
+  const services = servicesData.services;
+
+  // Use overall metrics from backend (no calculations needed!)
+  const { total_signals, avg_latency, error_rate, active_services } =
+    servicesData.overall;
+    console.log("Total_signals",total_signals)
 
   return (
     <>
@@ -135,35 +137,35 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
             <MetricCard
               title="Total Signals"
-              value={totalSignals}
+              value={total_signals}
               icon={Activity}
               color="bg-blue-500/20"
             />
 
             <MetricCard
               title="Active Services"
-              value={activeServices}
+              value={active_services}
               icon={Zap}
               color="bg-purple-500/20"
             />
 
             <MetricCard
               title="Avg Latency"
-              value={`${Math.round(avgLatency)}ms`}
+              value={`${Math.round(avg_latency)}ms`}
               icon={TrendingUp}
               color="bg-green-500/20"
             />
 
             <MetricCard
               title="Error Rate"
-              value={`${(errorRate * 100).toFixed(1)}%`}
+              value={`${(error_rate * 100).toFixed(1)}%`}
               icon={AlertTriangle}
-              color={errorRate > 0.1 ? "bg-red-500/20" : "bg-green-500/20"}
+              color={error_rate > 0.1 ? "bg-red-500/20" : "bg-green-500/20"}
             />
           </div>
 
           {/* Latency Chart */}
-          {signals.length > 0 && (
+          {signals && signals.length > 0 && (
             <div className="mb-10">
               <LatencyChart signals={signals} />
             </div>
