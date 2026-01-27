@@ -34,7 +34,7 @@ def make_decision(service_name, endpoint, tenant_id=None, db: Session = None):
     if tenant_id:
         query = query.filter(models.Signal.tenant_id == tenant_id)
     
-    signals = query.order_by(models.Signal.timestamp.desc()).limit(10).all()
+    signals = query.order_by(models.Signal.timestamp.desc()).limit(20).all()
 
     print(f"fetch signals for {service_name}{endpoint} (tenant: {tenant_id or 'all'}): {signals}")
 
