@@ -20,20 +20,32 @@ export interface Config {
 export interface Service {
   name: string;
   endpoints: Endpoint[];
-  totalSignals: number;
-  avgLatency: number;
-  errorRate: number;
-  lastSignal: string;
+  total_signals: number;
+  avg_latency: number;
+  error_rate: number;
+  last_signal: string;
   status: 'healthy' | 'degraded' | 'down';
 }
 
 export interface Endpoint {
   path: string;
-  avgLatency: number;
-  errorRate: number;
-  signalCount: number;
-  cacheEnabled: boolean;
-  circuitBreakerActive: boolean;
+  avg_latency: number;
+  error_rate: number;
+  signal_count: number;
+  cache_enabled: boolean;
+  circuit_breaker: boolean;
+  tenant_id?: string;
+  reasoning: string;  // AI decision reasoning
+}
+
+export interface ServicesResponse {
+  services: Service[];
+  overall: {
+    total_signals: number;
+    avg_latency: number;
+    error_rate: number;
+    active_services: number;
+  };
 }
 
 export interface Decision {
