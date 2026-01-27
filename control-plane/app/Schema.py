@@ -75,3 +75,30 @@ class ApiKeyCreate(BaseModel):
 class ApiKeyGenerateResponse(BaseModel):
     api_key: ApiKeyResponse
     message: str
+
+
+# Service Analytics Schemas
+class EndpointMetrics(BaseModel):
+    path: str
+    avg_latency: float
+    error_rate: float
+    signal_count: int
+    tenant_id: Optional[str]
+    cache_enabled: bool
+    circuit_breaker: bool
+    reasoning: str  # AI decision reasoning
+
+
+class ServiceMetrics(BaseModel):
+    name: str
+    endpoints: List[EndpointMetrics]
+    total_signals: int
+    avg_latency: float
+    error_rate: float
+    last_signal: datetime
+    status: str  # 'healthy', 'degraded', 'down'
+
+
+class ServicesResponse(BaseModel):
+    services: List[ServiceMetrics]
+    overall: dict  # Overall metrics across all services
