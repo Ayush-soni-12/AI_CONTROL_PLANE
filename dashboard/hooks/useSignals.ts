@@ -1,19 +1,19 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchSignals } from '@/lib/control-plane-client';
-import { signup, login, logout, authenticate } from '@/lib/auth-client';
+import { signup, login, logout, authenticate, authenticateSuspense } from '@/lib/auth-client';
 import type { SignupRequest, LoginRequest, AuthResponse, User } from '@/lib/types';
 
 /**
  * Hook to fetch signals from the control plane
  */
 export const useSignals = () => {
-  return useQuery({
+  return useSuspenseQuery({
     queryKey: ["signals"],
     queryFn: fetchSignals,
-    refetchInterval: 5000, // Refresh every 3 seconds
-    staleTime: 3000
+    refetchInterval: 2000, // Refresh every 3 seconds
+    staleTime: 1000
   });
 }
 
@@ -21,7 +21,7 @@ export const useSignals = () => {
  * Hook to fetch aggregated services with pre-calculated metrics from backend
  */
 export const useServices = () => {
-  return useQuery({
+  return useSuspenseQuery({
     queryKey: ["services"],
     queryFn: async () => {
       const response = await fetch('http://localhost:8000/api/services', {
@@ -34,8 +34,8 @@ export const useServices = () => {
       
       return response.json();
     },
-    refetchInterval: 10000, // Refresh every 10 seconds
-    staleTime: 7000
+    refetchInterval: 2000, // Refresh every 10 seconds
+    staleTime: 1000
   });
 }
 
@@ -92,9 +92,7 @@ export const useLogout = () => {
 }
 
 /**
- * Hook to check authentication status
- * Uses TanStack Query for automatic loading states and caching
- * Returns user data if authenticated, null if not
+ * Hook to check authentication status (Non-suspense version for top-level protection)
  */
 export const useCheckAuth = () => {
   return useQuery<User | null, Error>({
@@ -102,5 +100,17 @@ export const useCheckAuth = () => {
     queryFn: authenticate,
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
     retry: false, // Don't retry if not authenticated
+  });
+}
+
+/**
+ * Hook to check authentication status (Suspense version for components)
+ */
+export const useSuspenseCheckAuth = () => {
+  return useSuspenseQuery<User, Error>({
+    queryKey: ['auth', 'user', 'suspense'],
+    queryFn: authenticateSuspense,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
