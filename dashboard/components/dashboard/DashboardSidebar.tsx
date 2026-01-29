@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
@@ -15,16 +15,45 @@ import {
   X,
   Sparkles,
 } from "lucide-react";
-import { useCheckAuth, useLogout } from "@/hooks/useSignals";
+// import dynamic from "next/dynamic";
+import { useLogout } from "@/hooks/useSignals";
+import { DynamicUserProfile } from "@/components/dashboard/DynamicUserProfile";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// const DynamicUserProfile = dynamic(
+//   () =>
+//     import("@/components/dashboard/DynamicUserProfile").then(
+//       (mod) => mod.DynamicUserProfile,
+//     ),
+//   {
+//     ssr: false,
+//     loading: () => (
+//       <div className="px-6 pb-6">
+//         <div className="relative group">
+//           <div className="absolute inset-0 bg-linear-to-r from-purple-600/20 to-pink-600/20 rounded-2xl blur-sm"></div>
+//           <div className="relative p-4 rounded-2xl bg-gray-900/80 backdrop-blur-sm border border-gray-800">
+//             <div className="flex items-center gap-3">
+//               <Skeleton className="w-12 h-12 rounded-full" />
+//               <div className="flex-1 space-y-2">
+//                 <Skeleton className="h-4 w-24" />
+//                 <Skeleton className="h-3 w-32" />
+//               </div>
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+//     ),
+//   },
+// );
 
 /**
  * Dashboard Sidebar Component
+// ... existing code ...
  * Beautiful left-side navigation with modern design
  */
 export function DashboardSidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: user } = useCheckAuth();
   const { mutate: logout, isPending: isLoggingOut } = useLogout();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -72,7 +101,7 @@ export function DashboardSidebar() {
         `}
       >
         <div className="flex flex-col h-full">
-          {/* Logo Section */}
+          {/* Logo Section - Static */}
           <div className="p-6 pb-4">
             <Link href="/dashboard" className="block">
               <div className="flex items-center gap-3 mb-2">
@@ -97,32 +126,27 @@ export function DashboardSidebar() {
             </Link>
           </div>
 
-          {/* User Profile Card */}
-          <div className="px-6 pb-6">
-            <div className="relative group">
-              <div className="absolute inset-0 bg-linear-to-r from-purple-600/20 to-pink-600/20 rounded-2xl blur-sm group-hover:blur-md transition-all"></div>
-              <div className="relative p-4 rounded-2xl bg-gray-900/80 backdrop-blur-sm border border-gray-800 group-hover:border-purple-500/30 transition-all duration-300">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-linear-to-br from-purple-500 to-pink-500 rounded-full blur-sm"></div>
-                    <div className="relative w-12 h-12 rounded-full bg-linear-to-br from-purple-500 to-pink-500 flex items-center justify-center ring-2 ring-gray-900">
-                      <span className="text-white font-bold text-lg">
-                        {user?.name?.charAt(0).toUpperCase() || "U"}
-                      </span>
+          {/* User Profile Card - Dynamic with Suspense */}
+          <Suspense
+            fallback={
+              <div className="px-6 pb-6">
+                <div className="relative group">
+                  <div className="absolute inset-0 bg-linear-to-r from-purple-600/20 to-pink-600/20 rounded-2xl blur-sm"></div>
+                  <div className="relative p-4 rounded-2xl bg-gray-900/80 backdrop-blur-sm border border-gray-800">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="w-12 h-12 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">
-                      {user?.name || "User"}
-                    </p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {user?.email || "user@example.com"}
-                    </p>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
+            }
+          >
+            <DynamicUserProfile />
+          </Suspense>
 
           {/* Navigation Menu */}
           <nav className="flex-1 px-4 overflow-y-auto">
