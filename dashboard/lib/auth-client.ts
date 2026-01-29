@@ -62,6 +62,7 @@ export const login = async (data: LoginRequest): Promise<AuthResponse> => {
  * 
  * @returns Promise with User if authenticated, null if not
  */
+// ...existing code...
 export const authenticate = async (): Promise<User | null> => {
   try {
     const response = await authClient.get<User>('/me');
@@ -70,6 +71,20 @@ export const authenticate = async (): Promise<User | null> => {
     // If 401 or any error, user is not authenticated
     return null;
   }
+};
+
+/**
+ * Suspense-compatible authentication check
+ * 
+ * @returns Promise with User
+ * @throws Error if not authenticated
+ */
+export const authenticateSuspense = async (): Promise<User> => {
+    const user = await authenticate();
+    if (!user) {
+        throw new Error('Not authenticated');
+    }
+    return user;
 };
 
 /**
@@ -98,6 +113,7 @@ export const logout = async (): Promise<void> => {
 export const getApiKeys = async (): Promise<ApiKeyData[]> => {
   try {
     const response = await authClient.get<ApiKeyData[]>('/api_keys');
+    console.log("api keys", response.data);
     return response.data;
   } catch (error) {
     console.error('Get API keys error:', error);

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { Signal } from "./types";
 
-const CONTROL_PLANE_URL = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000';
+const CONTROL_PLANE_URL = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000'
 
 // Create axios instance for control plane API
 const apiClient = axios.create({
