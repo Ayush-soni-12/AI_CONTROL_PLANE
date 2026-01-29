@@ -1,38 +1,20 @@
 "use client";
 
-import { useServices, useCheckAuth, useSignals } from "@/hooks/useSignals";
-import { MetricCard } from "@/components/cards/MetricCard";
-import { ServiceCard } from "@/components/cards/ServiceCard";
-import { LatencyChart } from "@/components/cards/LatencyChart";
+import { useCheckAuth } from "@/hooks/useSignals";
+import { DynamicMetrics } from "@/components/dashboard/DynamicMetrics";
+import { DynamicChart } from "@/components/dashboard/DynamicChart";
+import { DynamicServices } from "@/components/dashboard/DynamicServices";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Activity,
-  Zap,
-  AlertTriangle,
-  TrendingUp,
-  Server,
-  LogIn,
-} from "lucide-react";
+import { Server, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
-
 
 export default function DashboardPage() {
   const router = useRouter();
 
   // Check authentication (validates token)
   const { data: user, isLoading: isAuthLoading } = useCheckAuth();
-
-  // Fetch services with pre-calculated metrics from backend
-  const {
-    data: servicesData,
-    isLoading: isServicesLoading,
-    error: servicesError,
-  } = useServices();
-
-  // Still fetch signals for the latency chart
-  const { data: signals } = useSignals();
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -60,65 +42,12 @@ export default function DashboardPage() {
     return null;
   }
 
-  if (servicesError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-purple-950/5 to-background">
-        <div className="text-center p-8 rounded-2xl border border-red-500/20 bg-card/50 backdrop-blur-sm">
-          <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4 animate-pulse" />
-          <h2 className="text-2xl font-bold mb-2 text-red-400">
-            Failed to load data
-          </h2>
-          <p className="text-gray-400 mb-2">
-            Make sure Control Plane is running
-          </p>
-          <code className="text-sm bg-gray-900/50 px-4 py-2 rounded-lg inline-block border border-gray-800">
-            http://localhost:8000
-          </code>
-        </div>
-      </div>
-    );
-  }
-
-  if (isServicesLoading || !servicesData) {
-    return (
-      <div className="min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <div className="h-10 w-80 bg-linear-to-r from-purple-500/20 to-pink-500/20 rounded-lg animate-pulse mb-3" />
-            <div className="h-5 w-96 bg-gray-800/50 rounded animate-pulse" />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton className="h-32 rounded-xl" key={i} />
-            ))}
-          </div>
-
-          <Skeleton className="h-96 rounded-xl mb-8" />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(3)].map((_, i) => (
-              <Skeleton className="h-64 rounded-xl" key={i} />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const services = servicesData.services;
-
-  // Use overall metrics from backend (no calculations needed!)
-  const { total_signals, avg_latency, error_rate, active_services } =
-    servicesData.overall;
-    console.log("Total_signals",total_signals)
-
   return (
     <>
       <DashboardSidebar />
       <div className="lg:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
-          {/* Header with enhanced linear */}
+          {/* Static Header - Renders immediately */}
           <div className="mb-10">
             <div className="flex items-center gap-3 mb-3">
               <div className="p-3 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
@@ -133,78 +62,44 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Metrics Cards with enhanced styling */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-            <MetricCard
-              title="Total Signals"
-              value={total_signals}
-              icon={Activity}
-              color="bg-blue-500/20"
-            />
-
-            <MetricCard
-              title="Active Services"
-              value={active_services}
-              icon={Zap}
-              color="bg-purple-500/20"
-            />
-
-            <MetricCard
-              title="Avg Latency"
-              value={`${Math.round(avg_latency)}ms`}
-              icon={TrendingUp}
-              color="bg-green-500/20"
-            />
-
-            <MetricCard
-              title="Error Rate"
-              value={`${(error_rate * 100).toFixed(1)}%`}
-              icon={AlertTriangle}
-              color={error_rate > 0.1 ? "bg-red-500/20" : "bg-green-500/20"}
-            />
-          </div>
-
-          {/* Latency Chart */}
-          {signals && signals.length > 0 && (
-            <div className="mb-10">
-              <LatencyChart signals={signals} />
-            </div>
-          )}
-
-          {/* Services List */}
-          <div>
-            <div className="flex items-center gap-3 mb-6">
-              <h2 className="text-3xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Services
-              </h2>
-              <div className="h-px flex-1 bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent" />
-            </div>
-
-            {services.length === 0 ? (
-              <div className="text-center py-16 bg-linear-to-br from-card to-purple-950/10 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
-                <div className="inline-block p-6 rounded-2xl bg-purple-500/10 mb-6">
-                  <Activity className="w-16 h-16 text-purple-400" />
-                </div>
-                <h3 className="text-2xl font-bold mb-3 text-gray-200">
-                  No services detected
-                </h3>
-                <p className="text-gray-400 mb-6 text-lg">
-                  Start sending signals from your services
-                </p>
-                <div className="inline-block">
-                  <code className="text-sm bg-gray-900/80 px-6 py-3 rounded-lg border border-purple-500/30 text-purple-300">
-                    curl -X POST http://localhost:8000/api/signals
-                  </code>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {services.map((service) => (
-                  <ServiceCard key={service.name} service={service} />
+          {/* Dynamic Metrics - Wrapped in Suspense */}
+          <Suspense
+            fallback={
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton className="h-32 rounded-xl" key={i} />
                 ))}
               </div>
-            )}
+            }
+          >
+            <DynamicMetrics />
+          </Suspense>
+
+          {/* Dynamic Latency Chart - Wrapped in Suspense */}
+          <Suspense fallback={<Skeleton className="h-96 rounded-xl mb-10" />}>
+            <DynamicChart />
+          </Suspense>
+
+          {/* Static Services Header - Renders immediately */}
+          <div className="flex items-center gap-3 mb-6">
+            <h2 className="text-3xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Services
+            </h2>
+            <div className="h-px flex-1 bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent" />
           </div>
+
+          {/* Dynamic Services List - Wrapped in Suspense */}
+          <Suspense
+            fallback={
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton className="h-64 rounded-xl" key={i} />
+                ))}
+              </div>
+            }
+          >
+            <DynamicServices />
+          </Suspense>
         </div>
       </div>
     </>
