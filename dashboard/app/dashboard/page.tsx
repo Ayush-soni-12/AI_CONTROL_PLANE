@@ -3,6 +3,7 @@
 import { useCheckAuth } from "@/hooks/useSignals";
 import { DynamicMetrics } from "@/components/dashboard/DynamicMetrics";
 import { DynamicChart } from "@/components/dashboard/DynamicChart";
+import { DynamicErrorChart } from "@/components/dashboard/DynamicErrorChart";
 import { DynamicServices } from "@/components/dashboard/DynamicServices";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Server, LogIn } from "lucide-react";
@@ -78,6 +79,11 @@ export default function DashboardPage() {
           {/* Dynamic Latency Chart - Wrapped in Suspense */}
           <Suspense fallback={<Skeleton className="h-96 rounded-xl mb-10" />}>
             <DynamicChart />
+          </Suspense>
+
+          {/* Dynamic Error Rate Chart - Wrapped in Suspense */}
+          <Suspense fallback={<Skeleton className="h-96 rounded-xl mb-10" />}>
+            <DynamicErrorChart />
           </Suspense>
 
           {/* Static Services Header - Renders immediately */}

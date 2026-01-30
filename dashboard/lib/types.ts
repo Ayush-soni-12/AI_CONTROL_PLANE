@@ -38,6 +38,23 @@ export interface Endpoint {
   reasoning: string;  // AI decision reasoning
 }
 
+export interface EndpointDetail {
+  service_name: string;
+  endpoint: string;
+  avg_latency: number;
+  error_rate: number;
+  total_signals: number;
+  history: Array<{
+    timestamp: string;
+    latency_ms: number;
+    status: 'success' | 'error';
+  }>;
+  suggestions: string[];
+  cache_enabled: boolean;
+  circuit_breaker: boolean;
+  reasoning: string;
+}
+
 export interface ServicesResponse {
   services: Service[];
   overall: {

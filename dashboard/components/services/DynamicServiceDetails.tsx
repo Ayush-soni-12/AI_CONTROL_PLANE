@@ -17,6 +17,8 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Endpoint, Service } from "@/lib/types";
+import { useState } from "react";
+import { EndpointDetailView } from "./EndpointDetailView";
 
 interface DynamicServiceDetailsProps {
   serviceName: string;
@@ -33,12 +35,12 @@ interface StatusConfigItem {
 
 type StatusConfig = Record<ServiceStatus, StatusConfigItem>;
 
-
 export function DynamicServiceDetails({
   serviceName,
 }: DynamicServiceDetailsProps) {
   const router = useRouter();
   const { data: servicesData } = useServices();
+  const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
 
   const service = servicesData.services.find(
     (s: Service) => s.name === serviceName,
@@ -67,7 +69,7 @@ export function DynamicServiceDetails({
     );
   }
 
-  const statusConfig:StatusConfig = {
+  const statusConfig: StatusConfig = {
     healthy: {
       icon: CheckCircle,
       color: "text-green-400",
@@ -90,6 +92,16 @@ export function DynamicServiceDetails({
 
   const config = statusConfig[service.status as ServiceStatus];
   const StatusIcon = config.icon;
+
+  if (selectedEndpoint) {
+    return (
+      <EndpointDetailView
+        serviceName={serviceName}
+        endpointPath={selectedEndpoint}
+        onBack={() => setSelectedEndpoint(null)}
+      />
+    );
+  }
 
   return (
     <>
@@ -195,16 +207,17 @@ export function DynamicServiceDetails({
         </div>
 
         <div className="space-y-4">
-          {service.endpoints.map((endpoint:Endpoint) => {
+          {service.endpoints.map((endpoint: Endpoint) => {
             return (
               <Card
                 key={endpoint.path}
-                className="border-purple-500/20 bg-card/50 backdrop-blur-sm hover:border-purple-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10"
+                onClick={() => setSelectedEndpoint(endpoint.path)}
+                className="border-purple-500/20 bg-card/50 backdrop-blur-sm hover:border-purple-500/40 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10 cursor-pointer group"
               >
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-xl font-mono text-purple-300 mb-2">
+                      <CardTitle className="text-xl font-mono text-purple-300 mb-2 group-hover:text-purple-400 transition-colors">
                         {endpoint.path}
                       </CardTitle>
                       <div className="flex items-center gap-3 text-sm">

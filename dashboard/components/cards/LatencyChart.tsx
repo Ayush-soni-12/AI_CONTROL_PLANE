@@ -10,17 +10,17 @@ import {
   Area,
   AreaChart,
 } from "recharts";
-import { Signal } from "@/lib/types";
 import { formatLatency } from "@/lib/function";
 import { TrendingUp } from "lucide-react";
 
 interface LatencyChartProps {
-  signals: Signal[];
+  signals: { timestamp: string; latency_ms: number; status?: string }[];
+  limit?: number;
 }
 
-export function LatencyChart({ signals }: LatencyChartProps) {
-  // Get last 20 signals and format with both date and time
-  const chartData = signals.slice(0,20).map((signal, idx) => {
+export function LatencyChart({ signals, limit = 20 }: LatencyChartProps) {
+  // Get specified number of signals and format with both date and time
+  const chartData = signals.slice(0, limit).map((signal, idx) => {
     const date = new Date(signal.timestamp);
     return {
       index: idx,
@@ -28,7 +28,7 @@ export function LatencyChart({ signals }: LatencyChartProps) {
       // Format as "HH:MM:SS" for better readability
       time: date.toLocaleTimeString("en-US", {
         hour: "2-digit",
-        minute: "2-digit",  
+        minute: "2-digit",
         second: "2-digit",
         hour12: false,
       }),
@@ -42,6 +42,7 @@ export function LatencyChart({ signals }: LatencyChartProps) {
       }),
     };
   });
+  // console.log("chartData", chartData);
 
   // Calculate smart interval to avoid label overlap
   // Show ~5-7 labels max
