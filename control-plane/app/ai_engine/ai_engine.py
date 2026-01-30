@@ -33,25 +33,46 @@ def decide_node(state: DecisionState) -> DecisionState:
     
     actions = []
     
-    # Rule 1: High latency → enable cache
-    if state['avg_latency'] > 500:
-        actions.append("enable_cache")
-        state['reasoning'] = f"Latency {state['avg_latency']:.0f}ms exceeds threshold - caching will help"
-    
-    # Rule 2: High error rate → circuit breaker (NOT rate limit!)
-    elif state['error_rate'] > 0.3:
+    # Rule 1: Critical Failure (High Errors)
+    if state['error_rate'] > 0.5:
         actions.append("circuit_breaker")
-        state['reasoning'] = f"Error rate {state['error_rate']*100:.1f}% is high - service may have issues"
-    
-    # Rule 3: Moderate errors + high latency → multiple issues
+        actions.append("alert")
+        state['reasoning'] = (
+            f"CRITICAL: Error rate is extremely high ({state['error_rate']*100:.1f}%). "
+            "Circuit breaker activated to prevent cascading failures. Immediate attention required."
+        )
+
+    # Rule 2: High Latency with Errors
     elif state['error_rate'] > 0.15 and state['avg_latency'] > 400:
         actions.append("enable_cache")
         actions.append("alert")
-        state['reasoning'] = "Both latency and errors elevated - enabling cache and alerting team"
+        state['reasoning'] = (
+            f"Performance Degradation: High latency ({state['avg_latency']:.0f}ms) accompanied by elevated error rate ({state['error_rate']*100:.1f}%). "
+            "Caching enabled to reduce load. Team alerted for investigation."
+        )
+
+    # Rule 3: High Latency Only
+    elif state['avg_latency'] > 500:
+        actions.append("enable_cache")
+        state['reasoning'] = (
+            f"High Latency Detected: Average latency ({state['avg_latency']:.0f}ms) exceeds 500ms threshold. "
+            "Caching enabled to improve response times."
+        )
     
-    # Rule 4: Everything good
+    # Rule 4: Moderate Errors (Warning)
+    elif state['error_rate'] > 0.15:
+        actions.append("alert")
+        state['reasoning'] = (
+            f"Elevated Error Rate: Error rate ({state['error_rate']*100:.1f}%) is above normal limits. "
+            "Monitoring continued, alert sent to operations team."
+        )
+
+    # Rule 5: Healthy State
     else:
-        state['reasoning'] = f"Performance acceptable (latency: {state['avg_latency']:.0f}ms, errors: {state['error_rate']*100:.1f}%)"
+        state['reasoning'] = (
+            f"Healthy: Service is performing within optimal parameters. "
+            f"Latency: {state['avg_latency']:.0f}ms, Error Rate: {state['error_rate']*100:.1f}%"
+        )
     
     # Build decision
     state['decision'] = {
