@@ -6,6 +6,8 @@ from ..dependencies import verify_api_key
 from ..functions.decisionFunction import make_decision
 from ..ai_engine.ai_engine import make_ai_decision
 from ..router.token import get_current_user
+from collections import defaultdict
+import time
 
 
 router = APIRouter(
@@ -31,6 +33,8 @@ async def receive_signal(
     
     print(f"Signals received: {signals}")
     print(f"User: {current_user.email} (ID: {current_user.id})")
+    
+  
 
     # Create signal with user_id
     signal_data = signals.model_dump()
@@ -55,7 +59,9 @@ async def get_all_signals(
     
     Requires authentication via cookie (from dashboard login).
     Returns only signals that belong to the logged-in user.
+
     """
+    # time.sleep(10)  
 
     
     # Get the current authenticated user from cookie
@@ -64,7 +70,7 @@ async def get_all_signals(
     # Query signals filtered by user_id
     signals = db.query(models.Signal).filter(
         models.Signal.user_id == current_user.id
-    ).order_by(models.Signal.timestamp.desc()).all()
+    ).order_by(models.Signal.timestamp.desc()).limit(20).all()
 
     if not signals:
         # Return empty list instead of 404 for better UX
@@ -74,7 +80,7 @@ async def get_all_signals(
 
     return {"signals": signals}
 @router.get("/config/{service_name}/{endpoint:path}")
-async def get_config(service_name: str, endpoint: str, tenant_id: str = None, db: Session = Depends(get_db)):
+async def get_config(service_name: str, endpoint: str, tenant_id: str = None, db: Session = Depends(get_db), current_user: models.User = Depends(verify_api_key)):
     """
     Services request their runtime configuration
     
@@ -83,12 +89,14 @@ async def get_config(service_name: str, endpoint: str, tenant_id: str = None, db
     Returns the decision (cache enabled or not)
     """
     
+    
     # Make sure endpoint starts with /
     if not endpoint.startswith('/'):
         endpoint = '/' + endpoint
     
     # Get decision with tenant_id
     decision = make_decision(service_name, endpoint, tenant_id, db)
+    
     
     # Return config
     return {
@@ -112,7 +120,7 @@ async def get_services(
     
     Uses only the last 20 signals per endpoint for recent performance metrics.
     """
-    
+    # time.sleep(10)
     # Get the current authenticated user from cookie
     current_user = get_current_user(request, db)
     
@@ -125,7 +133,6 @@ async def get_services(
         return {"services": [], "overall": {"total_signals": 0, "avg_latency": 0, "error_rate": 0, "active_services": 0}}
 
     # Group signals by service and endpoint
-    from collections import defaultdict
     service_map = defaultdict(lambda: {
         'endpoints': defaultdict(list),
         'all_signals': []
@@ -134,6 +141,11 @@ async def get_services(
     for signal in signals:
         service_map[signal.service_name]['all_signals'].append(signal)
         service_map[signal.service_name]['endpoints'][signal.endpoint].append(signal)
+        # print(f"Signal: {signal}")
+
+    # print(f"service_map: {service_map}")    
+
+
     
     # Build service metrics
     services = []
@@ -204,7 +216,7 @@ async def get_services(
         # Determine service status based on aggregated metrics
         if error_rate > 0.3:
             status = 'down'
-        elif avg_latency > 500 or error_rate > 0.1:
+        elif error_rate > 0.15  or avg_latency > 500:
             status = 'degraded'
         else:
             status = 'healthy'
@@ -244,4 +256,88 @@ async def get_services(
             "error_rate": overall_error_rate,
             "active_services": overall_active_services
         }
+    }
+
+
+@router.get("/services/{service_name}/endpoints/{endpoint_path:path}", response_model=Schema.EndpointDetailResponse)
+async def get_endpoint_detail(
+    service_name: str,
+    endpoint_path: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Get detailed metrics for a specific endpoint, including history for graphs.
+    """
+    # Normalize endpoint path
+    if not endpoint_path.startswith('/'):
+        endpoint_path = '/' + endpoint_path
+        
+    current_user = get_current_user(request, db)
+    
+    # Query signals for this specific endpoint
+    signals = db.query(models.Signal).filter(
+        models.Signal.user_id == current_user.id,
+        models.Signal.service_name == service_name,
+        models.Signal.endpoint == endpoint_path
+    ).order_by(models.Signal.timestamp.desc()).all()
+
+    # for signal in signals:
+    #     print("signal",signal.latency_ms)
+    
+    if not signals:
+        raise HTTPException(status_code=404, detail="Endpoint not found or no signals recorded")
+        
+    # Metrics calculation
+    total_signals = len(signals)
+    # avg_latency = sum(s.latency_ms for s in signals) / total_signals
+    # error_count = sum(1 for s in signals if s.status == 'error')
+    # error_rate = error_count / total_signals
+    
+    # History for graph (last 50 signals)
+    history = []
+    # Reverse to get chronological order for the graph
+    history_signals = signals[:20]
+    for s in history_signals:
+        history.append({
+            "timestamp": s.timestamp.isoformat(),
+            "latency_ms": s.latency_ms,
+            "status": s.status
+        })
+
+    # print(f"History ", history)
+        
+    # Get last 20 for AI decisionrecrecent_signals = signals[:20]ent_signals = signals[:20]
+    recent_signals = signals[:20]
+    print("recent_signals",len(recent_signals))
+    recent_avg_latency = sum(s.latency_ms for s in recent_signals) / len(recent_signals)
+    recent_error_rate = sum(1 for s in recent_signals if s.status == 'error') / len(recent_signals)
+    
+    ai_decision = make_ai_decision(service_name, endpoint_path, recent_avg_latency, recent_error_rate)
+    
+    # Generate suggestions
+    # suggestions = []
+    # if ai_decision['cache_enabled']:
+    #     suggestions.append("Optimization: High latency detected. Enabling the AI-driven cache will significantly reduce response times.")
+    # if ai_decision['circuit_breaker']:
+    #     suggestions.append("Critical: Frequent errors detected. The circuit breaker should be active to protect your system.")
+    # if recent_error_rate > 0.3:
+    #     suggestions.append(f"Alert: Error rate is {recent_error_rate*100:.1f}%. Check backend logs for potential failures.")
+    # if recent_avg_latency > 500:
+    #     suggestions.append("Latency is critically high (over 800ms). Consider optimizing database queries or upstream microservices.")
+    
+    # if not suggestions:
+    #     suggestions.append("Performance is excellent. No further actions needed.")
+    
+    return {
+        "service_name": service_name,
+        "endpoint": endpoint_path,
+        "avg_latency": recent_avg_latency,
+        "error_rate": recent_error_rate,
+        "total_signals": total_signals,
+        "history": history,
+        "suggestions": ai_decision['reasoning'],
+        "cache_enabled": ai_decision['cache_enabled'],
+        "circuit_breaker": ai_decision['circuit_breaker'],
+        "reasoning": ai_decision['reasoning']
     }
