@@ -3,7 +3,7 @@ from  ..import models
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from ..ai_engine import ai_engine
-
+from .email import send_mail
 make_ai_decision = ai_engine.make_ai_decision
 
 
@@ -62,6 +62,15 @@ def make_decision(service_name, endpoint, tenant_id=None, db: Session = None):
     
     if ai_decision.get('alert'):
         print(f"🚨 Alert: Issues detected for {service_name}{endpoint}")
+        
+        subject = f"🚨 Alert: Issue Detected in {service_name}"
+        
+        try:
+            # Send to admin (configure recipient as needed)
+            send_mail("admin@example.com", subject, html_content)
+            print(f"📧 Alert email sent to admin@example.com")
+        except Exception as e:
+            print(f"❌ Failed to send alert email: {e}")
     
     return {
         'cache_enabled': ai_decision['cache_enabled'],
