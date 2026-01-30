@@ -102,3 +102,16 @@ class ServiceMetrics(BaseModel):
 class ServicesResponse(BaseModel):
     services: List[ServiceMetrics]
     overall: dict  # Overall metrics across all services
+
+
+class EndpointDetailResponse(BaseModel):
+    service_name: str
+    endpoint: str
+    avg_latency: float
+    error_rate: float
+    total_signals: int
+    history: List[dict]
+    suggestions: List[str]
+    cache_enabled: bool
+    circuit_breaker: bool
+    reasoning: str

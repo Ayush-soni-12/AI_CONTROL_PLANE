@@ -9,7 +9,7 @@ from typing import List
 from .router import signals, auth
 
 # Create the app
-app = FastAPI()
+app =    FastAPI()
 
 # signals_memory = []
 

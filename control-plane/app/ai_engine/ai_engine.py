@@ -34,7 +34,7 @@ def decide_node(state: DecisionState) -> DecisionState:
     actions = []
     
     # Rule 1: Critical Failure (High Errors)
-    if state['error_rate'] > 0.5:
+    if state['error_rate'] > 0.3:
         actions.append("circuit_breaker")
         actions.append("alert")
         state['reasoning'] = (

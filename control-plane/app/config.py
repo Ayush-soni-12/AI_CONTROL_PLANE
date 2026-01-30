@@ -8,6 +8,15 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     
+    # SMTP Settings
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int | None = None
+    SMTP_MAIL: str | None = None
+    SMTP_PASS: str | None = None
+    
+    # Resend API Key (if used)
+    RESEND_API_KEY: str | None = None
+    
     class Config:
         # Look for .env file in project root (2 levels up from this file)
         # This works for both Docker and manual runs

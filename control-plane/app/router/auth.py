@@ -5,6 +5,7 @@ from ..database import get_db
 from ..utils import get_password_hash, verify_password
 from .token import create_access_token, get_current_user
 import secrets
+import time
 import hashlib 
 
 router = APIRouter(
@@ -62,7 +63,6 @@ async def signup(response: Response, new_user: Schema.SignupRequest, db: Session
         value=access_token,
         httponly=True,
         secure=False,      # HTTPS only
-        samesite="lax",   # or "strict"
         max_age=60 * 60   # 1 hour
     )
 
@@ -107,7 +107,6 @@ async def login(response: Response, credentials: Schema.LoginRequest, db: Sessio
         value=access_token,
         httponly=True,
         secure=False,      # HTTPS only
-        samesite="lax",   # or "strict"
         max_age=60 * 60   # 1 hour
     )
 
@@ -128,7 +127,10 @@ async def get_me(
     Get current authenticated user's information
     
     Requires valid JWT token in Authorization header or cookie
+
     """
+    # time.sleep(5)
+
     current_user = get_current_user(request, db)
     return current_user
 
@@ -142,7 +144,6 @@ async def logout(response: Response):
         key="access_token",
         httponly=True,
         secure=False,
-        samesite="lax"
     )
     
     return {"message": "Successfully logged out"}
@@ -209,6 +210,7 @@ async def delete_api_key(
 ):
     """
     Delete a specific API key
+
     """
     current_user = get_current_user(request, db)
     
