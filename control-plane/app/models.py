@@ -1,4 +1,4 @@
-from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, text,Float
+from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, text, Float, Index
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -9,14 +9,26 @@ class Signal(Base):
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    service_name = Column(String, nullable=False,index=True)
+    service_name = Column(String, nullable=False, index=True)
     tenant_id = Column(String, nullable=False, index=True) 
-    endpoint = Column(String, nullable=False,index=True)
+    endpoint = Column(String, nullable=False, index=True)
     latency_ms = Column(Float, nullable=False)
     status = Column(String, nullable=False)
-    timestamp = Column(TIMESTAMP(timezone=True),nullable=False, server_default=text('now()'),index=True)
+    timestamp = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'), index=True)
 
-    user  = relationship("User", back_populates= "signals")
+    user = relationship("User", back_populates="signals")
+    
+    # Composite indexes for query optimization
+    __table_args__ = (
+        # Index for /services endpoint: WHERE user_id=X AND service_name=Y AND endpoint=Z
+        Index('idx_signals_user_service_endpoint', 'user_id', 'service_name', 'endpoint'),
+        
+        # Index for time-based queries: WHERE user_id=X ORDER BY timestamp DESC
+        Index('idx_signals_user_timestamp', 'user_id', 'timestamp'),
+        
+        # Index for endpoint-specific queries: WHERE service_name=X AND endpoint=Y ORDER BY timestamp DESC
+        Index('idx_signals_service_endpoint_timestamp', 'service_name', 'endpoint', 'timestamp'),
+    )
 
 
 
