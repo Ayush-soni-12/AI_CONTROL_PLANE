@@ -9,6 +9,7 @@ from ..router.token import get_current_user
 from collections import defaultdict
 from fastapi import BackgroundTasks
 from ..functions.mailer import send_alert_email
+from ..cache import cache_get, cache_set, invalidate_user_cache
 import time
 
 
@@ -46,6 +47,9 @@ async def receive_signal(
     db.add(signal)
     db.commit()
     db.refresh(signal)
+    
+    # Invalidate cache for this user so they see fresh data
+    await invalidate_user_cache(current_user.id)  # await the async function
     
     return Response(status_code=status.HTTP_201_CREATED)
 
@@ -145,10 +149,21 @@ async def get_services(
     Get aggregated service metrics with all calculations done on backend.
     
     Uses only the last 20 signals per endpoint for recent performance metrics.
+    Cached for 30 seconds to reduce database load on high-traffic dashboards.
     """
-    # time.sleep(10)
     # Get the current authenticated user from cookie
     current_user = get_current_user(request, db)
+    
+    # Try cache first (30 second TTL for near-real-time data)
+    cache_key = f"user:{current_user.id}:services"
+    cached_data = await cache_get(cache_key)
+    
+    if cached_data is not None:
+        print(f"✅ Cache HIT for user {current_user.id} on /services")
+        # Cached data is already in dict format, FastAPI will validate it
+        return cached_data
+    
+    print(f"⚠️  Cache MISS for user {current_user.id} on /services - querying database")
     
     # Query signals filtered by user_id
     signals = db.query(models.Signal).filter(
@@ -271,10 +286,11 @@ async def get_services(
     
     print(f"Calculated metrics for {len(services)} services for user: {current_user.email}")
     print(f"Using last 20 signals per endpoint for accurate recent performance")
-    print("service_total_signals",service_total_signals)
-    print("overall_total_signals",overall_total_signals)
+    print("service_total_signals", service_total_signals)
+    print("overall_total_signals", overall_total_signals)
     
-    return {
+    # Prepare result
+    result = {
         "services": services,
         "overall": {
             "total_signals": service_total_signals,
@@ -283,6 +299,18 @@ async def get_services(
             "active_services": overall_active_services
         }
     }
+    
+    # Convert Pydantic models to dicts for caching (JSON serialization)
+    cacheable_result = {
+        "services": [service.model_dump() for service in services],
+        "overall": result["overall"]
+    }
+    
+    # Cache the dict version for 30 seconds
+    await cache_set(cache_key, cacheable_result, ttl=30)
+    print(f"💾 Cached /services data for user {current_user.id}")
+    
+    return result
 
 
 @router.get("/services/{service_name}/endpoints/{endpoint_path:path}", response_model=Schema.EndpointDetailResponse)
