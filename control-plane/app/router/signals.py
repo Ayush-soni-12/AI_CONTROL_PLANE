@@ -7,6 +7,8 @@ from ..functions.decisionFunction import make_decision
 from ..ai_engine.ai_engine import make_ai_decision
 from ..router.token import get_current_user
 from collections import defaultdict
+from fastapi import BackgroundTasks
+from ..functions.mailer import send_alert_email
 import time
 
 
@@ -80,7 +82,14 @@ async def get_all_signals(
 
     return {"signals": signals}
 @router.get("/config/{service_name}/{endpoint:path}")
-async def get_config(service_name: str, endpoint: str, tenant_id: str = None, db: Session = Depends(get_db), current_user: models.User = Depends(verify_api_key)):
+async def get_config(
+    service_name: str, 
+    endpoint: str, 
+    background_tasks: BackgroundTasks,
+    tenant_id: str = None, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(verify_api_key)
+):
     """
     Services request their runtime configuration
     
@@ -96,6 +105,23 @@ async def get_config(service_name: str, endpoint: str, tenant_id: str = None, db
     
     # Get decision with tenant_id
     decision = make_decision(service_name, endpoint, tenant_id, db)
+
+
+    if decision.get("send_alert"):
+        background_tasks.add_task(
+            send_alert_email,
+            to_email=current_user.email,  # Use current user's email
+            subject=f"🚨 Alert: {service_name}",
+            context={
+                "service_name": service_name,
+                "endpoint": endpoint,
+                "avg_latency": decision["metrics"]["avg_latency"],
+                "error_rate": decision["metrics"]["error_rate"] * 100,
+                "ai_decision": decision["ai_decision"],
+            }
+        )
+
+
     
     
     # Return config
@@ -316,18 +342,18 @@ async def get_endpoint_detail(
     ai_decision = make_ai_decision(service_name, endpoint_path, recent_avg_latency, recent_error_rate)
     
     # Generate suggestions
-    # suggestions = []
-    # if ai_decision['cache_enabled']:
-    #     suggestions.append("Optimization: High latency detected. Enabling the AI-driven cache will significantly reduce response times.")
-    # if ai_decision['circuit_breaker']:
-    #     suggestions.append("Critical: Frequent errors detected. The circuit breaker should be active to protect your system.")
-    # if recent_error_rate > 0.3:
-    #     suggestions.append(f"Alert: Error rate is {recent_error_rate*100:.1f}%. Check backend logs for potential failures.")
-    # if recent_avg_latency > 500:
-    #     suggestions.append("Latency is critically high (over 800ms). Consider optimizing database queries or upstream microservices.")
+    suggestions = []
+    if ai_decision['cache_enabled']:
+        suggestions.append("Optimization: High latency detected. Enabling the AI-driven cache will significantly reduce response times.")
+    if ai_decision['circuit_breaker']:
+        suggestions.append("Critical: Frequent errors detected. The circuit breaker should be active to protect your system.")
+    if recent_error_rate >= 0.3:
+        suggestions.append(f"Alert: Error rate is {recent_error_rate*100:.1f}%. Check backend logs for potential failures.")
+    if recent_avg_latency >= 500:
+        suggestions.append("Latency is critically high (over 500ms). Consider optimizing database queries or upstream microservices.")
     
-    # if not suggestions:
-    #     suggestions.append("Performance is excellent. No further actions needed.")
+    if not suggestions:
+        suggestions.append("Performance is excellent. No further actions needed.")
     
     return {
         "service_name": service_name,
@@ -336,7 +362,7 @@ async def get_endpoint_detail(
         "error_rate": recent_error_rate,
         "total_signals": total_signals,
         "history": history,
-        "suggestions": ai_decision['reasoning'],
+        "suggestions": suggestions,
         "cache_enabled": ai_decision['cache_enabled'],
         "circuit_breaker": ai_decision['circuit_breaker'],
         "reasoning": ai_decision['reasoning']

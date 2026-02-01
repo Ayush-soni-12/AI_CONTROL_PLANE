@@ -14,8 +14,7 @@ class Settings(BaseSettings):
     SMTP_MAIL: str | None = None
     SMTP_PASS: str | None = None
     
-    # Resend API Key (if used)
-    RESEND_API_KEY: str | None = None
+
     
     class Config:
         # Look for .env file in project root (2 levels up from this file)

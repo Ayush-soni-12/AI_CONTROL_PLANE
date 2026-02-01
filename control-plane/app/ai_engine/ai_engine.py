@@ -19,10 +19,10 @@ def analyze_node(state: DecisionState) -> DecisionState:
     
     issues = []
     
-    if state['avg_latency'] > 500:
+    if state['avg_latency'] >= 500:
         issues.append(f"High latency: {state['avg_latency']:.0f}ms")
     
-    if state['error_rate'] > 0.15:
+    if state['error_rate'] >= 0.15:
         issues.append(f"High error rate: {state['error_rate']*100:.1f}%")
     
     state['analysis'] = ", ".join(issues) if issues else "No issues"
@@ -34,7 +34,7 @@ def decide_node(state: DecisionState) -> DecisionState:
     actions = []
     
     # Rule 1: Critical Failure (High Errors)
-    if state['error_rate'] > 0.3:
+    if state['error_rate'] >= 0.3:
         actions.append("circuit_breaker")
         actions.append("alert")
         state['reasoning'] = (
@@ -43,16 +43,16 @@ def decide_node(state: DecisionState) -> DecisionState:
         )
 
     # Rule 2: High Latency with Errors
-    elif state['error_rate'] > 0.15 and state['avg_latency'] > 400:
+    elif state['error_rate'] >= 0.15 and state['avg_latency'] >= 400:
         actions.append("enable_cache")
-        actions.append("alert")
+        # actions.append("alert")
         state['reasoning'] = (
             f"Performance Degradation: High latency ({state['avg_latency']:.0f}ms) accompanied by elevated error rate ({state['error_rate']*100:.1f}%). "
             "Caching enabled to reduce load. Team alerted for investigation."
         )
 
     # Rule 3: High Latency Only
-    elif state['avg_latency'] > 500:
+    elif state['avg_latency'] >= 500:
         actions.append("enable_cache")
         state['reasoning'] = (
             f"High Latency Detected: Average latency ({state['avg_latency']:.0f}ms) exceeds 500ms threshold. "
@@ -60,8 +60,8 @@ def decide_node(state: DecisionState) -> DecisionState:
         )
     
     # Rule 4: Moderate Errors (Warning)
-    elif state['error_rate'] > 0.15:
-        actions.append("alert")
+    elif state['error_rate'] >= 0.15:
+        # actions.append("alert")
         state['reasoning'] = (
             f"Elevated Error Rate: Error rate ({state['error_rate']*100:.1f}%) is above normal limits. "
             "Monitoring continued, alert sent to operations team."
