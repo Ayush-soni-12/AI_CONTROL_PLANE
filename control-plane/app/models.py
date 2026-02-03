@@ -62,3 +62,87 @@ class ApiKey(Base):
     # Relationship to user
     user = relationship("User", back_populates="api_keys")
 
+
+# Aggregation tables for efficient time-series queries
+class SignalAggregateHourly(Base):
+    """
+    Hourly aggregated metrics for signals
+    Reduces database load for historical queries
+    Retention: 90 days
+    """
+    __tablename__ = "signal_aggregates_hourly"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_name = Column(String, nullable=False, index=True)
+    endpoint = Column(String, nullable=False)
+    tenant_id = Column(String, nullable=True)
+    
+    # Time bucket (start of hour)
+    hour_bucket = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
+    
+    # Aggregated metrics
+    avg_latency_ms = Column(Float, nullable=False)
+    min_latency_ms = Column(Float, nullable=False)
+    max_latency_ms = Column(Float, nullable=False)
+    p50_latency_ms = Column(Float, nullable=True)  # Median
+    p95_latency_ms = Column(Float, nullable=True)
+    p99_latency_ms = Column(Float, nullable=True)
+    
+    total_requests = Column(Integer, nullable=False)
+    error_count = Column(Integer, nullable=False)
+    success_count = Column(Integer, nullable=False)
+    error_rate = Column(Float, nullable=False)
+    
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    
+    # Composite indexes
+    __table_args__ = (
+        # Prevent duplicate aggregations for same hour
+        Index('idx_hourly_unique', 'user_id', 'service_name', 'endpoint', 'tenant_id', 'hour_bucket', unique=True),
+        # Fast time-range queries
+        Index('idx_hourly_user_time', 'user_id', 'hour_bucket'),
+        Index('idx_hourly_service_time', 'service_name', 'endpoint', 'hour_bucket'),
+    )
+
+
+class SignalAggregateDaily(Base):
+    """
+    Daily aggregated metrics for signals
+    For long-term trend analysis
+    Retention: Forever (minimal storage)
+    """
+    __tablename__ = "signal_aggregates_daily"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_name = Column(String, nullable=False, index=True)
+    endpoint = Column(String, nullable=False)
+    tenant_id = Column(String, nullable=True)
+    
+    # Time bucket (start of day)
+    day_bucket = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
+    
+    # Aggregated metrics
+    avg_latency_ms = Column(Float, nullable=False)
+    min_latency_ms = Column(Float, nullable=False)
+    max_latency_ms = Column(Float, nullable=False)
+    p50_latency_ms = Column(Float, nullable=True)
+    p95_latency_ms = Column(Float, nullable=True)
+    p99_latency_ms = Column(Float, nullable=True)
+    
+    total_requests = Column(Integer, nullable=False)
+    error_count = Column(Integer, nullable=False)
+    success_count = Column(Integer, nullable=False)
+    error_rate = Column(Float, nullable=False)
+    
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    
+    # Composite indexes
+    __table_args__ = (
+        # Prevent duplicate aggregations for same day
+        Index('idx_daily_unique', 'user_id', 'service_name', 'endpoint', 'tenant_id', 'day_bucket', unique=True),
+        # Fast time-range queries
+        Index('idx_daily_user_time', 'user_id', 'day_bucket'),
+        Index('idx_daily_service_time', 'service_name', 'endpoint', 'day_bucket'),
+    )
