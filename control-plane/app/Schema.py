@@ -104,6 +104,18 @@ class ServicesResponse(BaseModel):
     overall: dict  # Overall metrics across all services
 
 
+# Historical Data Schemas
+class HistoricalDataRequest(BaseModel):
+    start_date: datetime
+    end_date: datetime
+
+
+class HistoricalServicesResponse(BaseModel):
+    services: List[ServiceMetrics]
+    overall: dict
+    metadata: dict  # Contains: data_source, time_range, total_records
+
+
 class EndpointDetailResponse(BaseModel):
     service_name: str
     endpoint: str
