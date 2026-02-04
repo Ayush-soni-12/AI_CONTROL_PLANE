@@ -1,0 +1,269 @@
+"""
+Aggregate Persistence Module
+
+This module handles periodic persistence of Redis real-time aggregates to PostgreSQL.
+
+PURPOSE:
+- Redis aggregates have 24h TTL and are lost on restart
+- Database contains sampled signals (10% success, 100% errors)
+- This creates periodic snapshots of Redis aggregates for accurate fallback metrics
+
+ARCHITECTURE:
+1. Background job runs every 30 minutes
+2. Scans all active Redis aggregate keys
+3. Saves snapshots to PostgreSQL (aggregate_snapshots table)
+4. Old snapshots (>30 days) are cleaned up automatically
+
+WHEN IT RUNS:
+- Automatically via APScheduler background job
+- Started when FastAPI app starts (main.py lifespan)
+- Runs continuously every 30 minutes
+"""
+
+import json
+from datetime import datetime, timedelta, timezone
+from sqlalchemy.orm import Session
+from sqlalchemy import and_
+from app import models
+from app.database import SessionLocal
+from typing import List, Dict
+import asyncio
+import redis.asyncio as aioredis
+from app.config import settings
+
+
+async def snapshot_redis_aggregates(db: Session = None):
+    """
+    Snapshot all Redis real-time aggregates to PostgreSQL.
+    
+    This function:
+    1. Creates a new Redis connection (thread-safe for background jobs)
+    2. Scans Redis for all aggregate keys
+    3. Reads each aggregate's data
+    4. Saves to aggregate_snapshots table
+    5. Deletes old snapshots (>30 days)
+    
+    Runs automatically every 30 minutes via background scheduler.
+    """
+    if db is None:
+        db = SessionLocal()
+        should_close = True
+    else:
+        should_close = False
+    
+    # Create a new Redis client for this background job to avoid event loop conflicts
+    redis_job_client = None
+    
+    try:
+        print("\n" + "="*60)
+        print("🔄 Starting Redis aggregate snapshot job")
+        print("="*60)
+        
+        # Create dedicated Redis connection for this job
+        redis_job_client = await aioredis.from_url(
+            settings.REDIS_URL,
+            encoding="utf-8",
+            decode_responses=False
+        )
+        
+        # STEP 1: Scan Redis for all aggregate keys
+        # Pattern: rt_agg:user:{user_id}:service:{service}:endpoint:{endpoint}:{window}
+        pattern = "rt_agg:*"
+        
+        try:
+            # Scan all keys matching pattern
+            cursor = 0
+            keys = []
+            
+            # Use SCAN to avoid blocking Redis
+            while True:
+                cursor, partial_keys = await redis_job_client.scan(cursor, match=pattern, count=100)
+                keys.extend(partial_keys)
+                if cursor == 0:
+                    break
+            
+            print(f"📊 Found {len(keys)} Redis aggregate keys")
+            
+            if not keys:
+                print("⚠️  No Redis aggregates found to snapshot")
+                return
+            
+            # STEP 2: Process each key and save to database
+            snapshots_created = 0
+            snapshots_skipped = 0
+            
+            for key in keys:
+                try:
+                    # Parse key to extract metadata
+                    # Format: rt_agg:user:{user_id}:service:{service}:endpoint:{endpoint}:{window}
+                    key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                    parts = key_str.split(':')
+                    
+                    if len(parts) < 8:
+                        print(f"⚠️  Skipping malformed key: {key_str}")
+                        snapshots_skipped += 1
+                        continue
+                    
+                    user_id = int(parts[2])
+                    service_name = parts[4]
+                    # Endpoint might contain colons, so join remaining parts except window
+                    window = parts[-1]
+                    endpoint = ':'.join(parts[6:-1])
+                    
+                    # Get aggregate data from Redis
+                    data = await redis_job_client.get(key_str)
+                    if not data:
+                        snapshots_skipped += 1
+                        continue
+                    
+                    agg = json.loads(data)
+                    
+                    # Calculate derived metrics
+                    avg_latency = agg['sum_latency'] / agg['count'] if agg['count'] > 0 else 0
+                    error_rate = agg['errors'] / agg['count'] if agg['count'] > 0 else 0
+                    
+                    # STEP 3: Save snapshot to database
+                    snapshot = models.AggregateSnapshot(
+                        user_id=user_id,
+                        service_name=service_name,
+                        endpoint=endpoint,
+                        window=window,
+                        snapshot_at=datetime.now(timezone.utc),
+                        count=agg['count'],
+                        sum_latency=agg['sum_latency'],
+                        errors=agg['errors'],
+                        avg_latency=avg_latency,
+                        error_rate=error_rate,
+                        last_updated=agg.get('last_updated')
+                    )
+                    
+                    db.add(snapshot)
+                    snapshots_created += 1
+                    
+                    # Commit in batches of 50 to avoid memory issues
+                    if snapshots_created % 50 == 0:
+                        db.commit()
+                        print(f"   💾 Committed {snapshots_created} snapshots so far...")
+                    
+                except Exception as e:
+                    print(f"❌ Error processing key {key}: {e}")
+                    snapshots_skipped += 1
+                    continue
+            
+            # Final commit
+            db.commit()
+            print(f"✅ Created {snapshots_created} snapshots")
+            print(f"⏭️  Skipped {snapshots_skipped} keys")
+            
+            # STEP 4: Cleanup old snapshots (>30 days)
+            cleanup_threshold = datetime.now(timezone.utc) - timedelta(days=30)
+            deleted = db.query(models.AggregateSnapshot).filter(
+                models.AggregateSnapshot.snapshot_at < cleanup_threshold
+            ).delete()
+            
+            if deleted > 0:
+                db.commit()
+                print(f"🗑️  Cleaned up {deleted} old snapshots (>30 days)")
+            
+            print("="*60)
+            print(f"✅ Snapshot job completed successfully")
+            print(f"   - Snapshots created: {snapshots_created}")
+            print(f"   - Snapshots skipped: {snapshots_skipped}")
+            print(f"   - Old snapshots cleaned: {deleted}")
+            print("="*60 + "\n")
+            
+        except Exception as e:
+            print(f"❌ Error scanning Redis keys: {e}")
+            raise
+        
+    except Exception as e:
+        print(f"❌ Fatal error in snapshot job: {e}")
+        db.rollback()
+        raise
+    finally:
+        # Close Redis connection
+        if redis_job_client:
+            try:
+                await redis_job_client.close()
+            except:
+                pass
+        
+        # Close database session
+        if should_close:
+            db.close()
+
+
+async def get_snapshot_metrics(
+    user_id: int,
+    service_name: str,
+    endpoint: str,
+    window: str = '1h',
+    db: Session = None
+) -> Dict:
+    """
+    Get metrics from the most recent snapshot.
+    
+    Used as fallback when Redis aggregates are unavailable.
+    
+    Args:
+        user_id: User ID
+        service_name: Name of the service
+        endpoint: API endpoint path
+        window: Time window ('1h' or '24h')
+        db: Database session
+    
+    Returns:
+        Dict with keys: count, sum_latency, errors, avg_latency, error_rate
+        Returns None if no snapshot exists
+    """
+    if db is None:
+        db = SessionLocal()
+        should_close = True
+    else:
+        should_close = False
+    
+    try:
+        # Get most recent snapshot for this endpoint and window
+        snapshot = db.query(models.AggregateSnapshot).filter(
+            and_(
+                models.AggregateSnapshot.user_id == user_id,
+                models.AggregateSnapshot.service_name == service_name,
+                models.AggregateSnapshot.endpoint == endpoint,
+                models.AggregateSnapshot.window == window
+            )
+        ).order_by(models.AggregateSnapshot.snapshot_at.desc()).first()
+        
+        if not snapshot:
+            return None
+        
+        # Check if snapshot is too old (>48 hours for 24h window, >3 hours for 1h window)
+        max_age = timedelta(hours=48) if window == '24h' else timedelta(hours=3)
+        age = datetime.now(timezone.utc) - snapshot.snapshot_at
+        
+        if age > max_age:
+            print(f"⚠️  Snapshot is too old ({age}) for {service_name}{endpoint}, ignoring")
+            return None
+        
+        print(f"📸 Using snapshot from {snapshot.snapshot_at} for {service_name}{endpoint} ({window})")
+        
+        return {
+            'count': snapshot.count,
+            'sum_latency': snapshot.sum_latency,
+            'errors': snapshot.errors,
+            'avg_latency': snapshot.avg_latency,
+            'error_rate': snapshot.error_rate,
+            'last_updated': snapshot.last_updated,
+            'snapshot_age': age
+        }
+        
+    finally:
+        if should_close:
+            db.close()
+
+
+def run_snapshot_job_sync():
+    """
+    Synchronous wrapper for the snapshot job.
+    Used by APScheduler which doesn't support async directly.
+    """
+    asyncio.run(snapshot_redis_aggregates())
