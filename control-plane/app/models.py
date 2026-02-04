@@ -146,3 +146,53 @@ class SignalAggregateDaily(Base):
         Index('idx_daily_user_time', 'user_id', 'day_bucket'),
         Index('idx_daily_service_time', 'service_name', 'endpoint', 'day_bucket'),
     )
+
+
+class AggregateSnapshot(Base):
+    """
+    Periodic snapshots of Redis real-time aggregates.
+    
+    WHY THIS EXISTS:
+    - Redis aggregates expire after 24h (TTL)
+    - Without this, fallback to database uses sampled data (10% success, 100% errors)
+    - This preserves accurate metrics (100% coverage) even after Redis expiry
+    
+    HOW IT WORKS:
+    - Background job snapshots Redis aggregates every 30 minutes
+    - Contains same metrics as Redis but persisted to PostgreSQL
+    - Used as fallback when Redis data is unavailable
+    
+    RETENTION: 30 days (cleanup old snapshots automatically)
+    """
+    __tablename__ = "aggregate_snapshots"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_name = Column(String, nullable=False, index=True)
+    endpoint = Column(String, nullable=False, index=True)
+    
+    # Window type: '1h' or '24h'
+    window = Column(String, nullable=False, index=True)
+    
+    # Snapshot timestamp
+    snapshot_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'), index=True)
+    
+    # Aggregated metrics (from Redis)
+    count = Column(Integer, nullable=False)
+    sum_latency = Column(Float, nullable=False)
+    errors = Column(Integer, nullable=False)
+    avg_latency = Column(Float, nullable=False)
+    error_rate = Column(Float, nullable=False)
+    
+    # Metadata
+    last_updated = Column(String, nullable=True)  # ISO timestamp from Redis
+    
+    # Composite indexes
+    __table_args__ = (
+        # Fast lookups by user, service, endpoint, window
+        Index('idx_snapshot_lookup', 'user_id', 'service_name', 'endpoint', 'window'),
+        # Fast cleanup queries by timestamp
+        Index('idx_snapshot_cleanup', 'snapshot_at'),
+        # Get latest snapshot for each endpoint
+        Index('idx_snapshot_latest', 'user_id', 'service_name', 'endpoint', 'window', 'snapshot_at'),
+    )
