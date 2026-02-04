@@ -32,24 +32,50 @@ async def receive_signal(
     
     Requires API key authentication via Authorization header.
     The signal will be associated with the user who owns the API key.
+    
+    TWO-TIER APPROACH (Phase 3 Optimization):
+    1. Update Redis real-time aggregates for ALL signals (100% - accurate metrics)
+    2. Apply sampling for PostgreSQL storage (10% success, 100% errors - efficient storage)
     """
     
     print(f"Signals received: {signals}")
     print(f"User: {current_user.email} (ID: {current_user.id})")
     
-  
-
-    # Create signal with user_id
+    # Prepare signal data
     signal_data = signals.model_dump()
     signal_data['user_id'] = current_user.id
     
-    signal = models.Signal(**signal_data)
-    db.add(signal)
-    db.commit()
-    db.refresh(signal)
+    # STEP 1: Update real-time aggregates for ALL signals (100%)
+    # This ensures accurate metrics for caching decisions
+    from app.realtime_aggregates import update_realtime_aggregate
+    from app.config import settings
+    import random
+    
+    await update_realtime_aggregate(
+        user_id=current_user.id,
+        service_name=signals.service_name,
+        endpoint=signals.endpoint,
+        latency_ms=signals.latency_ms,
+        status=signals.status
+    )
+    print(f"✅ Updated real-time aggregates for {signals.service_name}{signals.endpoint}")
+    
+    # STEP 2: Apply sampling for database storage
+    # Store 100% of errors (critical for debugging)
+    # Store only SIGNAL_SAMPLING_RATE % of success (reduces storage)
+    should_store = (signals.status == 'error') or (random.random() < settings.SIGNAL_SAMPLING_RATE)
+    
+    if should_store:
+        signal = models.Signal(**signal_data)
+        db.add(signal)
+        db.commit()
+        db.refresh(signal)
+        print(f"💾 Stored signal in database (sampled)")
+    else:
+        print(f"⏭️  Signal aggregated but not stored (sampling)")
     
     # Invalidate cache for this user so they see fresh data
-    await invalidate_user_cache(current_user.id)  # await the async function
+    await invalidate_user_cache(current_user.id)
     
     return Response(status_code=status.HTTP_201_CREATED)
 
@@ -65,24 +91,32 @@ async def get_all_signals(
     
     Requires authentication via cookie (from dashboard login).
     Returns only signals that belong to the logged-in user.
-
+    
+    PHASE 3: Returns sampled signals from database (10% of success signals)
+    plus metadata showing total signals tracked in real-time aggregates.
     """
-    # time.sleep(10)  
-
     
     # Get the current authenticated user from cookie
     current_user = get_current_user(request, db)
     
-    # Query signals filtered by user_id
+    # Query sampled signals from database (limited to last 20)
     signals = db.query(models.Signal).filter(
         models.Signal.user_id == current_user.id
     ).order_by(models.Signal.timestamp.desc()).limit(20).all()
 
     if not signals:
-        # Return empty list instead of 404 for better UX
-        return {"signals": []}
+        # Return empty list with metadata
+        return {
+            "signals": [],
+            "metadata": {
+                "total_signals_tracked": 0,
+                "signals_displayed": 0,
+                "sampling_rate": 0.1,
+                "note": "No signals yet. Start sending signals from your services!"
+            }
+        }
 
-    print(f"Fetched {len(signals)} signals for user: {current_user.email} (ID: {current_user.id})")
+    print(f"Fetched {len(signals)} sampled signals for user: {current_user.email} (ID: {current_user.id})")
 
     return {"signals": signals}
 @router.get("/config/{service_name}/{endpoint:path}")
@@ -91,7 +125,7 @@ async def get_config(
     endpoint: str, 
     background_tasks: BackgroundTasks,
     tenant_id: str = None, 
-    db: Session = Depends(get_db), 
+    db: Session = sseDepends(get_db), 
     current_user: models.User = Depends(verify_api_key)
 ):
     """
@@ -107,8 +141,8 @@ async def get_config(
     if not endpoint.startswith('/'):
         endpoint = '/' + endpoint
     
-    # Get decision with tenant_id
-    decision = make_decision(service_name, endpoint, tenant_id, db)
+    # Get decision with tenant_id and user_id (for real-time aggregates)
+    decision = await make_decision(service_name, endpoint, tenant_id, db, user_id=current_user.id)
 
 
     if decision.get("send_alert"):
@@ -146,10 +180,15 @@ async def get_services(
     db: Session = Depends(get_db)
 ):
     """
-    Get aggregated service metrics with all calculations done on backend.
+    Get aggregated service metrics using HYBRID APPROACH (Phase 3 Optimization).
     
-    Uses only the last 20 signals per endpoint for recent performance metrics.
-    Cached for 30 seconds to reduce database load on high-traffic dashboards.
+    APPROACH:
+    1. Get list of unique service/endpoint combinations from database (fast DISTINCT)
+    2. Get METRICS from Redis real-time aggregates (24h window - 100% accurate)
+    3. Fallback to database calculations if no Redis data exists
+    
+    This ensures accurate metrics based on ALL signals while being efficient.
+    Cached for 30 seconds to reduce load on high-traffic dashboards.
     """
     # Get the current authenticated user from cookie
     current_user = get_current_user(request, db)
@@ -160,119 +199,148 @@ async def get_services(
     
     if cached_data is not None:
         print(f"✅ Cache HIT for user {current_user.id} on /services")
-        # Cached data is already in dict format, FastAPI will validate it
         return cached_data
     
-    print(f"⚠️  Cache MISS for user {current_user.id} on /services - querying database")
+    print(f"⚠️  Cache MISS for user {current_user.id} on /services - building from Redis aggregates")
     
-    # Query signals filtered by user_id
-    signals = db.query(models.Signal).filter(
+    from app.realtime_aggregates import get_realtime_metrics
+    
+    # STEP 1: Get unique service/endpoint combinations from database
+    distinct_endpoints = db.query(
+        models.Signal.service_name,
+        models.Signal.endpoint
+    ).filter(
         models.Signal.user_id == current_user.id
-    ).order_by(models.Signal.timestamp.desc()).all()
-
-    if not signals:
-        return {"services": [], "overall": {"total_signals": 0, "avg_latency": 0, "error_rate": 0, "active_services": 0}}
-
-    # Group signals by service and endpoint
+    ).distinct().all()
+    
+    if not distinct_endpoints:
+        return {
+            "services": [],
+            "overall": {
+                "total_signals": 0,
+                "avg_latency": 0,
+                "error_rate": 0,
+                "active_services": 0
+            }
+        }
+    
+    print(f"📊 Found {len(distinct_endpoints)} unique endpoints for user {current_user.id}")
+    
+    # STEP 2: Build service metrics using Redis aggregates
     service_map = defaultdict(lambda: {
-        'endpoints': defaultdict(list),
-        'all_signals': []
+        'endpoints': [],
+        'total_signals': 0,
+        'total_latency': 0,
+        'total_errors': 0
     })
     
-    for signal in signals:
-        service_map[signal.service_name]['all_signals'].append(signal)
-        service_map[signal.service_name]['endpoints'][signal.endpoint].append(signal)
-        # print(f"Signal: {signal}")
-
-    # print(f"service_map: {service_map}")    
-
-
+    for service_name, endpoint in distinct_endpoints:
+        # Get metrics from Redis 24h aggregates (ALL signals - 100% accurate)
+        # Falls back to PostgreSQL snapshots if Redis is unavailable
+        metrics = await get_realtime_metrics(
+            user_id=current_user.id,
+            service_name=service_name,
+            endpoint=endpoint,
+            window='24h',
+            db=db
+        )
+        
+        if metrics and metrics['count'] >= 1:
+            # Use accurate metrics from Redis
+            avg_latency = metrics['avg_latency']
+            error_rate = metrics['error_rate']
+            signal_count = metrics['count']
+            
+            print(f"✅ Redis metrics for {service_name}{endpoint}: "
+                  f"{signal_count} signals, {avg_latency:.1f}ms avg, {error_rate*100:.1f}% errors")
+        else:
+            # Fallback: Get metrics from database (sampled data)
+            print(f"⚠️  No Redis data for {service_name}{endpoint}, falling back to database")
+            
+            signals = db.query(models.Signal).filter(
+                models.Signal.user_id == current_user.id,
+                models.Signal.service_name == service_name,
+                models.Signal.endpoint == endpoint
+            ).order_by(models.Signal.timestamp.desc()).limit(20).all()
+            
+            if not signals:
+                continue
+                
+            signal_count = len(signals)
+            avg_latency = sum(s.latency_ms for s in signals) / signal_count
+            error_count = sum(1 for s in signals if s.status == 'error')
+            error_rate = error_count / signal_count
+        
+        # Get most recent signal for tenant_id
+        recent_signal = db.query(models.Signal).filter(
+            models.Signal.user_id == current_user.id,
+            models.Signal.service_name == service_name,
+            models.Signal.endpoint == endpoint
+        ).order_by(models.Signal.timestamp.desc()).first()
+        
+        tenant_id = recent_signal.tenant_id if recent_signal else None
+        
+        # Get AI decision using accurate metrics
+        endpoint_normalized = endpoint if endpoint.startswith('/') else '/' + endpoint
+        ai_decision = make_ai_decision(service_name, endpoint_normalized, avg_latency, error_rate)
+        
+        # Build endpoint metrics
+        endpoint_metrics = Schema.EndpointMetrics(
+            path=endpoint,
+            avg_latency=avg_latency,
+            error_rate=error_rate,
+            signal_count=signal_count,
+            tenant_id=tenant_id,
+            cache_enabled=ai_decision['cache_enabled'],
+            circuit_breaker=ai_decision['circuit_breaker'],
+            reasoning=ai_decision['reasoning']
+        )
+        
+        # Accumulate for service-level metrics
+        service_map[service_name]['endpoints'].append(endpoint_metrics)
+        service_map[service_name]['total_signals'] += signal_count
+        service_map[service_name]['total_latency'] += avg_latency * signal_count
+        service_map[service_name]['total_errors'] += error_rate * signal_count
     
-    # Build service metrics
+    # STEP 3: Build service list with aggregated metrics
     services = []
     
     for service_name, data in service_map.items():
-        # Build endpoint metrics (using last 20 signals per endpoint)
-        endpoints = []
-        service_total_signals = 0  # Actual total count from all signals
-        service_weighted_latency = 0  # Weighted by recent signals
-        service_weighted_errors = 0  # Weighted by recent signals
-        total_recent_signals_for_service = 0  # Sum of recent counts for weighting
-        
-        for endpoint_path, endpoint_signals in data['endpoints'].items():
-            # Get actual total count for this endpoint (all signals)
-            actual_endpoint_count = len(endpoint_signals)
-            
-            # Use only the last 20 signals for metrics calculation (most recent data)
-            recent_signals = sorted(endpoint_signals, key=lambda s: s.timestamp, reverse=True)[:20]
-            
-            if not recent_signals:
-                continue
-            
-            # Calculate metrics from recent signals only
-            recent_count = len(recent_signals)
-            endpoint_avg_latency = sum(s.latency_ms for s in recent_signals) / recent_count
-            endpoint_error_count = sum(1 for s in recent_signals if s.status == 'error')
-            endpoint_error_rate = endpoint_error_count / recent_count
-            
-            # Get most recent signal's tenant_id
-            most_recent = recent_signals[0]  # Already sorted by timestamp desc
-            tenant_id = most_recent.tenant_id
-            
-            # Get AI decision directly using already calculated metrics (no redundant DB queries!)
-            endpoint_normalized = endpoint_path if endpoint_path.startswith('/') else '/' + endpoint_path
-            ai_decision = make_ai_decision(service_name, endpoint_normalized, endpoint_avg_latency, endpoint_error_rate)
-            
-            endpoints.append(Schema.EndpointMetrics(
-                path=endpoint_path,
-                avg_latency=endpoint_avg_latency,
-                error_rate=endpoint_error_rate,
-                signal_count=actual_endpoint_count,  # Show actual total count
-                tenant_id=tenant_id,
-                cache_enabled=ai_decision['cache_enabled'],
-                circuit_breaker=ai_decision['circuit_breaker'],
-                reasoning=ai_decision['reasoning']  # Pass AI reasoning to frontend
-            ))
-            
-            # Accumulate for service-level metrics
-            # Use actual count for total, but weight metrics by recent count for accuracy
-            service_total_signals += actual_endpoint_count
-            # service_weighted_latency += endpoint_avg_latency * recent_count
-            # service_weighted_errors += endpoint_error_rate * recent_count
-            # total_recent_signals_for_service += recent_count  # Track sum of recent counts
-        
-        if not endpoints:
+        if not data['endpoints']:
             continue
-            
-        # Calculate SERVICE-level metrics from ALL signals (not just last 20)
-        all_signals = data['all_signals']
-        avg_latency = sum(s.latency_ms for s in all_signals) / len(all_signals) if all_signals else 0
-        error_count = sum(1 for s in all_signals if s.status == 'error')
-        error_rate = error_count / len(all_signals) if all_signals else 0
-        print(f"Average_latency {avg_latency}, error_rate {error_rate}, total_signals {len(all_signals)}")
         
-        # Get last signal timestamp
-        last_signal = max(all_signals, key=lambda s: s.timestamp).timestamp if all_signals else None
+        # Calculate service-level metrics
+        total_signals = data['total_signals']
+        avg_latency = data['total_latency'] / total_signals if total_signals > 0 else 0
+        error_rate = data['total_errors'] / total_signals if total_signals > 0 else 0
         
-        # Determine service status based on aggregated metrics
+        # Get last signal timestamp for this service
+        last_signal_record = db.query(models.Signal).filter(
+            models.Signal.user_id == current_user.id,
+            models.Signal.service_name == service_name
+        ).order_by(models.Signal.timestamp.desc()).first()
+        
+        last_signal = last_signal_record.timestamp if last_signal_record else None
+        
+        # Determine service status
         if error_rate > 0.3:
             status = 'down'
-        elif error_rate > 0.15  or avg_latency > 500:
+        elif error_rate > 0.15 or avg_latency > 500:
             status = 'degraded'
         else:
             status = 'healthy'
-            
+        
         services.append(Schema.ServiceMetrics(
             name=service_name,
-            endpoints=endpoints,
-            total_signals=service_total_signals,
+            endpoints=data['endpoints'],
+            total_signals=total_signals,
             avg_latency=avg_latency,
             error_rate=error_rate,
             last_signal=last_signal,
             status=status
         ))
     
-    # Calculate overall metrics across all services
+    # Calculate overall metrics
     if services:
         overall_total_signals = sum(s.total_signals for s in services)
         overall_avg_latency = sum(s.avg_latency * s.total_signals for s in services) / overall_total_signals if overall_total_signals > 0 else 0
@@ -284,29 +352,27 @@ async def get_services(
         overall_error_rate = 0
         overall_active_services = 0
     
-    print(f"Calculated metrics for {len(services)} services for user: {current_user.email}")
-    print(f"Using last 20 signals per endpoint for accurate recent performance")
-    print("service_total_signals", service_total_signals)
-    print("overall_total_signals", overall_total_signals)
+    print(f"✅ Built metrics for {len(services)} services using Redis aggregates")
+    print(f"   Total signals (accurate): {overall_total_signals}")
     
     # Prepare result
     result = {
         "services": services,
         "overall": {
-            "total_signals": service_total_signals,
+            "total_signals": overall_total_signals,
             "avg_latency": overall_avg_latency,
             "error_rate": overall_error_rate,
             "active_services": overall_active_services
         }
     }
     
-    # Convert Pydantic models to dicts for caching (JSON serialization)
+    # Convert to dict for caching
     cacheable_result = {
         "services": [service.model_dump() for service in services],
         "overall": result["overall"]
     }
     
-    # Cache the dict version for 30 seconds
+    # Cache for 30 seconds
     await cache_set(cache_key, cacheable_result, ttl=30)
     print(f"💾 Cached /services data for user {current_user.id}")
     
@@ -321,7 +387,14 @@ async def get_endpoint_detail(
     db: Session = Depends(get_db)
 ):
     """
-    Get detailed metrics for a specific endpoint, including history for graphs.
+    Get detailed metrics for a specific endpoint using HYBRID APPROACH (Phase 3).
+    
+    APPROACH:
+    1. Get accurate METRICS from Redis 24h aggregates (total signals, avg latency, error rate)
+    2. Get HISTORY (graph data) from database (last 20 sampled signals)
+    3. Fallback to database for metrics if no Redis data exists
+    
+    This ensures endpoint details show accurate overall metrics while graphs show sampled trends.
     """
     # Normalize endpoint path
     if not endpoint_path.startswith('/'):
@@ -329,69 +402,92 @@ async def get_endpoint_detail(
         
     current_user = get_current_user(request, db)
     
-    # Query signals for this specific endpoint
-    signals = db.query(models.Signal).filter(
+    from app.realtime_aggregates import get_realtime_metrics
+    
+    # STEP 1: Get accurate metrics from Redis 24h aggregates
+    # Falls back to PostgreSQL snapshots if Redis is unavailable
+    metrics = await get_realtime_metrics(
+        user_id=current_user.id,
+        service_name=service_name,
+        endpoint=endpoint_path,
+        window='24h',
+        db=db
+    )
+    
+    if metrics and metrics['count'] >= 1:
+        # Use accurate metrics from Redis (ALL signals)
+        total_signals = metrics['count']
+        avg_latency = metrics['avg_latency']
+        error_rate = metrics['error_rate']
+        
+        print(f"✅ Using Redis metrics for {service_name}{endpoint_path}: "
+              f"{total_signals} signals, {avg_latency:.1f}ms avg, {error_rate*100:.1f}% errors")
+    else:
+        # Fallback: Calculate from database (sampled data)
+        print(f"⚠️  No Redis data for {service_name}{endpoint_path}, falling back to database")
+        
+        signals = db.query(models.Signal).filter(
+            models.Signal.user_id == current_user.id,
+            models.Signal.service_name == service_name,
+            models.Signal.endpoint == endpoint_path
+        ).order_by(models.Signal.timestamp.desc()).all()
+        
+        if not signals:
+            raise HTTPException(status_code=404, detail="Endpoint not found or no signals recorded")
+        
+        total_signals = len(signals)
+        avg_latency = sum(s.latency_ms for s in signals) / total_signals
+        error_count = sum(1 for s in signals if s.status == 'error')
+        error_rate = error_count / total_signals
+    
+    # STEP 2: Get history for graph (last 20 signals from database - sampled is fine for trends)
+    history_signals = db.query(models.Signal).filter(
         models.Signal.user_id == current_user.id,
         models.Signal.service_name == service_name,
         models.Signal.endpoint == endpoint_path
-    ).order_by(models.Signal.timestamp.desc()).all()
-
-    # for signal in signals:
-    #     print("signal",signal.latency_ms)
+    ).order_by(models.Signal.timestamp.desc()).limit(20).all()
     
-    if not signals:
-        raise HTTPException(status_code=404, detail="Endpoint not found or no signals recorded")
-        
-    # Metrics calculation
-    total_signals = len(signals)
-    # avg_latency = sum(s.latency_ms for s in signals) / total_signals
-    # error_count = sum(1 for s in signals if s.status == 'error')
-    # error_rate = error_count / total_signals
-    
-    # History for graph (last 50 signals)
     history = []
-    # Reverse to get chronological order for the graph
-    history_signals = signals[:20]
     for s in history_signals:
         history.append({
             "timestamp": s.timestamp.isoformat(),
             "latency_ms": s.latency_ms,
             "status": s.status
         })
-
-    # print(f"History ", history)
-        
-    # Get last 20 for AI decisionrecrecent_signals = signals[:20]ent_signals = signals[:20]
-    recent_signals = signals[:20]
-    print("recent_signals",len(recent_signals))
-    recent_avg_latency = sum(s.latency_ms for s in recent_signals) / len(recent_signals)
-    recent_error_rate = sum(1 for s in recent_signals if s.status == 'error') / len(recent_signals)
     
-    ai_decision = make_ai_decision(service_name, endpoint_path, recent_avg_latency, recent_error_rate)
+    # STEP 3: Get AI decision using accurate metrics
+    ai_decision = make_ai_decision(service_name, endpoint_path, avg_latency, error_rate)
     
-    # Generate suggestions
+    # Generate suggestions based on metrics
     suggestions = []
+    if error_rate > 0.3:
+        suggestions.append("⚠️ High error rate detected. Consider implementing retry logic or circuit breakers.")
+    if avg_latency > 500:
+        suggestions.append("🐌 High latency detected. Consider caching frequently accessed data.")
+    if error_rate > 0.15 and avg_latency > 300:
+        suggestions.append("💡 Both latency and errors are elevated. Review service dependencies and database queries.")
+    
     if ai_decision['cache_enabled']:
-        suggestions.append("Optimization: High latency detected. Enabling the AI-driven cache will significantly reduce response times.")
-    if ai_decision['circuit_breaker']:
-        suggestions.append("Critical: Frequent errors detected. The circuit breaker should be active to protect your system.")
-    if recent_error_rate >= 0.3:
-        suggestions.append(f"Alert: Error rate is {recent_error_rate*100:.1f}%. Check backend logs for potential failures.")
-    if recent_avg_latency >= 500:
-        suggestions.append("Latency is critically high (over 500ms). Consider optimizing database queries or upstream microservices.")
+        suggestions.append("✅ Caching is recommended and enabled for this endpoint.")
+    
+    if ai_decision.get('circuit_breaker'):
+        suggestions.append("🔴 Circuit breaker is active due to high error rate. Service is in degraded mode.")
     
     if not suggestions:
-        suggestions.append("Performance is excellent. No further actions needed.")
+        suggestions.append("✨ Endpoint is performing well! No immediate optimizations needed.")
     
-    return {
-        "service_name": service_name,
-        "endpoint": endpoint_path,
-        "avg_latency": recent_avg_latency,
-        "error_rate": recent_error_rate,
-        "total_signals": total_signals,
-        "history": history,
-        "suggestions": suggestions,
-        "cache_enabled": ai_decision['cache_enabled'],
-        "circuit_breaker": ai_decision['circuit_breaker'],
-        "reasoning": ai_decision['reasoning']
-    }
+    print(f"📊 Endpoint detail for {service_name}{endpoint_path}: "
+          f"Total: {total_signals}, Avg: {avg_latency:.1f}ms, Errors: {error_rate*100:.1f}%")
+    
+    return Schema.EndpointDetailResponse(
+        service_name=service_name,
+        endpoint=endpoint_path,
+        avg_latency=avg_latency,
+        error_rate=error_rate,
+        total_signals=total_signals,
+        history=history,
+        suggestions=suggestions,
+        cache_enabled=ai_decision['cache_enabled'],
+        circuit_breaker=ai_decision.get('circuit_breaker', False),
+        reasoning=ai_decision['reasoning']
+    )
