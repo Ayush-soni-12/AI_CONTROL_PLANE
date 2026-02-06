@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     SMTP_PORT: int | None = None
     SMTP_MAIL: str | None = None
     SMTP_PASS: str | None = None
+
+    # Redis api key
+    REDIS_URL: str
+    
+    # Signal sampling settings (Phase 3 optimization)
+    SIGNAL_SAMPLING_RATE: float = 0.1  # 10% of success signals stored
+    MAX_BATCH_SIZE: int = 1000  # Maximum signals per batch request
     
 
     

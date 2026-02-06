@@ -3,6 +3,9 @@ from jwt.exceptions import InvalidTokenError
 from datetime import datetime, timedelta, timezone
 from fastapi import status, HTTPException, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from ..config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
@@ -48,9 +51,9 @@ def verify_token(token: str, credentials_exception):
 
     return token_data
 
-def get_current_user(
+async def get_current_user(
     request: Request,
-    db,  # Database session
+    db: AsyncSession,  # Async database session
     token: str = Depends(oauth2_scheme)
 ):
     from .. import models
@@ -72,8 +75,13 @@ def get_current_user(
 
     user_id = verify_token(final_token, credentials_exception)
     
-    # Fetch user from database
-    user = db.query(models.User).filter(models.User.id == int(user_id)).first()
+    # Fetch user from database (async pattern)
+    # Eagerly load api_keys to prevent lazy-load issues in auth endpoints
+    stmt = select(models.User).options(
+        selectinload(models.User.api_keys)
+    ).filter(models.User.id == int(user_id))
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
     
     if not user:
         raise credentials_exception

@@ -3,47 +3,51 @@ Background Jobs for AI Control Plane
 Handles data aggregation and cleanup tasks
 """
 
-from datetime import datetime, timedelta
-from sqlalchemy import func, and_, text
-from sqlalchemy.orm import Session
-from app.database import SessionLocal
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import func, and_, text, select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database import AsyncSessionLocal
 from app import models
 import traceback
 
 
-def aggregate_signals_hourly():
+async def aggregate_signals_hourly():
     """
     Aggregate signals into hourly buckets
     Runs every hour, aggregates data from the previous hour
     """
-    db: Session = SessionLocal()
+    db: AsyncSession = AsyncSessionLocal()
     
     try:
         # Calculate time range: last complete hour
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         hour_start = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
         hour_end = hour_start + timedelta(hours=1)
         
         print(f"🔄 Starting hourly aggregation for {hour_start} to {hour_end}")
         
         # Get all unique combinations of (user_id, service, endpoint, tenant) for this hour
-        combinations = db.query(
+        # Async pattern using select().distinct()
+        stmt = select(
             models.Signal.user_id,
             models.Signal.service_name,
             models.Signal.endpoint,
             models.Signal.tenant_id
-        ).filter(
+        ).where(
             and_(
                 models.Signal.timestamp >= hour_start,
                 models.Signal.timestamp < hour_end
             )
-        ).distinct().all()
+        ).distinct()
+        
+        result = await db.execute(stmt)
+        combinations = result.all()
         
         aggregated_count = 0
         
         for user_id, service_name, endpoint, tenant_id in combinations:
             # Get all signals for this combination in this hour
-            signals = db.query(models.Signal).filter(
+            stmt_signals = select(models.Signal).where(
                 and_(
                     models.Signal.user_id == user_id,
                     models.Signal.service_name == service_name,
@@ -52,7 +56,9 @@ def aggregate_signals_hourly():
                     models.Signal.timestamp >= hour_start,
                     models.Signal.timestamp < hour_end
                 )
-            ).all()
+            )
+            result_signals = await db.execute(stmt_signals)
+            signals = result_signals.scalars().all()
             
             if not signals:
                 continue
@@ -89,53 +95,56 @@ def aggregate_signals_hourly():
             )
             
             # Insert or update (in case job runs twice)
-            db.merge(aggregate)
+            await db.merge(aggregate)
             aggregated_count += 1
         
-        db.commit()
+        await db.commit()
         print(f"✅ Hourly aggregation complete: {aggregated_count} aggregates created")
         
     except Exception as e:
         print(f"❌ Hourly aggregation failed: {e}")
         print(traceback.format_exc())
-        db.rollback()
+        await db.rollback()
     finally:
-        db.close()
+        await db.close()
 
 
-def aggregate_signals_daily():
+async def aggregate_signals_daily():
     """
     Aggregate hourly data into daily buckets
     Runs daily, aggregates yesterday's hourly data
     """
-    db: Session = SessionLocal()
+    db: AsyncSession = AsyncSessionLocal()
     
     try:
         # Calculate time range: yesterday (complete day)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         day_start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
         
         print(f"🔄 Starting daily aggregation for {day_start.date()}")
         
         # Get all unique combinations for yesterday
-        combinations = db.query(
+        stmt = select(
             models.SignalAggregateHourly.user_id,
             models.SignalAggregateHourly.service_name,
             models.SignalAggregateHourly.endpoint,
             models.SignalAggregateHourly.tenant_id
-        ).filter(
+        ).where(
             and_(
                 models.SignalAggregateHourly.hour_bucket >= day_start,
                 models.SignalAggregateHourly.hour_bucket < day_end
             )
-        ).distinct().all()
+        ).distinct()
+        
+        result = await db.execute(stmt)
+        combinations = result.all()
         
         aggregated_count = 0
         
         for user_id, service_name, endpoint, tenant_id in combinations:
             # Get all hourly aggregates for this combination for this day
-            hourly_aggs = db.query(models.SignalAggregateHourly).filter(
+            stmt_hourly = select(models.SignalAggregateHourly).where(
                 and_(
                     models.SignalAggregateHourly.user_id == user_id,
                     models.SignalAggregateHourly.service_name == service_name,
@@ -144,7 +153,9 @@ def aggregate_signals_daily():
                     models.SignalAggregateHourly.hour_bucket >= day_start,
                     models.SignalAggregateHourly.hour_bucket < day_end
                 )
-            ).all()
+            )
+            result_hourly = await db.execute(stmt_hourly)
+            hourly_aggs = result_hourly.scalars().all()
             
             if not hourly_aggs:
                 continue
@@ -175,45 +186,49 @@ def aggregate_signals_daily():
                 error_rate=(total_errors / total_requests) * 100 if total_requests > 0 else 0
             )
             
-            db.merge(aggregate)
+            await db.merge(aggregate)
             aggregated_count += 1
         
-        db.commit()
+        await db.commit()
         print(f"✅ Daily aggregation complete: {aggregated_count} aggregates created")
         
     except Exception as e:
         print(f"❌ Daily aggregation failed: {e}")
         print(traceback.format_exc())
-        db.rollback()
+        await db.rollback()
     finally:
-        db.close()
+        await db.close()
 
 
-def cleanup_old_data():
+async def cleanup_old_data():
     """
     Delete old signal data based on retention policies:
     - Raw signals: 7 days
     - Hourly aggregates: 90 days
     - Daily aggregates: Keep forever
     """
-    db: Session = SessionLocal()
+    db: AsyncSession = AsyncSessionLocal()
     
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Delete raw signals older than 7 days
         signals_cutoff = now - timedelta(days=7)
-        deleted_signals = db.query(models.Signal).filter(
+        stmt_signals = delete(models.Signal).where(
             models.Signal.timestamp < signals_cutoff
-        ).delete(synchronize_session=False)
+        )
+        result_signals = await db.execute(stmt_signals)
+        deleted_signals = result_signals.rowcount
         
         # Delete hourly aggregates older than 90 days
         hourly_cutoff = now - timedelta(days=90)
-        deleted_hourly = db.query(models.SignalAggregateHourly).filter(
+        stmt_hourly = delete(models.SignalAggregateHourly).where(
             models.SignalAggregateHourly.hour_bucket < hourly_cutoff
-        ).delete(synchronize_session=False)
+        )
+        result_hourly = await db.execute(stmt_hourly)
+        deleted_hourly = result_hourly.rowcount
         
-        db.commit()
+        await db.commit()
         
         print(f"🗑️  Cleanup complete:")
         print(f"   - Deleted {deleted_signals} raw signals older than 7 days")
@@ -222,9 +237,9 @@ def cleanup_old_data():
     except Exception as e:
         print(f"❌ Cleanup failed: {e}")
         print(traceback.format_exc())
-        db.rollback()
+        await db.rollback()
     finally:
-        db.close()
+        await db.close()
 
 
 if __name__ == "__main__":

@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Response, status, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from .. import models, Schema
-from ..database import get_db
+from ..database import get_async_db
 from ..dependencies import verify_api_key
 from ..functions.decisionFunction import make_decision
 from ..ai_engine.ai_engine import make_ai_decision
@@ -24,7 +25,7 @@ router = APIRouter(
 @router.post("/signals")
 async def receive_signal(
     signals: Schema.SignalSend, 
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_async_db),
     current_user: models.User = Depends(verify_api_key)
 ):
     """
@@ -68,8 +69,8 @@ async def receive_signal(
     if should_store:
         signal = models.Signal(**signal_data)
         db.add(signal)
-        db.commit()
-        db.refresh(signal)
+        await db.commit()
+        await db.refresh(signal)
         print(f"💾 Stored signal in database (sampled)")
     else:
         print(f"⏭️  Signal aggregated but not stored (sampling)")
@@ -84,7 +85,7 @@ async def receive_signal(
 @router.get("/signals", response_model=Schema.SignalsResponse)
 async def get_all_signals(
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get all signals for the currently authenticated user.
@@ -97,12 +98,14 @@ async def get_all_signals(
     """
     
     # Get the current authenticated user from cookie
-    current_user = get_current_user(request, db)
+    current_user = await get_current_user(request, db)
     
-    # Query sampled signals from database (limited to last 20)
-    signals = db.query(models.Signal).filter(
+    # Query sampled signals from database (limited to last 20) - async pattern
+    stmt = select(models.Signal).filter(
         models.Signal.user_id == current_user.id
-    ).order_by(models.Signal.timestamp.desc()).limit(20).all()
+    ).order_by(models.Signal.timestamp.desc()).limit(20)
+    result = await db.execute(stmt)
+    signals = result.scalars().all()
 
     if not signals:
         # Return empty list with metadata
@@ -125,7 +128,7 @@ async def get_config(
     endpoint: str, 
     background_tasks: BackgroundTasks,
     tenant_id: str = None, 
-    db: Session = sseDepends(get_db), 
+    db: AsyncSession = Depends(get_async_db), 
     current_user: models.User = Depends(verify_api_key)
 ):
     """
@@ -177,7 +180,7 @@ async def get_config(
 @router.get("/services", response_model=Schema.ServicesResponse)
 async def get_services(
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get aggregated service metrics using HYBRID APPROACH (Phase 3 Optimization).
@@ -191,7 +194,7 @@ async def get_services(
     Cached for 30 seconds to reduce load on high-traffic dashboards.
     """
     # Get the current authenticated user from cookie
-    current_user = get_current_user(request, db)
+    current_user = await get_current_user(request, db)
     
     # Try cache first (30 second TTL for near-real-time data)
     cache_key = f"user:{current_user.id}:services"
@@ -205,13 +208,15 @@ async def get_services(
     
     from app.realtime_aggregates import get_realtime_metrics
     
-    # STEP 1: Get unique service/endpoint combinations from database
-    distinct_endpoints = db.query(
+    # STEP 1: Get unique service/endpoint combinations from database (async pattern)
+    stmt = select(
         models.Signal.service_name,
         models.Signal.endpoint
     ).filter(
         models.Signal.user_id == current_user.id
-    ).distinct().all()
+    ).distinct()
+    result = await db.execute(stmt)
+    distinct_endpoints = result.all()
     
     if not distinct_endpoints:
         return {
@@ -257,11 +262,14 @@ async def get_services(
             # Fallback: Get metrics from database (sampled data)
             print(f"⚠️  No Redis data for {service_name}{endpoint}, falling back to database")
             
-            signals = db.query(models.Signal).filter(
+            # Async pattern for fallback query
+            stmt = select(models.Signal).filter(
                 models.Signal.user_id == current_user.id,
                 models.Signal.service_name == service_name,
                 models.Signal.endpoint == endpoint
-            ).order_by(models.Signal.timestamp.desc()).limit(20).all()
+            ).order_by(models.Signal.timestamp.desc()).limit(20)
+            result = await db.execute(stmt)
+            signals = result.scalars().all()
             
             if not signals:
                 continue
@@ -271,12 +279,14 @@ async def get_services(
             error_count = sum(1 for s in signals if s.status == 'error')
             error_rate = error_count / signal_count
         
-        # Get most recent signal for tenant_id
-        recent_signal = db.query(models.Signal).filter(
+        # Get most recent signal for tenant_id (async pattern)
+        stmt = select(models.Signal).filter(
             models.Signal.user_id == current_user.id,
             models.Signal.service_name == service_name,
             models.Signal.endpoint == endpoint
-        ).order_by(models.Signal.timestamp.desc()).first()
+        ).order_by(models.Signal.timestamp.desc())
+        result = await db.execute(stmt)
+        recent_signal = result.scalars().first()
         
         tenant_id = recent_signal.tenant_id if recent_signal else None
         
@@ -314,11 +324,13 @@ async def get_services(
         avg_latency = data['total_latency'] / total_signals if total_signals > 0 else 0
         error_rate = data['total_errors'] / total_signals if total_signals > 0 else 0
         
-        # Get last signal timestamp for this service
-        last_signal_record = db.query(models.Signal).filter(
+        # Get last signal timestamp for this service (async pattern)
+        stmt = select(models.Signal).filter(
             models.Signal.user_id == current_user.id,
             models.Signal.service_name == service_name
-        ).order_by(models.Signal.timestamp.desc()).first()
+        ).order_by(models.Signal.timestamp.desc())
+        result = await db.execute(stmt)
+        last_signal_record = result.scalars().first()
         
         last_signal = last_signal_record.timestamp if last_signal_record else None
         
@@ -384,7 +396,7 @@ async def get_endpoint_detail(
     service_name: str,
     endpoint_path: str,
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get detailed metrics for a specific endpoint using HYBRID APPROACH (Phase 3).
@@ -400,7 +412,7 @@ async def get_endpoint_detail(
     if not endpoint_path.startswith('/'):
         endpoint_path = '/' + endpoint_path
         
-    current_user = get_current_user(request, db)
+    current_user = await get_current_user(request, db)
     
     from app.realtime_aggregates import get_realtime_metrics
     
@@ -426,11 +438,14 @@ async def get_endpoint_detail(
         # Fallback: Calculate from database (sampled data)
         print(f"⚠️  No Redis data for {service_name}{endpoint_path}, falling back to database")
         
-        signals = db.query(models.Signal).filter(
+        # Async pattern for fallback
+        stmt = select(models.Signal).filter(
             models.Signal.user_id == current_user.id,
             models.Signal.service_name == service_name,
             models.Signal.endpoint == endpoint_path
-        ).order_by(models.Signal.timestamp.desc()).all()
+        ).order_by(models.Signal.timestamp.desc())
+        result = await db.execute(stmt)
+        signals = result.scalars().all()
         
         if not signals:
             raise HTTPException(status_code=404, detail="Endpoint not found or no signals recorded")
@@ -441,11 +456,13 @@ async def get_endpoint_detail(
         error_rate = error_count / total_signals
     
     # STEP 2: Get history for graph (last 20 signals from database - sampled is fine for trends)
-    history_signals = db.query(models.Signal).filter(
+    stmt = select(models.Signal).filter(
         models.Signal.user_id == current_user.id,
         models.Signal.service_name == service_name,
         models.Signal.endpoint == endpoint_path
-    ).order_by(models.Signal.timestamp.desc()).limit(20).all()
+    ).order_by(models.Signal.timestamp.desc()).limit(20)
+    result = await db.execute(stmt)
+    history_signals = result.scalars().all()
     
     history = []
     for s in history_signals:

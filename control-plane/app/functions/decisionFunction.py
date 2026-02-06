@@ -1,14 +1,15 @@
-from ..database import get_db
+from ..database import get_async_db
 from  ..import models
 from fastapi import Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from ..ai_engine import ai_engine
 make_ai_decision = ai_engine.make_ai_decision
 
 
 
 
-async def make_decision(service_name, endpoint, tenant_id=None, db: Session = None, user_id: int = None):
+async def make_decision(service_name, endpoint, tenant_id=None, db: AsyncSession = None, user_id: int = None):
     """
     Decide if cache should be enabled for this endpoint
     
@@ -72,17 +73,19 @@ async def make_decision(service_name, endpoint, tenant_id=None, db: Session = No
     # FALLBACK: Use database if no real-time data available
     print(f"⚠️  No real-time aggregates found, falling back to database query")
 
-    # Build query with service_name and endpoint filters
-    query = db.query(models.Signal).filter(
+    # Build query with service_name and endpoint filters (async pattern)
+    stmt = select(models.Signal).filter(
         models.Signal.service_name == service_name,
         models.Signal.endpoint == endpoint
     )
     
     # Add tenant_id filter if provided
     if tenant_id:
-        query = query.filter(models.Signal.tenant_id == tenant_id)
+        stmt = stmt.filter(models.Signal.tenant_id == tenant_id)
     
-    signals = query.order_by(models.Signal.timestamp.desc()).limit(20).all()
+    stmt = stmt.order_by(models.Signal.timestamp.desc()).limit(20)
+    result = await db.execute(stmt)
+    signals = result.scalars().all()
 
     print(f"fetch signals for {service_name}{endpoint} (tenant: {tenant_id or 'all'}): {signals}")
 

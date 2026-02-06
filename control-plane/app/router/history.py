@@ -6,10 +6,10 @@ Serves aggregated data for time ranges beyond 7 days
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, func, select
 from app import models, Schema
-from app.database import get_db
+from app.database import get_async_db
 from app.router.auth import get_current_user
 from fastapi import Request
 
@@ -39,7 +39,7 @@ async def get_historical_services(
     request: Request,
     start_date: datetime = Query(..., description="Start date (ISO format)"),
     end_date: datetime = Query(..., description="End date (ISO format)"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get service metrics for a historical time range
@@ -49,7 +49,7 @@ async def get_historical_services(
     - 7-90 days: Hourly aggregates
     - 90+ days: Daily aggregates
     """
-    current_user = get_current_user(request, db)
+    current_user = await get_current_user(request, db)
     
     # Determine data source
     print(f"Start date",start_date ,"End date", end_date)
@@ -63,13 +63,13 @@ async def get_historical_services(
     
     if data_source == "raw":
         # Use raw signals
-        services, total_records = _get_services_from_raw(db, current_user.id, start_date, end_date)
+        services, total_records = await _get_services_from_raw(db, current_user.id, start_date, end_date)
     elif data_source == "hourly":
         # Use hourly aggregates
-        services, total_records = _get_services_from_hourly(db, current_user.id, start_date, end_date)
+        services, total_records = await _get_services_from_hourly(db, current_user.id, start_date, end_date)
     else:
         # Use daily aggregates
-        services, total_records = _get_services_from_daily(db, current_user.id, start_date, end_date)
+        services, total_records = await _get_services_from_daily(db, current_user.id, start_date, end_date)
     
     # Calculate overall metrics
     if services:
@@ -108,15 +108,17 @@ async def get_historical_services(
     }
 
 
-def _get_services_from_raw(db: Session, user_id: int, start_date: datetime, end_date: datetime):
+async def _get_services_from_raw(db: AsyncSession, user_id: int, start_date: datetime, end_date: datetime):
     """Get services from raw signals"""
-    signals = db.query(models.Signal).filter(
+    stmt = select(models.Signal).filter(
         and_(
             models.Signal.user_id == user_id,
             models.Signal.timestamp >= start_date,
             models.Signal.timestamp < end_date
         )
-    ).all()
+    )
+    result = await db.execute(stmt)
+    signals = result.scalars().all()
     
     # Group by service
     service_data = {}
@@ -172,28 +174,32 @@ def _get_services_from_raw(db: Session, user_id: int, start_date: datetime, end_
     return services, len(signals)
 
 
-def _get_services_from_hourly(db: Session, user_id: int, start_date: datetime, end_date: datetime):
+async def _get_services_from_hourly(db: AsyncSession, user_id: int, start_date: datetime, end_date: datetime):
     """Get services from hourly aggregates"""
-    aggregates = db.query(models.SignalAggregateHourly).filter(
+    stmt = select(models.SignalAggregateHourly).filter(
         and_(
             models.SignalAggregateHourly.user_id == user_id,
             models.SignalAggregateHourly.hour_bucket >= start_date,
             models.SignalAggregateHourly.hour_bucket < end_date
         )
-    ).all()
+    )
+    result = await db.execute(stmt)
+    aggregates = result.scalars().all()
     
     return _build_services_from_aggregates(aggregates, 'hourly')
 
 
-def _get_services_from_daily(db: Session, user_id: int, start_date: datetime, end_date: datetime):
+async def _get_services_from_daily(db: AsyncSession, user_id: int, start_date: datetime, end_date: datetime):
     """Get services from daily aggregates"""
-    aggregates = db.query(models.SignalAggregateDaily).filter(
+    stmt = select(models.SignalAggregateDaily).filter(
         and_(
             models.SignalAggregateDaily.user_id == user_id,
             models.SignalAggregateDaily.day_bucket >= start_date,
             models.SignalAggregateDaily.day_bucket < end_date
         )
-    ).all()
+    )
+    result = await db.execute(stmt)
+    aggregates = result.scalars().all()
     
     return _build_services_from_aggregates(aggregates, 'daily')
 

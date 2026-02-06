@@ -1,14 +1,15 @@
 from fastapi import Header, HTTPException, status, Depends
-from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 from typing import Optional
 from . import models
-from .database import get_db
+from .database import get_async_db
 
 
 async def verify_api_key(
     authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ) -> models.User:
     """
     Verify API key from Authorization header and return the associated user.
@@ -45,11 +46,16 @@ async def verify_api_key(
             detail="API key is empty. Please provide a valid API key."
         )
     
-    # Query the database for the API key
-    db_api_key = db.query(models.ApiKey).filter(
+    # Query the database for the API key (async pattern)
+    # Use selectinload to eagerly load the user relationship (prevents lazy-load issues)
+    stmt = select(models.ApiKey).options(
+        selectinload(models.ApiKey.user)
+    ).filter(
         models.ApiKey.key == api_key,
         models.ApiKey.is_active == True
-    ).first()
+    )
+    result = await db.execute(stmt)
+    db_api_key = result.scalar_one_or_none()
     
     # Check if API key exists
     if not db_api_key:
@@ -60,7 +66,7 @@ async def verify_api_key(
     
     # Update last_used timestamp
     db_api_key.last_used = func.now()
-    db.commit()
+    await db.commit()
     
     # Return the user associated with this API key
     return db_api_key.user

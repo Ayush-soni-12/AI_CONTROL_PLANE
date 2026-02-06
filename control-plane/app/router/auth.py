@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Response, status, HTTPException, Request
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from .. import models, Schema
-from ..database import get_db
+from ..database import get_async_db
 from ..utils import get_password_hash, verify_password
 from .token import create_access_token, get_current_user
 import secrets
@@ -15,7 +16,7 @@ router = APIRouter(
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED, response_model=Schema.TokenResponse)
-async def signup(response: Response, new_user: Schema.SignupRequest, db: Session = Depends(get_db)):
+async def signup(response: Response, new_user: Schema.SignupRequest, db: AsyncSession = Depends(get_async_db)):
     """
     Create a new user account
     
@@ -31,8 +32,10 @@ async def signup(response: Response, new_user: Schema.SignupRequest, db: Session
             detail="Passwords do not match"
         )
     
-    # Check if user already exists
-    existing_user = db.query(models.User).filter(models.User.email == new_user.email.lower()).first()
+    # Check if user already exists (async pattern)
+    stmt = select(models.User).filter(models.User.email == new_user.email.lower())
+    result = await db.execute(stmt)
+    existing_user = result.scalar_one_or_none()
     
     if existing_user:
         raise HTTPException(
@@ -51,8 +54,8 @@ async def signup(response: Response, new_user: Schema.SignupRequest, db: Session
     )
     
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     
     # Create access token (use user.id, not new_user.id)
     access_token = create_access_token(data={"user_id": str(user.id)})
@@ -76,7 +79,7 @@ async def signup(response: Response, new_user: Schema.SignupRequest, db: Session
 
 
 @router.post("/login", response_model=Schema.TokenResponse)
-async def login(response: Response, credentials: Schema.LoginRequest, db: Session = Depends(get_db)):
+async def login(response: Response, credentials: Schema.LoginRequest, db: AsyncSession = Depends(get_async_db)):
     """
     Login with email and password
     
@@ -84,8 +87,10 @@ async def login(response: Response, credentials: Schema.LoginRequest, db: Sessio
     - **password**: User's password
     """
     
-    # Find user by email
-    user = db.query(models.User).filter(models.User.email == credentials.email.lower()).first()
+    # Find user by email (async pattern)
+    stmt = select(models.User).filter(models.User.email == credentials.email.lower())
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
     
     if not user:
         raise HTTPException(
@@ -121,7 +126,7 @@ async def login(response: Response, credentials: Schema.LoginRequest, db: Sessio
 @router.get("/me", response_model=Schema.UserResponse)
 async def get_me(
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get current authenticated user's information
@@ -131,7 +136,7 @@ async def get_me(
     """
     # time.sleep(5)
 
-    current_user = get_current_user(request, db)
+    current_user = await get_current_user(request, db)
     return current_user
 
 
@@ -162,12 +167,12 @@ def generate_secure_api_key() -> str:
 @router.get("/api_keys", response_model=list[Schema.ApiKeyResponse])
 async def get_api_keys(
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Get all API keys for the current authenticated user
     """
-    current_user = get_current_user(request, db)
+    current_user = await get_current_user(request, db)
     return current_user.api_keys
 
 
@@ -175,12 +180,12 @@ async def get_api_keys(
 async def generate_api_key(
     request: Request,
     key_data: Schema.ApiKeyCreate,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Generate a new API key for the current authenticated user
     """
-    current_user = get_current_user(request, db)
+    current_user = await get_current_user(request, db)
     
     # Generate new API key
     new_key = generate_secure_api_key()
@@ -193,8 +198,8 @@ async def generate_api_key(
     )
     
     db.add(api_key)
-    db.commit()
-    db.refresh(api_key)
+    await db.commit()
+    await db.refresh(api_key)
     
     return {
         "api_key": api_key,
@@ -206,19 +211,21 @@ async def generate_api_key(
 async def delete_api_key(
     key_id: int,
     request: Request,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Delete a specific API key
 
     """
-    current_user = get_current_user(request, db)
+    current_user = await get_current_user(request, db)
     
-    # Find the API key
-    api_key = db.query(models.ApiKey).filter(
+    # Find the API key (async pattern)
+    stmt = select(models.ApiKey).filter(
         models.ApiKey.id == key_id,
         models.ApiKey.user_id == current_user.id
-    ).first()
+    )
+    result = await db.execute(stmt)
+    api_key = result.scalar_one_or_none()
     
     if not api_key:
         raise HTTPException(
@@ -226,7 +233,7 @@ async def delete_api_key(
             detail="API key not found"
         )
     
-    db.delete(api_key)
-    db.commit()
+    await db.delete(api_key)
+    await db.commit()
     
     return {"message": "API key deleted successfully"}

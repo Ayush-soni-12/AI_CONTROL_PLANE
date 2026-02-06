@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from .router import signals, auth, history
 from .cache import redis_client
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from .jobs.aggregation_jobs import aggregate_signals_hourly, aggregate_signals_daily, cleanup_old_data
+from .aggregate_persistence import snapshot_redis_aggregates
 
 # Create the app
 app = FastAPI()
@@ -20,8 +21,8 @@ app = FastAPI()
 # Create all tables (Signal, User, ApiKey)
 Base.metadata.create_all(bind=engine)
 
-# Initialize background scheduler
-scheduler = BackgroundScheduler()
+# Initialize background scheduler (Async version for FastAPI loop)
+scheduler = AsyncIOScheduler()
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,7 +53,8 @@ async def startup():
     # Hourly aggregation: Run every hour at minute 5 (e.g., 10:05, 11:05, ...)
     scheduler.add_job(
         aggregate_signals_hourly,
-        trigger=CronTrigger(minute=5),
+        # trigger=CronTrigger(minute=5),
+        trigger=CronTrigger(minute='*/3'),
         id="hourly_aggregation",
         name="Aggregate signals hourly",
         replace_existing=True
@@ -76,11 +78,21 @@ async def startup():
         replace_existing=True
     )
     
+    # Snapshot Redis aggregates: Run every 3 minutes for testing (usually 30m)
+    scheduler.add_job(
+        snapshot_redis_aggregates,
+        trigger=CronTrigger(minute='*/3'),
+        id="snapshot_aggregates",
+        name="Snapshot Redis aggregates to PostgreSQL",
+        replace_existing=True
+    )
+    
     scheduler.start()
     print("✅ Background jobs scheduled:")
     print("   - Hourly aggregation: Every hour at :05")
     print("   - Daily aggregation: Daily at 00:30 UTC")
     print("   - Data cleanup: Daily at 02:00 UTC")
+    print("   - Aggregate snapshots: Every 30 minutes")
 
 @app.on_event("shutdown")
 async def shutdown():

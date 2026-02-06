@@ -23,7 +23,8 @@ import json
 from typing import Optional, Dict
 from datetime import datetime, timedelta
 from app.cache import redis_client
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 
@@ -92,7 +93,7 @@ async def get_realtime_metrics(
     service_name: str,
     endpoint: str,
     window: str = '1h',
-    db: Session = None
+    db: AsyncSession = None
 ) -> Optional[Dict]:
     """
     Get real-time metrics with THREE-TIER FALLBACK:

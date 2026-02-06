@@ -22,17 +22,19 @@ WHEN IT RUNS:
 
 import json
 from datetime import datetime, timedelta, timezone
-from sqlalchemy.orm import Session
+# from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from app import models
-from app.database import SessionLocal
+from app.database import SessionLocal, AsyncSessionLocal
 from typing import List, Dict
 import asyncio
 import redis.asyncio as aioredis
 from app.config import settings
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
 
 
-async def snapshot_redis_aggregates(db: Session = None):
+async def snapshot_redis_aggregates(db: AsyncSession = None):
     """
     Snapshot all Redis real-time aggregates to PostgreSQL.
     
@@ -46,9 +48,10 @@ async def snapshot_redis_aggregates(db: Session = None):
     Runs automatically every 30 minutes via background scheduler.
     """
     if db is None:
-        db = SessionLocal()
+        async_session = AsyncSessionLocal()
         should_close = True
     else:
+        async_session = db
         should_close = False
     
     # Create a new Redis client for this background job to avoid event loop conflicts
@@ -86,6 +89,8 @@ async def snapshot_redis_aggregates(db: Session = None):
             
             if not keys:
                 print("⚠️  No Redis aggregates found to snapshot")
+                if should_close:
+                    await async_session.close()
                 return
             
             # STEP 2: Process each key and save to database
@@ -137,12 +142,12 @@ async def snapshot_redis_aggregates(db: Session = None):
                         last_updated=agg.get('last_updated')
                     )
                     
-                    db.add(snapshot)
+                    async_session.add(snapshot)
                     snapshots_created += 1
                     
                     # Commit in batches of 50 to avoid memory issues
                     if snapshots_created % 50 == 0:
-                        db.commit()
+                        await async_session.commit()
                         print(f"   💾 Committed {snapshots_created} snapshots so far...")
                     
                 except Exception as e:
@@ -151,18 +156,22 @@ async def snapshot_redis_aggregates(db: Session = None):
                     continue
             
             # Final commit
-            db.commit()
+            await async_session.commit()
             print(f"✅ Created {snapshots_created} snapshots")
             print(f"⏭️  Skipped {snapshots_skipped} keys")
             
             # STEP 4: Cleanup old snapshots (>30 days)
             cleanup_threshold = datetime.now(timezone.utc) - timedelta(days=30)
-            deleted = db.query(models.AggregateSnapshot).filter(
+            
+            # Async delete pattern
+            stmt = delete(models.AggregateSnapshot).where(
                 models.AggregateSnapshot.snapshot_at < cleanup_threshold
-            ).delete()
+            )
+            result = await async_session.execute(stmt)
+            deleted = result.rowcount
             
             if deleted > 0:
-                db.commit()
+                await async_session.commit()
                 print(f"🗑️  Cleaned up {deleted} old snapshots (>30 days)")
             
             print("="*60)
@@ -178,7 +187,7 @@ async def snapshot_redis_aggregates(db: Session = None):
         
     except Exception as e:
         print(f"❌ Fatal error in snapshot job: {e}")
-        db.rollback()
+        await async_session.rollback()
         raise
     finally:
         # Close Redis connection
@@ -190,7 +199,7 @@ async def snapshot_redis_aggregates(db: Session = None):
         
         # Close database session
         if should_close:
-            db.close()
+            await async_session.close()
 
 
 async def get_snapshot_metrics(
@@ -198,7 +207,7 @@ async def get_snapshot_metrics(
     service_name: str,
     endpoint: str,
     window: str = '1h',
-    db: Session = None
+    db: AsyncSession = None
 ) -> Dict:
     """
     Get metrics from the most recent snapshot.
@@ -217,21 +226,26 @@ async def get_snapshot_metrics(
         Returns None if no snapshot exists
     """
     if db is None:
-        db = SessionLocal()
+        async_session = AsyncSessionLocal()
         should_close = True
     else:
+        async_session = db
         should_close = False
     
     try:
         # Get most recent snapshot for this endpoint and window
-        snapshot = db.query(models.AggregateSnapshot).filter(
+        # Async pattern using select()
+        stmt = select(models.AggregateSnapshot).where(
             and_(
                 models.AggregateSnapshot.user_id == user_id,
                 models.AggregateSnapshot.service_name == service_name,
                 models.AggregateSnapshot.endpoint == endpoint,
                 models.AggregateSnapshot.window == window
             )
-        ).order_by(models.AggregateSnapshot.snapshot_at.desc()).first()
+        ).order_by(models.AggregateSnapshot.snapshot_at.desc())
+        
+        result = await async_session.execute(stmt)
+        snapshot = result.scalars().first()
         
         if not snapshot:
             return None
@@ -258,12 +272,10 @@ async def get_snapshot_metrics(
         
     finally:
         if should_close:
-            db.close()
+            await async_session.close()
 
 
-def run_snapshot_job_sync():
-    """
-    Synchronous wrapper for the snapshot job.
-    Used by APScheduler which doesn't support async directly.
-    """
+if __name__ == "__main__":
+    # For manual testing
+    print("Running snapshot job manually...")
     asyncio.run(snapshot_redis_aggregates())
