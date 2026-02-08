@@ -306,6 +306,44 @@ export function DynamicServiceDetails({
                         </Badge>
                       </div>
                     </div>
+
+                    {/* Rate Limiting Status - NEW */}
+                    {endpoint.rate_limit_enabled !== undefined && (
+                      <div className="p-4 rounded-lg bg-linear-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/20">
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg
+                            className="w-4 h-4 text-orange-400"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                          </svg>
+                          <p className="text-xs font-medium text-gray-400">
+                            Rate Limit
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={
+                              endpoint.rate_limit_enabled
+                                ? "warning"
+                                : "success"
+                            }
+                            className="text-sm"
+                          >
+                            {endpoint.rate_limit_enabled
+                              ? "Enabled"
+                              : "Disabled"}
+                          </Badge>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {/* AI Reasoning Section */}
                   <div className="mt-4 p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">

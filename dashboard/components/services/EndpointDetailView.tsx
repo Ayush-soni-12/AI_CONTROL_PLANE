@@ -146,7 +146,7 @@ export function EndpointDetailView({
               </span>
             </div>
             <p
-              className={`text-4xl font-bold ${detail.error_rate > 0.3 ? "text-red-400" : "text-green-400"}`}
+              className={`text-4xl font-bold ${detail.error_rate >= 0.3 ? "text-red-400" : "text-green-400"}`}
             >
               {(detail.error_rate * 100).toFixed(1)}%
             </p>

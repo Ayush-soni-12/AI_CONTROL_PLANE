@@ -5,12 +5,18 @@ import { ServiceCard } from "@/components/cards/ServiceCard";
 import { Activity } from "lucide-react";
 import { Service } from "@/lib/types";
 
+interface DynamicServicesProps {
+  apiUrl?: string;
+}
+
 /**
  * Dynamic Services Component - Wrapped in Suspense
  * Fetches and displays real-time services list
  */
-export function DynamicServices() {
-  const { data: servicesData } = useServices();
+export function DynamicServices({
+  apiUrl = "/api/services",
+}: DynamicServicesProps) {
+  const { data: servicesData } = useServices(apiUrl);
 
   const services = servicesData.services;
 

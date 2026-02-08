@@ -20,11 +20,11 @@ export const useSignals = () => {
 /**
  * Hook to fetch aggregated services with pre-calculated metrics from backend
  */
-export const useServices = () => {
+export const useServices = (apiUrl: string = '/api/services') => {
   return useSuspenseQuery({
-    queryKey: ["services"],
+    queryKey: ["services", apiUrl],
     queryFn: async () => {
-      const response = await fetch('http://localhost:8000/api/services', {
+      const response = await fetch(`http://localhost:8000${apiUrl}`, {
         credentials: 'include',
       });
       

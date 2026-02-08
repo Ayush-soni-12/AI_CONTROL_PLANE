@@ -60,6 +60,10 @@ export function LatencyChart({ signals, limit = 20 }: LatencyChartProps) {
             Last {chartData.length} signals
           </div>
         </div>
+        <p className="text-xs text-gray-500 mt-2">
+          💡 Graph shows sampled data (10% of success signals, 100% of errors).
+          Metrics are calculated from all signals.
+        </p>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={350}>

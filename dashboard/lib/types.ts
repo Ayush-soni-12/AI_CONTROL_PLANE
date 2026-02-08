@@ -34,6 +34,7 @@ export interface Endpoint {
   signal_count: number;
   cache_enabled: boolean;
   circuit_breaker: boolean;
+  rate_limit_enabled?: boolean; // NEW: Rate limiting status
   tenant_id?: string;
   reasoning: string;  // AI decision reasoning
 }
@@ -52,6 +53,7 @@ export interface EndpointDetail {
   suggestions: string[];
   cache_enabled: boolean;
   circuit_breaker: boolean;
+  rate_limit_enabled?: boolean; // NEW: Rate limiting status
   reasoning: string;
 }
 
