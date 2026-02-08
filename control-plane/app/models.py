@@ -15,6 +15,12 @@ class Signal(Base):
     latency_ms = Column(Float, nullable=False)
     status = Column(String, nullable=False)
     timestamp = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'), index=True)
+    
+    # NEW: Priority for queue deferral and load shedding
+    priority = Column(String, nullable=False, server_default=text("'medium'"), index=True)
+    
+    # NEW: Customer identifier (IP, session ID) for per-customer rate limiting
+    customer_identifier = Column(String, nullable=True, index=True)
 
     user = relationship("User", back_populates="signals")
     
@@ -28,6 +34,9 @@ class Signal(Base):
         
         # Index for endpoint-specific queries: WHERE service_name=X AND endpoint=Y ORDER BY timestamp DESC
         Index('idx_signals_service_endpoint_timestamp', 'service_name', 'endpoint', 'timestamp'),
+        
+        # NEW: Index for per-customer rate limiting: WHERE user_id=X AND service_name=Y AND endpoint=Z AND customer_identifier=W
+        Index('idx_signals_customer_endpoint', 'user_id', 'service_name', 'endpoint', 'customer_identifier', 'timestamp'),
     )
 
 
@@ -195,4 +204,45 @@ class AggregateSnapshot(Base):
         Index('idx_snapshot_cleanup', 'snapshot_at'),
         # Get latest snapshot for each endpoint
         Index('idx_snapshot_latest', 'user_id', 'service_name', 'endpoint', 'window', 'snapshot_at'),
+    )
+
+
+class RateLimitConfig(Base):
+    """
+    Rate limit configurations for services/endpoints.
+    
+    WHY THIS EXISTS:
+    - AI dynamically enables/disables rate limiting based on traffic patterns
+    - Prevents service overload from traffic spikes
+    - Stores per-endpoint rate limit thresholds
+    
+    HOW IT WORKS:
+    - AI decision engine sets 'enabled=True' when high traffic detected
+    - Rate limiter checks this table before allowing requests
+    - Redis counters track actual request counts per minute
+    
+    DEFAULT: 100 requests/minute per endpoint
+    """
+    __tablename__ = "rate_limit_configs"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_name = Column(String, nullable=False, index=True)
+    endpoint = Column(String, nullable=False, index=True)
+    
+    # Rate limit settings
+    enabled = Column(Boolean, nullable=False, server_default=text('false'))
+    requests_per_minute = Column(Integer, nullable=False, server_default=text('100'))
+    
+    # Timestamps
+    enabled_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'), onupdate=text('now()'))
+    
+    # Composite indexes
+    __table_args__ = (
+        # Unique constraint: one config per user/service/endpoint
+        Index('idx_ratelimit_unique', 'user_id', 'service_name', 'endpoint', unique=True),
+        # Fast lookups for rate limit checks
+        Index('idx_ratelimit_lookup', 'user_id', 'service_name', 'endpoint', 'enabled'),
     )

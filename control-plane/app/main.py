@@ -53,8 +53,8 @@ async def startup():
     # Hourly aggregation: Run every hour at minute 5 (e.g., 10:05, 11:05, ...)
     scheduler.add_job(
         aggregate_signals_hourly,
-        # trigger=CronTrigger(minute=5),
-        trigger=CronTrigger(minute='*/3'),
+        trigger=CronTrigger(minute=5),
+        # trigger=CronTrigger(minute='*/3'),
         id="hourly_aggregation",
         name="Aggregate signals hourly",
         replace_existing=True
@@ -81,7 +81,7 @@ async def startup():
     # Snapshot Redis aggregates: Run every 3 minutes for testing (usually 30m)
     scheduler.add_job(
         snapshot_redis_aggregates,
-        trigger=CronTrigger(minute='*/3'),
+        trigger=CronTrigger(minute='*/30'),
         id="snapshot_aggregates",
         name="Snapshot Redis aggregates to PostgreSQL",
         replace_existing=True

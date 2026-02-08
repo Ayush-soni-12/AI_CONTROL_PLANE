@@ -23,7 +23,6 @@ async def verify_api_key(
         User: The user associated with the API key
     """
     
-    # Check if Authorization header is present
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
