@@ -15,6 +15,7 @@ ARCHITECTURE:
 4. Historical analysis uses PostgreSQL (efficient)
 
 TIME WINDOWS:
+- 1 minute: Used for real-time rate limiting and traffic spike detection
 - 1 hour: Used for caching decisions and circuit breaker logic
 - 24 hours: Used for dashboard metrics and trends
 """
@@ -38,10 +39,16 @@ async def update_realtime_aggregate(
     service_name: str,
     endpoint: str,
     latency_ms: float,
-    status: str
+    status: str,
+    customer_identifier: str = None,  # NEW: For per-customer rate limiting
+    priority: str = 'medium'  # NEW: For queue/shed decisions
 ):
     """
     Update real-time aggregates for ALL signals (100% coverage).
+    
+    TWO-TIER TRACKING:
+    1. Global aggregates: All customers combined (for queue/shed decisions)
+    2. Per-customer aggregates: Individual customer tracking (for rate limiting)
     
     This function is called for EVERY signal, regardless of whether it's
     stored in the database or not. This ensures accurate metrics.
@@ -52,13 +59,31 @@ async def update_realtime_aggregate(
         endpoint: API endpoint path
         latency_ms: Request latency in milliseconds
         status: Status of the request ('success' or 'error')
+        customer_identifier: IP or session ID (optional, for per-customer limiting)
+        priority: Request priority (critical/high/medium/low)
     """
-    # Update both 1-hour and 24-hour windows
-    for window in ['1h', '24h']:
-        key = _get_aggregate_key(user_id, service_name, endpoint, window)
-        
+    # Update aggregates with different strategies based on window
+    # 1m: Time-bucketed (one key per minute)
+    # 1h, 24h: Accumulating with TTL
+    
+    import time
+    current_timestamp = int(time.time())
+    
+    for window in ['1m', '1h', '24h']:
         # Get current aggregate or initialize
         try:
+            # For 1-minute window, use time-bucketed key to ensure true 60s window
+            if window == '1m':
+                # Create a key that includes the current minute timestamp
+                # This ensures each minute gets its own bucket
+                current_minute = current_timestamp // 60  # Unix timestamp divided by 60
+                key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:{window}:{current_minute}"
+                ttl = 120  # Keep for 2 minutes to allow reads from previous minute
+            else:
+                # For 1h and 24h, use the standard key
+                key = _get_aggregate_key(user_id, service_name, endpoint, window)
+                ttl = 3600 if window == '1h' else 86400
+            
             data = await redis_client.get(key)  # await async call
             if data:
                 agg = json.loads(data)
@@ -67,7 +92,8 @@ async def update_realtime_aggregate(
                     'count': 0,
                     'sum_latency': 0,
                     'errors': 0,
-                    'last_updated': None
+                    'last_updated': None,
+                    'window_start': current_timestamp if window == '1m' else None
                 }
             
             # Update counters
@@ -77,15 +103,39 @@ async def update_realtime_aggregate(
                 agg['errors'] += 1
             agg['last_updated'] = datetime.now().isoformat()
             
-            # Set TTL based on window
-            ttl = 3600 if window == '1h' else 86400  # 1 hour or 24 hours
-            
-            # Save back to Redis
+            # Save back to Redis with appropriate TTL
             await redis_client.setex(key, ttl, json.dumps(agg))  # await async call
             
         except Exception as e:
             # Log error but don't fail the signal processing
             print(f"❌ Error updating real-time aggregate: {e}")
+    
+    # NEW: Per-customer tracking (1-minute window only, for rate limiting)
+    if customer_identifier:
+        try:
+            import time
+            current_timestamp = int(time.time())
+            current_minute = current_timestamp // 60
+            
+            # Create per-customer key
+            customer_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:customer:{customer_identifier}:1m:{current_minute}"
+            
+            # Get or initialize per-customer aggregate
+            customer_data = await redis_client.get(customer_key)
+            if customer_data:
+                customer_agg = json.loads(customer_data)
+            else:
+                customer_agg = {'count': 0, 'last_updated': None}
+            
+            # Update customer counter
+            customer_agg['count'] += 1
+            customer_agg['last_updated'] = datetime.now().isoformat()
+            
+            # Save with 2-minute TTL
+            await redis_client.setex(customer_key, 120, json.dumps(customer_agg))
+            
+        except Exception as e:
+            print(f"❌ Error updating per-customer aggregate: {e}")
 
 
 async def get_realtime_metrics(
@@ -113,7 +163,7 @@ async def get_realtime_metrics(
         db: Database session (optional, for snapshot fallback)
     
     Returns:
-        Dict with keys: count, sum_latency, errors, avg_latency, error_rate
+        Dict with keys: count, sum_latency, errors, avg_latency, error_rate, requests_per_minute
         Returns None if no data exists in Redis or snapshots
     """
     key = _get_aggregate_key(user_id, service_name, endpoint, window)
@@ -128,12 +178,39 @@ async def get_realtime_metrics(
             avg_latency = agg['sum_latency'] / agg['count'] if agg['count'] > 0 else 0
             error_rate = agg['errors'] / agg['count'] if agg['count'] > 0 else 0
             
+            # 🔥 FIX: Get ACTUAL current rate from 1-minute aggregate
+            # This is more accurate than 1-hour average for detecting traffic spikes
+            try:
+                import time
+                current_timestamp = int(time.time())
+                current_minute = current_timestamp // 60
+                
+                # Try current minute bucket first
+                one_min_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:1m:{current_minute}"
+                one_min_data = await redis_client.get(one_min_key)
+                print(f"One minute data: {one_min_data}")
+                
+                if one_min_data:
+                    one_min_agg = json.loads(one_min_data)
+                    # Direct count from 1-minute window = requests per minute!
+                    requests_per_minute = one_min_agg.get('count', 0)
+                    print(f"Requests per minute: {requests_per_minute}")
+                else:
+                    # Fallback: use window-based calculation
+                    window_minutes = 60 if window == '1h' else 1440
+                    requests_per_minute = agg['count'] / window_minutes
+            except Exception as e:
+                print(f"⚠️ Error getting 1min aggregate, using fallback: {e}")
+                window_minutes = 60 if window == '1h' else 1440
+                requests_per_minute = agg['count'] / window_minutes
+            
             return {
                 'count': agg['count'],
                 'sum_latency': agg['sum_latency'],
                 'errors': agg['errors'],
                 'avg_latency': avg_latency,
                 'error_rate': error_rate,
+                'requests_per_minute': requests_per_minute,  # NEW: actual 60s rate
                 'last_updated': agg.get('last_updated'),
                 'source': 'redis'
             }
@@ -151,6 +228,11 @@ async def get_realtime_metrics(
             )
             
             if snapshot_metrics:
+                # For snapshots, use 1-hour average since we don't have rate limiter data
+                window_minutes = 60 if window == '1h' else 1440
+                snapshot_metrics['requests_per_minute'] = (
+                    snapshot_metrics.get('count', 0) / window_minutes if window_minutes > 0 else 0
+                )
                 snapshot_metrics['source'] = 'snapshot'
                 return snapshot_metrics
         
