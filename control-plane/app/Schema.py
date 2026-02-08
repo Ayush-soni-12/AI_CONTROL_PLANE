@@ -13,6 +13,14 @@ class SignalSend(BaseModel):
     latency_ms: float
     status: str
     tenant_id: str
+    priority: Optional[str] = 'medium'  # NEW: critical, high, medium, low
+    customer_identifier: Optional[str] = None  # NEW: IP or session ID for per-customer rate limiting
+    
+    @classmethod
+    def validate_priority(cls, v):
+        if v and v not in ['critical', 'high', 'medium', 'low']:
+            raise ValueError('Priority must be: critical, high, medium, or low')
+        return v or 'medium'
 
 class SignalReceive(SignalSend):
     id: int
@@ -86,6 +94,9 @@ class EndpointMetrics(BaseModel):
     tenant_id: Optional[str]
     cache_enabled: bool
     circuit_breaker: bool
+    rate_limit_enabled: bool = False  # Per-customer rate limiting
+    queue_deferral: bool = False  # NEW: Queue deferral status
+    load_shedding: bool = False  # NEW: Load shedding status
     reasoning: str  # AI decision reasoning
 
 
@@ -126,4 +137,7 @@ class EndpointDetailResponse(BaseModel):
     suggestions: List[str]
     cache_enabled: bool
     circuit_breaker: bool
+    rate_limit_enabled: bool = False  # Per-customer rate limiting
+    queue_deferral: bool = False  # NEW: Queue deferral status
+    load_shedding: bool = False  # NEW: Load shedding status
     reasoning: str
