@@ -2,6 +2,8 @@ import express from 'express';
 import ControlPlaneSDK, { generateTenantId } from "@ayushsoni12/ai-control-plane-sdk";
 import dotenv from 'dotenv';
 
+//  openssl rand -hex 16
+
 // Load environment variables
 dotenv.config();
 
@@ -10,8 +12,8 @@ app.use(express.json());
 
 // Initialize SDK with API key
 const controlPlane = new ControlPlaneSDK({
-  apiKey: 'acp_ed9323c29fba04b28187c987bc194f5fd2a44549' ,// API key from environment
-  tenantId: generateTenantId('user'),
+  apiKey: 'acp_2d936ad37aae3cea5635b46db3708d93897c96af' ,// API key from environment
+  tenantId: '38359c4fac51d6b5728454c29f769ef6',
   serviceName: process.env.SERVICE_NAME || 'demo-service',
   controlPlaneUrl: process.env.CONTROL_PLANE_URL || 'http://localhost:8000'
 });
@@ -300,6 +302,95 @@ app.get('/search', async (req, res) => {
   });
 });
 
+// =====================================
+// RATE LIMITING TEST ENDPOINT
+// =====================================
+
+app.get('/api/rate-limit',
+  controlPlane.middleware('/api/rate-limit'),
+  async (req, res) => {
+    console.log('🚦 Rate limit test request');
+    
+    // Check if circuit breaker is active
+    if (req.controlPlane.shouldSkip) {
+      console.log('🔴 Circuit breaker active');
+      return res.json({
+        circuit_breaker_active: true,
+        message: 'Service degraded - circuit breaker active'
+      });
+    }
+    
+    // NEW: Check if rate limiting is active (user-controlled!)
+    if (req.controlPlane.shouldRateLimit) {
+      console.log(`🚫 Rate limited - retry after ${req.controlPlane.retryAfter}s`);
+      return res.status(429).json({
+        error: 'Rate limit exceeded',
+        message: 'Too many requests - please slow down',
+        retry_after: req.controlPlane.retryAfter,
+        rate_limited: true
+      });
+    }
+    
+    // Simulate some work (fast response)
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    const data = {
+      success: true,
+      timestamp: new Date().toISOString(),
+      message: 'Rate limiting test endpoint',
+      rate_limit_enabled: req.controlPlane.shouldRateLimit || false
+    };
+    console.log("data",data)
+    
+    console.log(`✅ Response sent - Rate limiting: ${req.controlPlane.shouldRateLimit ? 'ENABLED' : 'disabled'}`);
+    
+    res.json(data);
+  }
+);
+
+// =====================================
+// ERROR TESTING ENDPOINT (for circuit breaker tests)
+// =====================================
+
+app.get('/products-error',
+  controlPlane.middleware('/products-error'),
+  async (req, res) => {
+    console.log('⚠️  Products-error request (testing circuit breaker)');
+    
+    // Check circuit breaker first
+    if (req.controlPlane.shouldSkip) {
+      console.log('🔴 Circuit breaker active - returning cached data');
+      return res.json({
+        circuit_breaker_active: true,
+        products: cache.products || [],
+        message: 'Circuit breaker is active - service degraded'
+      });
+    }
+    // Simulate 60% error rate to trigger circuit breaker
+    const shouldFail = Math.random() < 0.6;
+    
+    if (shouldFail) {
+      console.log('❌ Simulating database error');
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection failed',
+        simulated: true
+      });
+    }
+    
+    // 40% success rate
+    console.log('💾 Fetching from database (success)...');
+    const products = await getProductsFromDatabase();
+    
+    res.json({
+      cached: false,
+      products: products,
+      success: true
+    });
+  }
+);
+
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Demo Service running on port ${PORT}`);
@@ -309,3 +400,7 @@ app.listen(PORT, () => {
   console.log(`  Middleware: POST /login, GET /products, GET /products/:id`);
   console.log(`  Manual: POST /checkout, GET /search?q=laptop`);
 });
+
+
+
+
