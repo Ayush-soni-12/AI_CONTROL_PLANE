@@ -16,8 +16,6 @@ class ControlPlaneSDK {
     this.serviceName = config.serviceName || 'unknown-service';
     this.tenantId = config.tenantId || 'null';
     this.apiKey = config.apiKey || null; // API key for authentication
-    this.configCache = {};
-    this.configCacheTTL = config.configCacheTTL || 10000; // 10 seconds (was 30s)
     
     // Warn if API key is not provided
     if (!this.apiKey) {
@@ -25,31 +23,20 @@ class ControlPlaneSDK {
     }
   }
 
-  /**
-   * Invalidate cache for a specific endpoint
-   * This forces the next getConfig call to fetch fresh data
-   */
-  invalidateCache(endpoint) {
-    const cacheKey = `${this.serviceName}:${endpoint}:${this.tenantId}`;
-    if (this.configCache[cacheKey]) {
-      console.log(`[ControlPlane] Cache invalidated for ${cacheKey}`);
-      delete this.configCache[cacheKey];
-    }
-  }
+
 
   /**
    * Send performance signal to control plane
+   * 
+   * @param {string} endpoint - API endpoint path
+   * @param {number} latencyMs - Request latency in milliseconds
+   * @param {string} status - 'success' or 'error'
+   * @param {string} priority - 'critical', 'high', 'medium', or 'low' (default: 'medium')
+   * @param {string} customer_identifier - Optional IP or session ID for per-customer rate limiting
    */
-  async track(endpoint, latencyMs, status = 'success') {
+  async track(endpoint, latencyMs, status = 'success', priority = 'medium', customer_identifier = null) {
     try {
-      // Invalidate cache only on errors
-      // Note: We don't invalidate on individual high latency because the control plane
-      // makes decisions based on AVERAGE latency across multiple requests (last 10).
-      // A single slow request doesn't mean the average is high yet.
-      if (status === 'error') {
-        console.log(`[ControlPlane] Error detected - invalidating cache`);
-        this.invalidateCache(endpoint);
-      }
+
 
       // Prepare headers
       const headers = { 'Content-Type': 'application/json' };
@@ -59,7 +46,7 @@ class ControlPlaneSDK {
         headers['Authorization'] = `Bearer ${this.apiKey}`;
       }
 
-      await fetch(`${this.controlPlaneUrl}/api/signals`, {
+      const response = await fetch(`${this.controlPlaneUrl}/api/signals`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
@@ -67,10 +54,20 @@ class ControlPlaneSDK {
           endpoint: endpoint,
           latency_ms: latencyMs,
           status: status,
-          tenant_id: this.tenantId
+          tenant_id: this.tenantId,
+          priority: priority,  // NEW
+          customer_identifier: customer_identifier  // NEW
         }),
         timeout: 1000
       });
+
+      if(response.status === 401){
+        console.error('[ControlPlane] Failed to send signal: Invalid API key');
+        return {
+          reason: 'Invalid API key'
+        };
+      }
+
     } catch (error) {
       // Fail silently - don't crash service if control plane is down
       console.error('[ControlPlane] Failed to send signal:', error.message);
@@ -78,36 +75,19 @@ class ControlPlaneSDK {
   }
 
   /**
-   * Get runtime configuration from control plane
+   * Get runtime configuration from control plane with retry logic
+   * 
+   * @param {string} endpoint - API endpoint path
+   * @param {string} priority - Request priority (critical/high/medium/low)
+   * @param {string} customer_identifier - Optional IP or session ID
    */
-  async getConfig(endpoint) {
-    // Include tenant_id in cache key for proper multi-tenant isolation
-    const cacheKey = `${this.serviceName}:${endpoint}:${this.tenantId}`;
-    const cached = this.configCache[cacheKey];
+  async getConfig(endpoint, priority = 'medium', customer_identifier = null) {
+    // NO CACHING - fetch fresh config every time for real-time traffic management
+    // Queue deferral and load shedding require up-to-date traffic metrics
     
-    // Return cached config if still fresh
-    if (cached && Date.now() - cached.timestamp < this.configCacheTTL) {
-      console.log(`[ControlPlane] Using cached config for ${cacheKey}`);
-      return cached.config;
-    }
-
     try {
-    // Build URL with tenant_id if provided
-      let url = `${this.controlPlaneUrl}/api/config/${this.serviceName}${endpoint}`;
-      if (this.tenantId) {
-        url += `?tenant_id=${this.tenantId}`;
-      }
-    
-      console.log(`[ControlPlane] Fetching fresh config for ${cacheKey}`);
-      const response = await fetch(url, { method: 'GET', timeout: 1000 });
-      const config = await response.json();
-      
-      // Cache it with tenant-aware key
-      this.configCache[cacheKey] = {
-        config: config,
-        timestamp: Date.now()
-      };
-      
+      // Always fetch fresh config from control plane
+      const config = await this._fetchConfig(endpoint, priority, customer_identifier);
       return config;
       
     } catch (error) {
@@ -117,35 +97,142 @@ class ControlPlaneSDK {
       return {
         cache_enabled: false,
         circuit_breaker: false,
+        rate_limited_customer: false,
+        queue_deferral: false,
+        load_shedding: false,
+        status_code: 200,
         reason: 'Control plane unavailable'
       };
     }
   }
 
   /**
-   * Express middleware - automatic tracking
+   * Fetch config from control plane
+   * @private
    */
-  middleware(endpoint) {
+  async _fetchConfig(endpoint, priority = 'medium', customer_identifier = null) {
+    try {
+      // Build URL with tenant_id, priority, and customer_identifier
+      let url = `${this.controlPlaneUrl}/api/config/${this.serviceName}${endpoint}`;
+      const params = new URLSearchParams();
+      
+      if (this.tenantId) {
+        params.append('tenant_id', this.tenantId);
+      }
+      if (priority) {
+        params.append('priority', priority);
+      }
+      if (customer_identifier) {
+        params.append('customer_identifier', customer_identifier);  // NEW: Pass end-user IP
+      }
+      
+      if (params.toString()) {
+        url += `?${params.toString()}`;
+      }
+
+      // Prepare headers
+      const headers = { 'Content-Type': 'application/json' };
+      
+      // Add Authorization header if API key is provided
+      if (this.apiKey) {
+        headers['Authorization'] = `Bearer ${this.apiKey}`;
+      }
+      
+      console.log(`[ControlPlane] Fetching config from ${url}`);
+      
+      const response = await fetch(url, { method: 'GET', timeout: 1000, headers: headers });
+      const config = await response.json();
+
+      // Handle authentication errors
+      if (response.status === 401) {
+        console.error('[ControlPlane] Failed to fetch config: Invalid API key');
+        return {
+          cache_enabled: false,
+          circuit_breaker: false,
+          rate_limited_customer: false,
+          queue_deferral: false,
+          load_shedding: false,
+          status_code: 200,
+          reason: 'Invalid API key'
+        };
+      }
+      
+      // Return config as-is
+      return config;
+      
+    } catch (error) {
+      console.error(`[ControlPlane] Failed to fetch config:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Express middleware - automatic tracking with traffic management
+   * 
+   * Provides traffic management information via req.controlPlane for user to handle.
+   * Does NOT automatically send error responses - gives user full control.
+   * 
+   * @param {string} endpoint - API endpoint to track
+   * @param {object} options - { priority: 'critical'/'high'/'medium'/'low' }
+   */
+  middleware(endpoint, options = {}) {
     const sdk = this;
+    const priority = options.priority || 'medium';
     
     return async (req, res, next) => {
       const startTime = Date.now();
       
-      // Get config from control plane
-      const config = await sdk.getConfig(endpoint);
+      // Extract customer identifier (IP address) from end-user request
+      console.log("req.ip",req.ip);
+      const customer_identifier = req.ip || req.connection.remoteAddress;
+      console.log(`[ControlPlane] Tracking request for ${customer_identifier}`);
       
-      // Attach config to request object
+      // Get config from control plane with priority AND customer_identifier
+      const config = await sdk.getConfig(endpoint, priority, customer_identifier);
+      
+      const status_code = config.status_code || 200;
+      console.log(`[ControlPlane] Received response for ${customer_identifier}: ${status_code}`);
+      
+      // Attach ALL traffic management info to request
+      // User decides how to handle each scenario
       req.controlPlane = {
+        // Original config
         config: config,
-        shouldCache: config.cache_enabled,
-        shouldSkip: config.circuit_breaker
+        
+        // Status flags
+        isRateLimitedCustomer: config.rate_limited_customer || false,
+        isLoadShedding: config.load_shedding || false,
+        isQueueDeferral: config.queue_deferral || false,
+        
+        // Feature flags (existing)
+        shouldCache: config.cache_enabled || false,
+        shouldSkip: config.circuit_breaker || false,
+        
+        // Metadata for user to use
+        statusCode: status_code,
+        retryAfter: config.retry_after || 60,
+        estimatedDelay: config.estimated_delay || 10,
+        priorityRequired: config.priority_required || 'high',
+        reason: config.reason || '',
+        
+        // Request metadata
+        customer_identifier: customer_identifier,
+        priority: priority
       };
       
       // Track after response finishes
       res.on('finish', () => {
         const latency = Date.now() - startTime;
-        const status = res.statusCode < 400 ? 'success' : 'error';
-        sdk.track(endpoint, latency, status);
+        
+        // IMPORTANT: Don't track traffic management responses as errors
+        // 202 = Queue Deferral (intentional)
+        // 429 = Rate Limited (intentional)
+        // 503 = Load Shedding (intentional)
+        // Only track actual system errors (5xx except 503, and 4xx except 429)
+        const isTrafficManagement = [202, 429, 503].includes(res.statusCode);
+        const status = (res.statusCode < 400 || isTrafficManagement) ? 'success' : 'error';
+        
+        sdk.track(endpoint, latency, status, priority, customer_identifier);
       });
       
       next();
