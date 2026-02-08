@@ -57,9 +57,13 @@ async def receive_signal(
         service_name=signals.service_name,
         endpoint=signals.endpoint,
         latency_ms=signals.latency_ms,
-        status=signals.status
+        status=signals.status,
+        customer_identifier=signals.customer_identifier,  # NEW
+        priority=signals.priority  # NEW
     )
-    print(f"✅ Updated real-time aggregates for {signals.service_name}{signals.endpoint}")
+    print(f"✅ Updated real-time aggregates for {signals.service_name}{signals.endpoint} "
+          f"(customer: {signals.customer_identifier[:15] if signals.customer_identifier else 'N/A'}..., "
+          f"priority: {signals.priority})")
     
     # STEP 2: Apply sampling for database storage
     # Store 100% of errors (critical for debugging)
@@ -127,31 +131,53 @@ async def get_config(
     service_name: str, 
     endpoint: str, 
     background_tasks: BackgroundTasks,
-    tenant_id: str = None, 
+    request: Request,  # For future use if needed
+    tenant_id: str = None,
+    priority: str = 'medium',  # Request priority
+    customer_identifier: str = None,  # NEW: Customer IP from SDK (query param)
     db: AsyncSession = Depends(get_async_db), 
     current_user: models.User = Depends(verify_api_key)
 ):
     """
-    Services request their runtime configuration
+    Services request their runtime configuration with TWO-TIER TRAFFIC MANAGEMENT:
     
-    Example: GET /api/config/demo-service/login?tenant_id=tenant123
+    TIER 1: Per-customer rate limiting (individual abuse prevention)
+    - Returns 429 if customer exceeds 10 req/min
     
-    Returns the decision (cache enabled or not)
+    TIER 2: Global capacity management (system protection)
+    - Returns 503 if load shedding active (>120 req/min + low priority)
+    - Returns 202 if queue deferral active (80-120 req/min + low/medium priority)
+    
+    Example: GET /api/config/demo-service/login?tenant_id=tenant123&priority=high&customer_identifier=192.168.1.100
+    
+    Headers required: Authorization: your-api-key
     """
-    
     
     # Make sure endpoint starts with /
     if not endpoint.startswith('/'):
         endpoint = '/' + endpoint
     
-    # Get decision with tenant_id and user_id (for real-time aggregates)
-    decision = await make_decision(service_name, endpoint, tenant_id, db, user_id=current_user.id)
+    # customer_identifier is now passed as query parameter from SDK
+    # This represents the END-USER's IP, not the service owner's IP
+    
+    # Get decision with ALL new parameters
+    decision = await make_decision(
+        service_name, 
+        endpoint, 
+        tenant_id, 
+        db, 
+        user_id=current_user.id,
+        customer_identifier=customer_identifier,  # NEW
+        priority=priority  # NEW
+    )
 
-
+    # ===== EXISTING FEATURES: Alerts, Caching, Circuit Breaker =====
+    
+    # Send alert if needed
     if decision.get("send_alert"):
         background_tasks.add_task(
             send_alert_email,
-            to_email=current_user.email,  # Use current user's email
+            to_email=current_user.email,
             subject=f"🚨 Alert: {service_name}",
             context={
                 "service_name": service_name,
@@ -161,17 +187,74 @@ async def get_config(
                 "ai_decision": decision["ai_decision"],
             }
         )
-
-
     
     
-    # Return config
+    # ===== TIER 1: PER-CUSTOMER RATE LIMITING =====
+    if decision.get('rate_limit_customer'):
+        print(f"🚫 Per-customer rate limit triggered for {customer_identifier}")
+        
+        # Calculate retry_after (seconds until next minute)
+        import time
+        retry_after = 60 - (int(time.time()) % 60)
+        
+        # Return 429 for this customer only
+        return {
+            'service_name': service_name,
+            'endpoint': endpoint,
+            'tenant_id': tenant_id,
+            'customer_identifier': customer_identifier,
+            'rate_limited_customer': True,  # NEW: Indicates per-customer block
+            'retry_after': retry_after,
+            'status_code': 429,  # SDK should return 429
+            'reason': f"Per-customer rate limit: {decision['reason']}"
+        }
+    
+    # ===== TIER 2: GLOBAL CAPACITY MANAGEMENT =====
+    
+    # Load Shedding: Drop the request (503)
+    if decision.get('load_shedding'):
+        print(f"🗑️  Load shedding: Dropping {priority} priority request")
+        
+        import time
+        retry_after = 30  # Suggest retry in 30 seconds
+        
+        return {
+            'service_name': service_name,
+            'endpoint': endpoint,
+            'tenant_id': tenant_id,
+            'load_shedding': True,  # NEW
+            'retry_after': retry_after,
+            'status_code': 503,  # SDK should return 503
+            'reason': decision['reason'],
+            'priority_required': 'high'  # Hint for client
+        }
+    
+    # Queue Deferral: Queue the request (202)
+    if decision.get('queue_deferral'):
+        print(f"⏳ Queue deferral: Queueing {priority} priority request")
+        
+        return {
+            'service_name': service_name,
+            'endpoint': endpoint,
+            'tenant_id': tenant_id,
+            'queue_deferral': True,  # NEW
+            'status_code': 202,  # SDK should return 202
+            'reason': decision['reason'],
+            'estimated_delay': 10  # Seconds (SDK can queue for later)
+        }
+    
+
+    # Return normal config (all checks passed)
     return {
         'service_name': service_name,
         'endpoint': endpoint,
         'tenant_id': tenant_id,
         'cache_enabled': decision['cache_enabled'],
         'circuit_breaker': decision['circuit_breaker'],
+        'rate_limited_customer': False,  # Passed per-customer check
+        'queue_deferral': False,  # Not queued
+        'load_shedding': False,  # Not shed
+        'status_code': 200,  # Normal request
         'reason': decision['reason']
     }
 
@@ -255,9 +338,10 @@ async def get_services(
             avg_latency = metrics['avg_latency']
             error_rate = metrics['error_rate']
             signal_count = metrics['count']
+            requests_per_minute = metrics.get('requests_per_minute', 0)  # NEW: for rate limiting
             
             print(f"✅ Redis metrics for {service_name}{endpoint}: "
-                  f"{signal_count} signals, {avg_latency:.1f}ms avg, {error_rate*100:.1f}% errors")
+                  f"{signal_count} signals, {avg_latency:.1f}ms avg, {error_rate*100:.1f}% errors, {requests_per_minute:.1f} req/min")
         else:
             # Fallback: Get metrics from database (sampled data)
             print(f"⚠️  No Redis data for {service_name}{endpoint}, falling back to database")
@@ -278,6 +362,7 @@ async def get_services(
             avg_latency = sum(s.latency_ms for s in signals) / signal_count
             error_count = sum(1 for s in signals if s.status == 'error')
             error_rate = error_count / signal_count
+            requests_per_minute = 0  # No real-time rate data for fallback
         
         # Get most recent signal for tenant_id (async pattern)
         stmt = select(models.Signal).filter(
@@ -290,9 +375,15 @@ async def get_services(
         
         tenant_id = recent_signal.tenant_id if recent_signal else None
         
-        # Get AI decision using accurate metrics
+        # Get AI decision using accurate metrics including traffic rate
         endpoint_normalized = endpoint if endpoint.startswith('/') else '/' + endpoint
-        ai_decision = make_ai_decision(service_name, endpoint_normalized, avg_latency, error_rate)
+        ai_decision = make_ai_decision(
+            service_name, 
+            endpoint_normalized, 
+            avg_latency, 
+            error_rate,
+            requests_per_minute=requests_per_minute  # NEW: pass traffic rate to AI
+        )
         
         # Build endpoint metrics
         endpoint_metrics = Schema.EndpointMetrics(
@@ -303,6 +394,7 @@ async def get_services(
             tenant_id=tenant_id,
             cache_enabled=ai_decision['cache_enabled'],
             circuit_breaker=ai_decision['circuit_breaker'],
+            rate_limit_enabled=ai_decision.get('rate_limit_enabled', False),  # NEW
             reasoning=ai_decision['reasoning']
         )
         
@@ -431,9 +523,11 @@ async def get_endpoint_detail(
         total_signals = metrics['count']
         avg_latency = metrics['avg_latency']
         error_rate = metrics['error_rate']
+        requests_per_minute = metrics.get('requests_per_minute', 0)  # NEW: for rate limiting
         
         print(f"✅ Using Redis metrics for {service_name}{endpoint_path}: "
-              f"{total_signals} signals, {avg_latency:.1f}ms avg, {error_rate*100:.1f}% errors")
+              f"{total_signals} signals, {avg_latency:.1f}ms avg, "
+              f"{error_rate*100:.1f}% errors, {requests_per_minute:.1f} req/min")
     else:
         # Fallback: Calculate from database (sampled data)
         print(f"⚠️  No Redis data for {service_name}{endpoint_path}, falling back to database")
@@ -454,6 +548,7 @@ async def get_endpoint_detail(
         avg_latency = sum(s.latency_ms for s in signals) / total_signals
         error_count = sum(1 for s in signals if s.status == 'error')
         error_rate = error_count / total_signals
+        requests_per_minute = 0  # No real-time rate data for fallback
     
     # STEP 2: Get history for graph (last 20 signals from database - sampled is fine for trends)
     stmt = select(models.Signal).filter(
@@ -472,8 +567,14 @@ async def get_endpoint_detail(
             "status": s.status
         })
     
-    # STEP 3: Get AI decision using accurate metrics
-    ai_decision = make_ai_decision(service_name, endpoint_path, avg_latency, error_rate)
+    # STEP 3: Get AI decision using accurate metrics including traffic rate
+    ai_decision = make_ai_decision(
+        service_name, 
+        endpoint_path, 
+        avg_latency, 
+        error_rate,
+        requests_per_minute=requests_per_minute  # NEW: pass traffic rate to AI
+    )
     
     # Generate suggestions based on metrics
     suggestions = []
@@ -506,5 +607,6 @@ async def get_endpoint_detail(
         suggestions=suggestions,
         cache_enabled=ai_decision['cache_enabled'],
         circuit_breaker=ai_decision.get('circuit_breaker', False),
+        rate_limit_enabled=ai_decision.get('rate_limit_enabled', False),  # NEW
         reasoning=ai_decision['reasoning']
     )
