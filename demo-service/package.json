@@ -12,7 +12,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@ayushsoni12/ai-control-plane-sdk": "^2.0.0",
+    "@ayushsoni12/ai-control-plane-sdk": "file:../sdk/nodejs",
     "dotenv": "^16.6.1",
     "express": "^5.2.1"
   }
