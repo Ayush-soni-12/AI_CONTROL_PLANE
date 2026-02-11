@@ -1,109 +1,132 @@
 'use client';
 
 import { useMutation, useQuery, useSuspenseQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchSignals } from '@/lib/control-plane-client';
 import { signup, login, logout, authenticate, authenticateSuspense } from '@/lib/auth-client';
-import type { SignupRequest, LoginRequest, AuthResponse, User, EndpointDetail } from '@/lib/types';
+import type { User, EndpointDetail, Signal, ServicesResponse } from '@/lib/types';
+import { useSSE } from './useSSE';
 
 /**
- * Hook to fetch signals from the control plane
+ * Hook to stream signals from the control plane using Server-Sent Events
+ * 
+ * Replaces polling with real-time SSE streaming for better performance.
+ * TanStack Query is NO LONGER used here (SSE handles real-time data).
  */
 export const useSignals = () => {
-  return useSuspenseQuery({
-    queryKey: ["signals"],
-    queryFn: fetchSignals,
-    refetchInterval: 2000, // Refresh every 3 seconds
-    staleTime: 1000
-  });
+  return useSSE<{ signals: Signal[]; timestamp: number }>('/api/sse/signals', 'signals');
 }
 
 /**
- * Hook to fetch aggregated services with pre-calculated metrics from backend
+ * Hook to fetch aggregated services data
+ * 
+ * HYBRID APPROACH:
+ * - Real-time data (/api/services) → SSE streaming
+ * - Historical data (/api/history/services?...) → TanStack Query (one-time fetch with caching)
+ * 
+ * @param apiUrl - The API endpoint to fetch from
+ * @returns Data in consistent format { data, status, error, reconnect }
  */
-export const useServices = (apiUrl: string = '/api/services') => {
-  return useSuspenseQuery({
-    queryKey: ["services", apiUrl],
+export const useServices = (apiUrl: string = '/api/sse/services') => {
+  const isRealtime = apiUrl === '/api/sse/services';
+  
+  // Always call both hooks unconditionally (React Hooks rules)
+  const sseResult = useSSE<ServicesResponse>('/api/sse/services', 'services', isRealtime);
+  
+  const queryResult = useQuery({
+    queryKey: ['services', apiUrl],
     queryFn: async () => {
-      const response = await fetch(`http://localhost:8000${apiUrl}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000'}${apiUrl}`, {
         credentials: 'include',
       });
-      
       if (!response.ok) {
-        throw new Error('Failed to fetch services');
+        throw new Error('Failed to fetch historical data');
       }
-      
-      return response.json();
+      return response.json() as Promise<ServicesResponse>;
     },
-    refetchInterval: 2000, // Refresh every 10 seconds
-    staleTime: 1000
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+    enabled: !isRealtime, // Only fetch when NOT real-time
   });
+  
+  // Return the appropriate result
+  if (isRealtime) {
+    return sseResult;
+  }
+  
+  // Transform TanStack Query to SSE format
+  return {
+    data: queryResult.data || null,
+    status: queryResult.isLoading ? 'connecting' as const : 
+            queryResult.isError ? 'error' as const : 
+            queryResult.data ? 'connected' as const : 
+            'disconnected' as const,
+    error: queryResult.error ? String(queryResult.error) : null,
+    reconnect: () => { queryResult.refetch(); },
+  };
 }
 
 /**
- * Hook to fetch detailed metrics for a specific endpoint
+ * Hook to stream detailed metrics for a specific endpoint using Server-Sent Events
+ * 
+ * @param serviceName - Name of the service
+ * @param endpointPath - Endpoint path to get details for
+ * @param enabled - Whether to enable SSE streaming (default: true)
+ * @returns Detailed endpoint metrics streamed via SSE
  */
-export const useEndpointDetail = (serviceName: string, endpointPath: string) => {
-  return useQuery<EndpointDetail>({
-    queryKey: ["endpoint-detail", serviceName, endpointPath],
-    queryFn: async () => {
-      // Ensure endpointPath doesn't have leading slash when appending to URL if needed, 
-      // but FastAPI :path handles it well. 
-      // We'll strip leading slash to avoid // in URL
-      const path = endpointPath.startsWith('/') ? endpointPath.substring(1) : endpointPath;
-      const response = await fetch(`http://localhost:8000/api/services/${serviceName}/endpoints/${path}`, {
-        credentials: 'include',
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch endpoint details');
-      }
-      
-      return response.json();
-    },
-    enabled: !!serviceName && !!endpointPath,
-    refetchInterval: 3000,
-  });
+export const useEndpointDetail = (serviceName: string, endpointPath: string, enabled: boolean = true) => {
+  return useSSE<EndpointDetail>(
+    `/api/sse/endpoint-detail/${serviceName}/${endpointPath}`,
+    'endpoint-detail',
+    enabled
+  );
 }
 
+// ========================================
+// AUTHENTICATION HOOKS (Using TanStack Query)
+// ========================================
+
 /**
- * Hook to handle user signup
+ * Check if the user is authenticated
+ * 
+ * Uses TanStack Query for authentication checks (not SSE).
+ * This is appropriate because auth status doesn't need real-time streaming.
+ */
+
+/**
+ * Signup mutation
  */
 export const useSignup = () => {
   const queryClient = useQueryClient();
-  return useMutation<AuthResponse, Error, SignupRequest>({
+  
+  return useMutation({
     mutationFn: signup,
     onSuccess: (data) => {
-      console.log("Signup successful:", data.user);
-      // Immediately set the user data in cache
-      queryClient.setQueryData(['auth', 'user'], data.user);
+      // Update auth cache after successful signup
+      queryClient.setQueryData(['auth'], data.user);
     },
-    onError: (error) => {
-      console.error("Signup failed:", error.message);
-    }
   });
-}
+};
 
 /**
- * Hook to handle user login
+ * Login mutation
  */
 export const useLogin = () => {
   const queryClient = useQueryClient();
-  return useMutation<AuthResponse, Error, LoginRequest>({
+  
+  return useMutation({
     mutationFn: login,
     onSuccess: (data) => {
-      console.log("Login successful:", data.user);
-      // Immediately set the user data in cache
-      queryClient.setQueryData(['auth', 'user'], data.user);
+      // Update auth cache after successful login
+      queryClient.setQueryData(['auth'], data.user);
     },
-    onError: (error) => {
-      console.error("Login failed:", error.message);
-    }
   });
-}
+};
 
-
+/**
+ * Logout mutation
+ */
 export const useLogout = () => {
   const queryClient = useQueryClient();
+  
   return useMutation({
     mutationFn: logout,
     onSuccess: () => {
