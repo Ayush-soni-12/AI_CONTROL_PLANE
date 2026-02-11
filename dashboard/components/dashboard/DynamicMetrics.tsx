@@ -3,16 +3,39 @@
 import { useServices } from "@/hooks/useSignals";
 import { MetricCard } from "@/components/cards/MetricCard";
 import { Activity, Zap, AlertTriangle, TrendingUp } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
- * Dynamic Metrics Component - Wrapped in Suspense
- * Fetches and displays real-time metrics
+ * Dynamic Metrics Component - Now using SSE
+ * Streams real-time metrics from server
  */
 export function DynamicMetrics() {
-  const { data: servicesData } = useServices();
+  const { data, status, error } = useServices();
+
+  // Show loading skeleton while connecting
+  if (status === "connecting" || !data) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        {[...Array(4)].map((_, i) => (
+          <Skeleton className="h-32 rounded-xl" key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  // Show error state
+  if (status === "error" || error) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <div className="col-span-full p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
+          Error loading metrics: {error || "Connection error"}
+        </div>
+      </div>
+    );
+  }
 
   const { total_signals, avg_latency, error_rate, active_services } =
-    servicesData.overall;
+    data.overall;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">

@@ -4,21 +4,42 @@ import { useServices } from "@/hooks/useSignals";
 import { ServiceCard } from "@/components/cards/ServiceCard";
 import { Activity } from "lucide-react";
 import { Service } from "@/lib/types";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface DynamicServicesProps {
   apiUrl?: string;
 }
 
 /**
- * Dynamic Services Component - Wrapped in Suspense
- * Fetches and displays real-time services list
+ * Dynamic Services Component - Now using SSE
+ * Streams real-time services data from server
  */
 export function DynamicServices({
-  apiUrl = "/api/services",
+  apiUrl = "/api/sse/services",
 }: DynamicServicesProps) {
-  const { data: servicesData } = useServices(apiUrl);
+  const { data, status, error } = useServices(apiUrl);
 
-  const services = servicesData.services;
+  // Show loading skeleton while connecting
+  if (status === "connecting" || !data) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[...Array(3)].map((_, i) => (
+          <Skeleton className="h-64 rounded-xl" key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  // Show error state
+  if (status === "error" || error) {
+    return (
+      <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
+        Error loading services: {error || "Connection error"}
+      </div>
+    );
+  }
+
+  const services = data.services;
 
   if (services.length === 0) {
     return (
