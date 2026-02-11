@@ -39,12 +39,39 @@ export function DynamicServiceDetails({
   serviceName,
 }: DynamicServiceDetailsProps) {
   const router = useRouter();
-  const { data: servicesData } = useServices();
+  const { data, status, error } = useServices();
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
 
-  const service = servicesData.services.find(
-    (s: Service) => s.name === serviceName,
-  );
+  // Show loading state while connecting
+  if (status === "connecting" || !data) {
+    return (
+      <div className="text-center py-16 bg-linear-to-br from-card to-purple-950/10 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
+        <div className="inline-block p-6 rounded-2xl bg-purple-500/10 mb-6">
+          <Server className="w-16 h-16 text-purple-400 animate-pulse" />
+        </div>
+        <h3 className="text-2xl font-bold mb-3 text-gray-200">
+          Loading service details...
+        </h3>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (status === "error" || error) {
+    return (
+      <div className="text-center py-16 bg-red-500/10 rounded-2xl border border-red-500/30">
+        <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+        <h3 className="text-2xl font-bold mb-3 text-gray-200">
+          Error loading service
+        </h3>
+        <p className="text-gray-400 mb-6 text-lg">
+          {error || "Connection error"}
+        </p>
+      </div>
+    );
+  }
+
+  const service = data.services.find((s: Service) => s.name === serviceName);
 
   if (!service) {
     return (

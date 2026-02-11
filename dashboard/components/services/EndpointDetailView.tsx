@@ -31,11 +31,11 @@ export function EndpointDetailView({
 }: EndpointDetailViewProps) {
   const {
     data: detail,
-    isLoading,
+    status,
     error,
   } = useEndpointDetail(serviceName, endpointPath);
 
-  if (isLoading) {
+  if (status === "connecting" || !detail) {
     return (
       <div className="flex flex-col items-center justify-center py-20 bg-card/50 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
         <div className="w-12 h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin mb-4" />
@@ -46,16 +46,14 @@ export function EndpointDetailView({
     );
   }
 
-  if (error || !detail) {
+  if (status === "error" || error) {
     return (
       <div className="text-center py-16 bg-card/50 rounded-2xl border border-red-500/20 backdrop-blur-sm">
         <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
         <h3 className="text-xl font-bold text-gray-200">
           Failed to load details
         </h3>
-        <p className="text-gray-400 mb-6">
-          There was an error fetching data for this endpoint.
-        </p>
+        <p className="text-gray-400 mb-6">{error || "Connection error"}</p>
         <button
           onClick={onBack}
           className="px-6 py-2 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 rounded-lg transition-colors"
