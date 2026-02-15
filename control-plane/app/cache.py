@@ -10,9 +10,6 @@ from .config import settings
 
 import redis.asyncio as redis
 
-# Redis connection - supports Docker or local Redis
-# For Docker with password: set REDIS_URL="redis://default:password@localhost:6379"
-# For local Redis: set REDIS_URL="redis://localhost:6379"
 REDIS_URL = settings.REDIS_URL
 
 redis_client = redis.from_url(
@@ -34,8 +31,7 @@ async def cache_get(key: str) -> Optional[Any]:
     Returns:
         Cached value as dict, or None if not found or Redis unavailable
     """
-    # if not REDIS_AVAILABLE:
-    #     return None
+
         
     try:
         data = await redis_client.get(key)
@@ -55,8 +51,7 @@ async def cache_set(key: str, value: Any, ttl: int = 300):
         value: Value to cache (will be JSON serialized)
         ttl: Time to live in seconds (default: 300 = 5 minutes)
     """
-    # if not REDIS_AVAILABLE:
-    #     return
+
         
     try:
         await redis_client.setex(
@@ -76,8 +71,7 @@ async def cache_delete(key: str):
     Args:
         key: Cache key to delete
     """
-    # if not REDIS_AVAILABLE:
-    #     return
+
         
     try:
         await redis_client.delete(key)
@@ -92,8 +86,7 @@ async def cache_delete_pattern(pattern: str):
     Args:
         pattern: Pattern to match (e.g., "user:123:*")
     """
-    # if not REDIS_AVAILABLE:
-    #     return
+
         
     try:
         keys = await redis_client.keys(pattern)

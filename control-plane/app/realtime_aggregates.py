@@ -21,7 +21,8 @@ TIME WINDOWS:
 """
 
 import json
-from typing import Optional, Dict
+import statistics
+from typing import Optional, Dict, List
 from datetime import datetime, timedelta
 from app.cache import redis_client
 # from sqlalchemy.orm import Session
@@ -32,6 +33,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 def _get_aggregate_key(user_id: int, service_name: str, endpoint: str, window: str) -> str:
     """Generate Redis key for aggregate storage."""
     return f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:{window}"
+    
+
+def _percentile(sorted_data: List[float], p: int) -> float:
+    """Compute the p-th percentile from a sorted list of values."""
+    if not sorted_data:
+        return 0.0
+    n = len(sorted_data)
+    k = (p / 100) * (n - 1)
+    f = int(k)
+    c = f + 1 if f + 1 < n else f
+    d = k - f
+    return sorted_data[f] + d * (sorted_data[c] - sorted_data[f])
 
 
 async def update_realtime_aggregate(
@@ -105,6 +118,17 @@ async def update_realtime_aggregate(
             
             # Save back to Redis with appropriate TTL
             await redis_client.setex(key, ttl, json.dumps(agg))  # await async call
+            
+            # Track individual latency in sorted set for percentile calculation
+            # Use timestamp+random as member to allow duplicate latencies
+            latency_key = f"{key}:latencies"
+            member = f"{current_timestamp}:{latency_ms}"
+            await redis_client.zadd(latency_key, {member: latency_ms})
+            # Cap at 1000 samples (remove oldest)
+            count = await redis_client.zcard(latency_key)
+            if count > 1000:
+                await redis_client.zremrangebyrank(latency_key, 0, count - 1001)
+            await redis_client.expire(latency_key, ttl)
             
         except Exception as e:
             # Log error but don't fail the signal processing
@@ -204,6 +228,19 @@ async def get_realtime_metrics(
                 window_minutes = 60 if window == '1h' else 1440
                 requests_per_minute = agg['count'] / window_minutes
             
+            # Calculate p50/p95/p99 from latency sorted set
+            p50, p95, p99 = 0, 0, 0
+            try:
+                latency_key = f"{key}:latencies"
+                raw_scores = await redis_client.zrange(latency_key, 0, -1, withscores=True)
+                if raw_scores:
+                    latencies = sorted([score for _, score in raw_scores])
+                    p50 = _percentile(latencies, 50)
+                    p95 = _percentile(latencies, 95)
+                    p99 = _percentile(latencies, 99)
+            except Exception as e:
+                print(f"⚠️ Error computing percentiles: {e}")
+            
             return {
                 'count': agg['count'],
                 'sum_latency': agg['sum_latency'],
@@ -211,6 +248,9 @@ async def get_realtime_metrics(
                 'avg_latency': avg_latency,
                 'error_rate': error_rate,
                 'requests_per_minute': requests_per_minute,  # NEW: actual 60s rate
+                'p50': round(p50, 2),
+                'p95': round(p95, 2),
+                'p99': round(p99, 2),
                 'last_updated': agg.get('last_updated'),
                 'source': 'redis'
             }
@@ -245,34 +285,3 @@ async def get_realtime_metrics(
 
 
 
-def get_service_metrics(user_id: int, service_name: str, window: str = '24h') -> Dict:
-    """
-    Get aggregated metrics for all endpoints of a service.
-    
-    Useful for dashboard service-level metrics.
-    
-    Args:
-        user_id: User ID
-        service_name: Name of the service
-        window: Time window ('1h' or '24h')
-    
-    Returns:
-        Dict with aggregated metrics across all endpoints
-    """
-    # This would require scanning Redis keys, which is expensive
-    # For now, return None and let the caller aggregate from individual endpoints
-    # In production, consider maintaining a separate service-level aggregate
-    return {}
-
-
-def cleanup_old_aggregates():
-    """
-    Cleanup job to remove stale aggregates.
-    
-    This is handled automatically by Redis TTL, but this function
-    can be used for manual cleanup if needed.
-    """
-    # Redis TTL handles this automatically
-    # 1h window expires after 1 hour
-    # 24h window expires after 24 hours
-    pass

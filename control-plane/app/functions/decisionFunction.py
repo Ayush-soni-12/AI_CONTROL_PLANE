@@ -1,10 +1,13 @@
 from ..database import get_async_db
 from  ..import models
 from fastapi import Depends
+from ..realtime_aggregates import get_realtime_metrics
+from ..customer_metrics import get_customer_metrics
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from ..ai_engine import ai_engine
 make_ai_decision = ai_engine.make_ai_decision
+get_ai_tuned_decision = ai_engine.get_ai_tuned_decision
 
 
 
@@ -26,6 +29,9 @@ async def make_decision(
     PHASE 3 OPTIMIZATION: Uses real-time aggregates from Redis for accurate metrics.
     This ensures decisions are based on 100% of signals, not just sampled data.
     
+    PHASE 4: Uses AI-tuned thresholds from background Gemini analysis
+    when available, falling back to hardcoded defaults.
+    
     Args:
         service_name: Name of the service
         endpoint: API endpoint path
@@ -37,8 +43,7 @@ async def make_decision(
     
     Returns: dictionary with decision
     """
-    from ..realtime_aggregates import get_realtime_metrics
-    from ..customer_metrics import get_customer_metrics
+
     
     # Get global metrics (all customers combined)
     metrics = None
@@ -62,18 +67,33 @@ async def make_decision(
         
         print(f"✅ Using real-time aggregates: {service_name}{endpoint} - "
               f"Avg: {avg_latency:.1f}ms, Error: {error_rate*100:.1f}%, "
-              f"Count: {metrics['count']} (ALL signals), Total RPM: {total_rpm:.1f}")
+              f"Count: {metrics['count']} (ALL signals), Total RPM: {total_rpm:.1f}, "
+              f"p50: {metrics.get('p50', 0):.1f}ms, p95: {metrics.get('p95', 0):.1f}ms, p99: {metrics.get('p99', 0):.1f}ms")
         
-        # Use AI decision with both global and customer metrics
-        ai_decision = make_ai_decision(
-            service_name, 
-            endpoint, 
-            avg_latency, 
-            error_rate,
-            requests_per_minute=total_rpm,  # Global traffic
-            customer_requests_per_minute=customer_rpm,  # This customer only
-            priority=priority  # NEW
-        )
+        # Use AI-tuned decision (reads thresholds from DB) when db+user_id available
+        if db and user_id:
+            ai_decision = await get_ai_tuned_decision(
+                service_name,
+                endpoint,
+                avg_latency,
+                error_rate,
+                requests_per_minute=total_rpm,
+                customer_requests_per_minute=customer_rpm,
+                priority=priority,
+                user_id=user_id,
+                db=db
+            )
+        else:
+            # Fallback to hardcoded thresholds
+            ai_decision = make_ai_decision(
+                service_name, 
+                endpoint, 
+                avg_latency, 
+                error_rate,
+                requests_per_minute=total_rpm,
+                customer_requests_per_minute=customer_rpm,
+                priority=priority
+            )
         
         print(f"🤖 AI Decision: {ai_decision['reasoning']}")
         

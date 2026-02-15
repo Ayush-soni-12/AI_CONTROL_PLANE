@@ -1,3 +1,4 @@
+from app.ai_engine.threshold_manager import get_all_thresholds, DEFAULTS
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
 
@@ -69,7 +70,7 @@ def decide_node(state: DecisionState) -> DecisionState:
             'rate_limit_customer': True,  # NEW: Block this customer only
             'queue_deferral': False,
             'load_shedding': False,
-            'send_alert': True  # Alert on potential DDoS
+            'send_alert': False  # Alert on potential DDoS
         }
         return state
     
@@ -95,7 +96,7 @@ def decide_node(state: DecisionState) -> DecisionState:
             'rate_limit_customer': False,
             'queue_deferral': False,
             'load_shedding': True,  # NEW: Drop this request
-            'send_alert': True
+            'send_alert': False
         }
         return state
     
@@ -147,7 +148,7 @@ def decide_node(state: DecisionState) -> DecisionState:
     # Rule 2: High Latency with Errors
     elif state['error_rate'] >= 0.15 and state['avg_latency'] >= 400:
         actions.append("enable_cache")
-        actions.append("alert")
+        # actions.append("alert")
         state['reasoning'] = (
             f"Performance Degradation: High latency ({state['avg_latency']:.0f}ms) accompanied by elevated error rate ({state['error_rate']*100:.1f}%). "
             "Caching enabled to reduce load. Team alerted for investigation."
@@ -163,7 +164,7 @@ def decide_node(state: DecisionState) -> DecisionState:
     
     # Rule 4: Moderate Errors (Warning)
     elif state['error_rate'] >= 0.15:
-        actions.append("alert")
+        # actions.append("alert")
         state['reasoning'] = (
             f"Elevated Error Rate: Error rate ({state['error_rate']*100:.1f}%) is above normal limits. "
             "Monitoring continued, alert sent to operations team."
@@ -249,4 +250,170 @@ def make_ai_decision(
         "reasoning": result['reasoning'],
         "analysis": result['analysis'],
         "ai_decision": result['reasoning'].split(':')[0]  # Extract action name
+    }
+
+
+
+
+
+async def get_ai_tuned_decision(
+    service_name: str,
+    endpoint: str,
+    avg_latency: float,
+    error_rate: float,
+    requests_per_minute: float = 0,
+    customer_requests_per_minute: float = 0,
+    priority: str = 'medium',
+    user_id: int = None,
+    db = None
+) -> dict:
+    """
+    Make decision using AI-tuned thresholds from the database.
+    
+    Loads thresholds set by the background AI analyzer (Gemini),
+    then runs the same LangGraph decision logic but with dynamic values.
+    Falls back to hardcoded defaults if no AI thresholds exist.
+    """
+
+    
+    # Load AI-tuned thresholds
+    if db and user_id:
+        thresholds = await get_all_thresholds(db, user_id, service_name, endpoint)
+    else:
+        thresholds = {**DEFAULTS, 'source': 'default'}
+    
+    # Build state with AI-tuned thresholds
+    is_ai_tuned = thresholds.get('source') == 'ai'
+    cache_threshold = thresholds['cache_latency_ms']
+    cb_threshold = thresholds['circuit_breaker_error_rate']
+    queue_threshold = thresholds['queue_deferral_rpm']
+    shed_threshold = thresholds['load_shedding_rpm']
+    customer_limit = thresholds['rate_limit_customer_rpm']
+    
+    prefix = "🧠 AI-Tuned" if is_ai_tuned else "📏 Default"
+    
+    # ===== TIER 1: PER-CUSTOMER RATE LIMITING =====
+    if customer_requests_per_minute > customer_limit:
+        reasoning = (
+            f"{prefix} Per-Customer Rate Limit: {customer_requests_per_minute:.1f} req/min "
+            f"exceeds limit of {customer_limit} req/min."
+        )
+        return {
+            'cache_enabled': False,
+            'circuit_breaker': False,
+            'rate_limit_customer': True,
+            'queue_deferral': False,
+            'load_shedding': False,
+            'send_alert': False,
+            'reasoning': reasoning,
+            'analysis': f"Customer abuse: {customer_requests_per_minute:.1f} req/min",
+            'ai_decision': 'Per-Customer Rate Limit',
+            'thresholds_source': thresholds.get('source', 'default')
+        }
+    
+    # ===== TIER 2: GLOBAL CAPACITY MANAGEMENT =====
+    if priority == 'critical':
+        pass  # Critical never gets queued or shed
+    
+    # Load shedding: extreme overload
+    elif requests_per_minute > shed_threshold and priority in ['low', 'medium']:
+        reasoning = (
+            f"{prefix} Load Shedding: Traffic {requests_per_minute:.1f} req/min "
+            f"exceeds threshold {shed_threshold} rpm. Dropping {priority} priority."
+        )
+        return {
+            'cache_enabled': True,
+            'circuit_breaker': False,
+            'rate_limit_customer': False,
+            'queue_deferral': False,
+            'load_shedding': True,
+            'send_alert': False,
+            'reasoning': reasoning,
+            'analysis': f"Extreme traffic: {requests_per_minute:.1f} rpm",
+            'ai_decision': 'Load Shedding',
+            'thresholds_source': thresholds.get('source', 'default')
+        }
+    
+    # Load shedding: high overload (shed low only)
+    elif requests_per_minute > shed_threshold * 0.8 and priority == 'low':
+        reasoning = (
+            f"{prefix} Load Shedding: Traffic {requests_per_minute:.1f} req/min "
+            f"approaching threshold. Dropping low priority."
+        )
+        return {
+            'cache_enabled': True,
+            'circuit_breaker': False,
+            'rate_limit_customer': False,
+            'queue_deferral': False,
+            'load_shedding': True,
+            'send_alert': False,
+            'reasoning': reasoning,
+            'analysis': f"High traffic: {requests_per_minute:.1f} rpm",
+            'ai_decision': 'Load Shedding',
+            'thresholds_source': thresholds.get('source', 'default')
+        }
+    
+    # Queue deferral: moderate overload
+    elif requests_per_minute > queue_threshold and priority in ['low', 'medium']:
+        reasoning = (
+            f"{prefix} Queue Deferral: Traffic {requests_per_minute:.1f} req/min "
+            f"exceeds threshold {queue_threshold} rpm. Queueing {priority} priority."
+        )
+        return {
+            'cache_enabled': True,
+            'circuit_breaker': False,
+            'rate_limit_customer': False,
+            'queue_deferral': True,
+            'load_shedding': False,
+            'send_alert': False,
+            'reasoning': reasoning,
+            'analysis': f"Moderate traffic: {requests_per_minute:.1f} rpm",
+            'ai_decision': 'Queue Deferral',
+            'thresholds_source': thresholds.get('source', 'default')
+        }
+    
+    # ===== TIER 3: CACHING & CIRCUIT BREAKER =====
+    actions = []
+    
+    if error_rate >= cb_threshold:
+        actions.append("circuit_breaker")
+        actions.append("alert")
+        reasoning = (
+            f"{prefix} CRITICAL: Error rate {error_rate*100:.1f}% exceeds "
+            f"threshold {cb_threshold*100:.0f}%. Circuit breaker activated."
+        )
+    elif error_rate >= cb_threshold * 0.5 and avg_latency >= cache_threshold * 0.8:
+        actions.append("enable_cache")
+        reasoning = (
+            f"{prefix} Performance Degradation: Latency {avg_latency:.0f}ms + "
+            f"error rate {error_rate*100:.1f}%. Caching enabled."
+        )
+    elif avg_latency >= cache_threshold:
+        actions.append("enable_cache")
+        reasoning = (
+            f"{prefix} High Latency: {avg_latency:.0f}ms exceeds "
+            f"threshold {cache_threshold}ms. Caching enabled."
+        )
+    elif error_rate >= cb_threshold * 0.5:
+        reasoning = (
+            f"{prefix} Elevated Error Rate: {error_rate*100:.1f}% "
+            f"(threshold: {cb_threshold*100:.0f}%). Monitoring."
+        )
+    else:
+        reasoning = (
+            f"{prefix} Healthy: Latency {avg_latency:.0f}ms, "
+            f"Errors {error_rate*100:.1f}%, Traffic {requests_per_minute:.1f} rpm"
+        )
+    
+    return {
+        'cache_enabled': 'enable_cache' in actions,
+        'circuit_breaker': 'circuit_breaker' in actions,
+        'rate_limit_customer': False,
+        'queue_deferral': False,
+        'load_shedding': False,
+        'send_alert': 'alert' in actions,
+        'reasoning': reasoning,
+        'analysis': reasoning,
+        'ai_decision': reasoning.split(':')[0] if ':' in reasoning else 'Healthy',
+        'thresholds_source': thresholds.get('source', 'default')
     }

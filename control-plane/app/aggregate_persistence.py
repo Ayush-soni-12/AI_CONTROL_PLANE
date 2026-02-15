@@ -22,7 +22,6 @@ WHEN IT RUNS:
 
 import json
 from datetime import datetime, timedelta, timezone
-# from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from app import models
 from app.database import SessionLocal, AsyncSessionLocal
@@ -102,6 +101,12 @@ async def snapshot_redis_aggregates(db: AsyncSession = None):
                     # Parse key to extract metadata
                     # Format: rt_agg:user:{user_id}:service:{service}:endpoint:{endpoint}:{window}
                     key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                    
+                    # Skip latency sorted set keys (auxiliary data structures)
+                    if key_str.endswith(':latencies'):
+                        snapshots_skipped += 1
+                        continue
+                    
                     parts = key_str.split(':')
                     
                     if len(parts) < 8:
@@ -127,6 +132,20 @@ async def snapshot_redis_aggregates(db: AsyncSession = None):
                     avg_latency = agg['sum_latency'] / agg['count'] if agg['count'] > 0 else 0
                     error_rate = agg['errors'] / agg['count'] if agg['count'] > 0 else 0
                     
+                    # Calculate percentiles from latency sorted set
+                    p50, p95, p99 = 0.0, 0.0, 0.0
+                    try:
+                        latency_key = f"{key_str}:latencies"
+                        raw_scores = await redis_job_client.zrange(latency_key, 0, -1, withscores=True)
+                        if raw_scores:
+                            from app.realtime_aggregates import _percentile
+                            latencies = sorted([score for _, score in raw_scores])
+                            p50 = _percentile(latencies, 50)
+                            p95 = _percentile(latencies, 95)
+                            p99 = _percentile(latencies, 99)
+                    except Exception as e:
+                        print(f"⚠️  Could not compute percentiles for {key_str}: {e}")
+                    
                     # STEP 3: Save snapshot to database
                     snapshot = models.AggregateSnapshot(
                         user_id=user_id,
@@ -139,6 +158,9 @@ async def snapshot_redis_aggregates(db: AsyncSession = None):
                         errors=agg['errors'],
                         avg_latency=avg_latency,
                         error_rate=error_rate,
+                        p50=p50,
+                        p95=p95,
+                        p99=p99,
                         last_updated=agg.get('last_updated')
                     )
                     
@@ -250,15 +272,9 @@ async def get_snapshot_metrics(
         if not snapshot:
             return None
         
-        # Check if snapshot is too old (>48 hours for 24h window, >3 hours for 1h window)
-        max_age = timedelta(hours=48) if window == '24h' else timedelta(hours=3)
+        # Calculate age for logging purposes
         age = datetime.now(timezone.utc) - snapshot.snapshot_at
-        
-        if age > max_age:
-            print(f"⚠️  Snapshot is too old ({age}) for {service_name}{endpoint}, ignoring")
-            return None
-        
-        print(f"📸 Using snapshot from {snapshot.snapshot_at} for {service_name}{endpoint} ({window})")
+        print(f"📸 Using snapshot from {snapshot.snapshot_at} for {service_name}{endpoint} ({window}) - age: {age}")
         
         return {
             'count': snapshot.count,
@@ -266,6 +282,9 @@ async def get_snapshot_metrics(
             'errors': snapshot.errors,
             'avg_latency': snapshot.avg_latency,
             'error_rate': snapshot.error_rate,
+            'p50': snapshot.p50 if snapshot.p50 else 0,
+            'p95': snapshot.p95 if snapshot.p95 else 0,
+            'p99': snapshot.p99 if snapshot.p99 else 0,
             'last_updated': snapshot.last_updated,
             'snapshot_age': age
         }

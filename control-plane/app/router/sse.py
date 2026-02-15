@@ -149,7 +149,8 @@ async def stream_services(
                 
                 # Reuse the same logic from signals.py get_services endpoint
                 from app.realtime_aggregates import get_realtime_metrics
-                from app.ai_engine.ai_engine import make_ai_decision
+                from app.ai_engine.ai_engine import get_ai_tuned_decision
+                from app.ai_engine.threshold_manager import get_all_thresholds
                 
                 # STEP 1: Get unique service/endpoint combinations
                 stmt = select(
@@ -230,14 +231,21 @@ async def stream_services(
                     
                     tenant_id = recent_signal.tenant_id if recent_signal else None
                     
-                    # Get AI decision
+                    # Get AI-tuned decision (uses thresholds from DB)
                     endpoint_normalized = endpoint if endpoint.startswith('/') else '/' + endpoint
-                    ai_decision = make_ai_decision(
+                    ai_decision = await get_ai_tuned_decision(
                         service_name, 
                         endpoint_normalized, 
                         avg_latency, 
                         error_rate,
-                        requests_per_minute=requests_per_minute
+                        requests_per_minute=requests_per_minute,
+                        user_id=current_user.id,
+                        db=db
+                    )
+                    
+                    # Get threshold values for frontend dynamic icons
+                    thresholds = await get_all_thresholds(
+                        db, current_user.id, service_name, endpoint_normalized
                     )
                     
                     # Build endpoint metrics  
@@ -250,7 +258,17 @@ async def stream_services(
                         'cache_enabled': ai_decision['cache_enabled'],
                         'circuit_breaker': ai_decision['circuit_breaker'],
                         'rate_limit_enabled': ai_decision.get('rate_limit_enabled', False),
-                        'reasoning': ai_decision['reasoning']
+                        'queue_deferral': ai_decision.get('queue_deferral', False),
+                        'load_shedding': ai_decision.get('load_shedding', False),
+                        'reasoning': ai_decision['reasoning'],
+                        'thresholds': {
+                            'cache_latency_ms': thresholds['cache_latency_ms'],
+                            'circuit_breaker_error_rate': thresholds['circuit_breaker_error_rate'],
+                            'queue_deferral_rpm': thresholds['queue_deferral_rpm'],
+                            'load_shedding_rpm': thresholds['load_shedding_rpm'],
+                            'rate_limit_customer_rpm': thresholds['rate_limit_customer_rpm'],
+                            'source': thresholds.get('source', 'default')
+                        }
                     }
                     
                     # Accumulate for service-level metrics
@@ -281,9 +299,9 @@ async def stream_services(
                     last_signal = last_signal_record.timestamp.isoformat() if last_signal_record else None
                     
                     # Determine status
-                    if error_rate > 0.3:
+                    if error_rate > thresholds['circuit_breaker_error_rate']:
                         status = 'down'
-                    elif error_rate > 0.15 or avg_latency > 500:
+                    elif error_rate > thresholds['circuit_breaker_error_rate'] or avg_latency > thresholds['cache_latency_ms']:
                         status = 'degraded'
                     else:
                         status = 'healthy'
@@ -378,7 +396,8 @@ async def stream_endpoint_detail(
                     break
                 
                 from app.realtime_aggregates import get_realtime_metrics
-                from app.ai_engine.ai_engine import make_ai_decision
+                from app.ai_engine.ai_engine import get_ai_tuned_decision
+                from app.ai_engine.threshold_manager import get_all_thresholds
                 
                 # Get metrics from Redis
                 metrics = await get_realtime_metrics(
@@ -435,22 +454,32 @@ async def stream_endpoint_detail(
                         "status": s.status
                     })
                 
-                # Get AI decision
-                ai_decision = make_ai_decision(
+                # Get AI-tuned decision (uses thresholds from DB)
+                ai_decision = await get_ai_tuned_decision(
                     service_name, 
                     endpoint_path, 
                     avg_latency, 
                     error_rate,
-                    requests_per_minute=requests_per_minute
+                    requests_per_minute=requests_per_minute,
+                    user_id=current_user.id,
+                    db=db
                 )
                 
-                # Generate suggestions
+                # Get threshold values for frontend dynamic icons
+                thresholds = await get_all_thresholds(
+                    db, current_user.id, service_name, endpoint_path
+                )
+                
+                cache_threshold = thresholds['cache_latency_ms']
+                cb_threshold = thresholds['circuit_breaker_error_rate']
+                
+                # Generate suggestions using AI-tuned thresholds
                 suggestions = []
-                if error_rate > 0.3:
-                    suggestions.append("⚠️ High error rate detected. Consider implementing retry logic or circuit breakers.")
-                if avg_latency > 500:
-                    suggestions.append("🐌 High latency detected. Consider caching frequently accessed data.")
-                if error_rate > 0.15 and avg_latency > 300:
+                if error_rate > cb_threshold:
+                    suggestions.append(f"⚠️ High error rate detected ({error_rate*100:.1f}% exceeds {cb_threshold*100:.0f}% threshold). Consider implementing retry logic or circuit breakers.")
+                if avg_latency > cache_threshold:
+                    suggestions.append(f"🐌 High latency detected ({avg_latency:.0f}ms exceeds {cache_threshold}ms threshold). Consider caching frequently accessed data.")
+                if error_rate > cb_threshold * 0.5 and avg_latency > cache_threshold * 0.6:
                     suggestions.append("💡 Both latency and errors are elevated. Review service dependencies and database queries.")
                 
                 if ai_decision['cache_enabled']:
@@ -476,7 +505,15 @@ async def stream_endpoint_detail(
                         "cache_enabled": ai_decision['cache_enabled'],
                         "circuit_breaker": ai_decision.get('circuit_breaker', False),
                         "rate_limit_enabled": ai_decision.get('rate_limit_enabled', False),
-                        "reasoning": ai_decision['reasoning']
+                        "reasoning": ai_decision['reasoning'],
+                        "thresholds": {
+                            'cache_latency_ms': thresholds['cache_latency_ms'],
+                            'circuit_breaker_error_rate': thresholds['circuit_breaker_error_rate'],
+                            'queue_deferral_rpm': thresholds['queue_deferral_rpm'],
+                            'load_shedding_rpm': thresholds['load_shedding_rpm'],
+                            'rate_limit_customer_rpm': thresholds['rate_limit_customer_rpm'],
+                            'source': thresholds.get('source', 'default')
+                        }
                     })
                 }
                 

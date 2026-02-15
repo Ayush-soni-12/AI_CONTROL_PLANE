@@ -193,6 +193,11 @@ class AggregateSnapshot(Base):
     avg_latency = Column(Float, nullable=False)
     error_rate = Column(Float, nullable=False)
     
+    # Percentile metrics (NEW: for AI analysis)
+    p50 = Column(Float, nullable=True, server_default=text('0'))
+    p95 = Column(Float, nullable=True, server_default=text('0'))
+    p99 = Column(Float, nullable=True, server_default=text('0'))
+    
     # Metadata
     last_updated = Column(String, nullable=True)  # ISO timestamp from Redis
     
@@ -207,42 +212,54 @@ class AggregateSnapshot(Base):
     )
 
 
-class RateLimitConfig(Base):
+
+class AIThreshold(Base):
     """
-    Rate limit configurations for services/endpoints.
+    AI-tuned thresholds per user/service/endpoint.
     
-    WHY THIS EXISTS:
-    - AI dynamically enables/disables rate limiting based on traffic patterns
-    - Prevents service overload from traffic spikes
-    - Stores per-endpoint rate limit thresholds
-    
-    HOW IT WORKS:
-    - AI decision engine sets 'enabled=True' when high traffic detected
-    - Rate limiter checks this table before allowing requests
-    - Redis counters track actual request counts per minute
-    
-    DEFAULT: 100 requests/minute per endpoint
+    Updated by the background AI analyzer every 5 minutes.
+    Used by the decision engine instead of hardcoded values.
     """
-    __tablename__ = "rate_limit_configs"
+    __tablename__ = "ai_thresholds"
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     service_name = Column(String, nullable=False, index=True)
     endpoint = Column(String, nullable=False, index=True)
     
-    # Rate limit settings
-    enabled = Column(Boolean, nullable=False, server_default=text('false'))
-    requests_per_minute = Column(Integer, nullable=False, server_default=text('100'))
+    # Thresholds (AI-tuned)
+    cache_latency_ms = Column(Integer, nullable=False, server_default=text('500'))
+    circuit_breaker_error_rate = Column(Float, nullable=False, server_default=text('0.3'))
+    queue_deferral_rpm = Column(Integer, nullable=False, server_default=text('80'))
+    load_shedding_rpm = Column(Integer, nullable=False, server_default=text('150'))
+    rate_limit_customer_rpm = Column(Integer, nullable=False, server_default=text('15'))
     
-    # Timestamps
-    enabled_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
-    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'), onupdate=text('now()'))
+    # AI metadata
+    confidence = Column(Float, nullable=True)
+    reasoning = Column(String, nullable=True)
+    last_updated = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
     
-    # Composite indexes
     __table_args__ = (
-        # Unique constraint: one config per user/service/endpoint
-        Index('idx_ratelimit_unique', 'user_id', 'service_name', 'endpoint', unique=True),
-        # Fast lookups for rate limit checks
-        Index('idx_ratelimit_lookup', 'user_id', 'service_name', 'endpoint', 'enabled'),
+        Index('idx_ai_threshold_unique', 'user_id', 'service_name', 'endpoint', unique=True),
+    )
+
+
+class AIInsight(Base):
+    """
+    AI-detected patterns, anomalies, and recommendations.
+    
+    Stored by the background analyzer for dashboard display.
+    """
+    __tablename__ = "ai_insights"
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_name = Column(String, nullable=False, index=True)
+    insight_type = Column(String, nullable=False)  # 'pattern', 'anomaly', 'recommendation'
+    description = Column(String, nullable=False)
+    confidence = Column(Float, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    
+    __table_args__ = (
+        Index('idx_ai_insight_user_time', 'user_id', 'created_at'),
     )
