@@ -22,7 +22,7 @@ echo "3. Subsequent requests should be fast (cached)"
 echo ""
 echo "Press Enter to start..."
 read
-
+True
 echo -e "${YELLOW}Phase 1: Sending initial requests (slow database calls)${NC}"
 echo "Sending 15 requests to trigger caching decision..."
 echo ""
@@ -55,7 +55,7 @@ echo "Sending 5 more requests (should be fast if cached)..."
 echo ""
 
 CACHED_COUNT=0
-for i in {1..5}
+for i in {1..12}
 do
   echo -n "Request $i: "
   START=$(date +%s%N)

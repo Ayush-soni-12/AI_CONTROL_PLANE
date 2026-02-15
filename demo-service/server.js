@@ -1,5 +1,5 @@
 import express from 'express';
-import ControlPlaneSDK, { generateTenantId } from "@ayushsoni12/ai-control-plane-sdk";
+import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
 import dotenv from 'dotenv';
 
 //  openssl rand -hex 16
@@ -12,8 +12,8 @@ app.use(express.json());
 
 // Initialize SDK with API key
 const controlPlane = new ControlPlaneSDK({
-  apiKey: 'acp_2d936ad37aae3cea5635b46db3708d93897c96af' ,// API key from environment
-  tenantId: '38359c4fac51d6b5728454c29f769ef6',
+  apiKey: 'your_api_key_here' ,// API key from environment
+  tenantId: 'your_tenant_id_here',
   serviceName: process.env.SERVICE_NAME || 'demo-service',
   controlPlaneUrl: process.env.CONTROL_PLANE_URL || 'http://localhost:8000'
 });
