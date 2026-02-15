@@ -1,15 +1,3 @@
-import crypto from 'crypto';
-
-/**
- * Generate a unique tenant ID
- * @param {string} prefix - Optional prefix for the tenant ID (e.g., 'user', 'org', 'customer')
- * @returns {string} Unique tenant identifier
- */
-function generateTenantId(prefix = 'tenant') {
-  const uuid = crypto.randomUUID();
-  return `${prefix}-${uuid}`;
-}
-
 class ControlPlaneSDK {
   constructor(config = {}) {
     this.controlPlaneUrl = config.controlPlaneUrl || 'http://localhost:8000';
@@ -241,4 +229,3 @@ class ControlPlaneSDK {
 }
 
 export default ControlPlaneSDK
-export { generateTenantId }

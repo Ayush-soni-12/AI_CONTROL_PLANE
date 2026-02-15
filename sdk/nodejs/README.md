@@ -5,13 +5,13 @@ Easy integration for autonomous runtime control in your microservices. The SDK a
 ## Installation
 
 ```bash
-npm install @ayushsoni12/ai-control-plane-sdk
+npm install @ayushsoni12/ai-control-plane
 ```
 
 ## Links
 
 - **GitHub Repository**: [https://github.com/Ayush-soni-12/AI_CONTROL_PLANE](https://github.com/Ayush-soni-12/AI_CONTROL_PLANE)
-- **npm Package**: [https://www.npmjs.com/package/@ayushsoni12/ai-control-plane-sdk](https://www.npmjs.com/package/@ayushsoni12/ai-control-plane-sdk)
+- **npm Package**: [https://www.npmjs.com/package/@ayushsoni12/ai-control-plane](https://www.npmjs.com/package/@ayushsoni12/ai-control-plane)
 
 For more information, documentation, and examples, visit the GitHub repository.
 
@@ -39,25 +39,38 @@ The SDK sends performance metrics to the AI Control Plane, which analyzes patter
 3. Click **"Generate New Key"**
 4. Copy your API key
 
-### 1. Initialize SDK with API Key
+### 1. Generate Tenant ID
+
+**Generate a unique tenant ID using OpenSSL:**
+
+```bash
+openssl rand -hex 16
+```
+
+This will output a random 32-character hexadecimal string like: `bfc3aed7948e46fafacac26faf8b3159`
+
+**💡 Tip**: Save this tenant ID in your environment variables or configuration file. Each service instance or user should have a unique tenant ID.
+
+### 2. Initialize SDK with API Key
 
 ```javascript
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane-sdk";
+import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
 
 const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY, // ⚠️ REQUIRED
+  tenantId: process.env.TENANT_ID, // ⚠️ REQUIRED - Generate using: openssl rand -hex 16
   serviceName: "my-service",
   controlPlaneUrl: "http://localhost:8000",
-  tenantId: generateTenantId("user"), // Optional: for multi-tenancy
 });
 ```
 
-**Best Practice**: Store your API key in environment variables:
+**Best Practice**: Store your API key and tenant ID in environment variables:
 
 ```bash
 # .env file
 CONTROL_PLANE_API_KEY=your-api-key-here
 CONTROL_PLANE_URL=http://localhost:8000
+TENANT_ID=bfc3aed7948e46fafacac26faf8b3159  # Generate with: openssl rand -hex 16
 ```
 
 ```javascript
@@ -66,20 +79,19 @@ dotenv.config();
 
 const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY,
+  tenantId: process.env.TENANT_ID, // Generated using: openssl rand -hex 16
   serviceName: "my-service",
   controlPlaneUrl: process.env.CONTROL_PLANE_URL,
 });
 ```
 
-### 2. Use Middleware (Automatic Tracking)
+### 3. Use Middleware (Automatic Tracking)
 
 **Real Example from Demo Service:**
 
 ```javascript
 import express from "express";
-import ControlPlaneSDK, {
-  generateTenantId,
-} from "@ayushsoni12/ai-control-plane-sdk";
+import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -87,9 +99,9 @@ dotenv.config();
 const app = express();
 const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY, // Required
+  tenantId: process.env.TENANT_ID, // Required - Generate with: openssl rand -hex 16
   serviceName: "demo-service",
   controlPlaneUrl: process.env.CONTROL_PLANE_URL || "http://localhost:8000",
-  tenantId: generateTenantId("user"),
 });
 
 // Example: Product API with automatic tracking
@@ -130,7 +142,7 @@ app.listen(3001, () => {
 - ✅ Receives runtime configuration (caching, circuit breaker decisions)
 - ✅ Makes config available in `req.controlPlane`
 
-### 3. Manual Tracking (Without Middleware)
+### 4. Manual Tracking (Without Middleware)
 
 ````javascript
 app.post("/login", async (req, res) => {

@@ -1,6 +1,6 @@
 {
-  "name": "@ayushsoni12/ai-control-plane-sdk",
-  "version": "2.0.0",
+  "name": "@ayushsoni12/ai-control-plane",
+  "version": "1.0.0",
   "description": "AI-powered SDK for autonomous microservices optimization with secure API key authentication, dynamic caching, circuit breaking, and intelligent decision-making",
   "main": "index.js",
   "types": "index.d.ts",
