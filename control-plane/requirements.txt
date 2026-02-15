@@ -2,9 +2,15 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 psycopg2-binary
+asyncpg
 pydantic
 pydantic-settings
 python-dotenv
+redis
 langgraph
 langchain
 langchain-core
+alembic
+apscheduler
+sse-starlette
+langchain-google-genai
