@@ -4,13 +4,16 @@ An intelligent control plane that uses AI to automatically optimize microservice
 
 ## ✨ Features
 
-- 🤖 **AI-Powered Decisions**: Uses LangGraph to analyze performance metrics and make intelligent optimization decisions
-- 📊 **Real-time Monitoring**: Tracks latency, error rates, and performance patterns across services
-- 🔄 **Dynamic Caching**: Automatically enables/disables caching based on performance
-- ⚡ **Circuit Breaker**: Protects services during degradation
+- 🤖 **AI-Powered Decisions**: Uses Gemini API to analyze metrics and make intelligent optimization decisions
+- 📊 **Real-time Monitoring**: SSE-based live updates with p50/p95/p99 latency tracking
+- 🔄 **Dynamic Caching**: AI decides when to cache based on latency patterns
+- 🚦 **Rate Limiting**: AI-tuned rate limits to protect against abuse
+- ⚖️ **Load Shedding**: Graceful degradation during traffic spikes
+- 📋 **Queue Deferral**: Async processing for non-critical operations
+- ⚡ **Circuit Breaker**: Protects services from cascade failures
 - 👥 **Multi-Tenant Support**: Isolated metrics and decisions per tenant
-- 📦 **Easy Integration**: 2-line SDK integration for any Node.js/Express service
-- 🐳 **Docker Ready**: One-command setup with Docker Compose
+- 📦 **Easy Integration**: Simple SDK integration for Node.js/Express services
+- 🐳 **Docker Ready**: Complete stack with one command
 
 ---
 
@@ -93,24 +96,49 @@ npm start
 #### 1. Install the SDK
 
 ```bash
-npm install ai-control-plane-sdk
+npm install @ayushsoni12/ai-control-plane
 ```
 
-#### 2. Use in Your Code
+#### 2. Generate Tenant ID
+
+```bash
+# Generate unique tenant ID using OpenSSL
+openssl rand -hex 16
+# Output: bfc3aed7948e46fafacac26faf8b3159
+```
+
+#### 3. Use in Your Code
 
 ```javascript
-import ControlPlaneSDK, { generateTenantId } from "ai-control-plane-sdk";
+import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
 
 // Initialize SDK
 const sdk = new ControlPlaneSDK({
+  apiKey: process.env.CONTROL_PLANE_API_KEY, // From dashboard
+  tenantId: process.env.TENANT_ID, // Generated above
   serviceName: "my-service",
-  tenantId: generateTenantId("user"),
   controlPlaneUrl: "http://localhost:8000",
 });
 
-// Use as middleware (automatic tracking)
+// Use as middleware (automatic traffic management)
 app.get("/products", sdk.middleware("/products"), async (req, res) => {
-  // Check if caching is recommended
+  // Handle rate limiting
+  if (req.controlPlane.isRateLimitedCustomer) {
+    return res.status(429).json({
+      error: "Rate limited",
+      retryAfter: req.controlPlane.retryAfter,
+    });
+  }
+
+  // Handle load shedding
+  if (req.controlPlane.isLoadShedding) {
+    return res.status(503).json({
+      error: "Service overloaded",
+      retryAfter: req.controlPlane.retryAfter,
+    });
+  }
+
+  // Check cache recommendation
   if (req.controlPlane.shouldCache && cache.products) {
     return res.json({ cached: true, data: cache.products });
   }
@@ -249,167 +277,6 @@ ai-control-plane/
 
 ---
 
-## 🐳 Docker Commands
-
-### Start Services
-
-```bash
-# Start in foreground (see logs)
-docker-compose up
-
-# Start in background
-docker-compose up -d
-
-# Rebuild and start (after code changes)
-docker-compose up --build
-```
-
-### View Logs
-
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f control-plane
-docker-compose logs -f demo-service
-docker-compose logs -f postgres
-```
-
-### Stop Services
-
-```bash
-# Stop containers (keep data)
-docker-compose down
-
-# Stop and remove volumes (delete data)
-docker-compose down -v
-```
-
-### Restart a Service
-
-```bash
-docker-compose restart control-plane
-```
-
-### Execute Commands in Container
-
-```bash
-# Access PostgreSQL
-docker-compose exec postgres psql -U controlplane -d controlplane
-
-# Access Python shell
-docker-compose exec control-plane python
-
-# Access Node.js shell
-docker-compose exec demo-service node
-```
-
----
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-# Database
-DATABASE_URL=postgresql://controlplane:password123@postgres:5432/controlplane
-
-# Optional: Gemini API Key
-GEMINI_API_KEY=your_api_key_here
-
-# Control Plane URL
-CONTROL_PLANE_URL=http://control-plane:8000
-```
-
-### SDK Configuration
-
-```javascript
-const sdk = new ControlPlaneSDK({
-  serviceName: "my-service", // Your service name
-  tenantId: "tenant-123", // Tenant identifier
-  controlPlaneUrl: "http://localhost:8000",
-  configCacheTTL: 10000, // Cache lifetime (ms)
-});
-```
-
----
-
-## 📊 API Endpoints
-
-### Control Plane
-
-```bash
-# Health check
-GET http://localhost:8000/
-
-# Send performance signal
-POST http://localhost:8000/api/signals
-{
-  "service_name": "my-service",
-  "endpoint": "/products",
-  "latency_ms": 450,
-  "status": "success",
-  "tenant_id": "tenant-123"
-}
-
-# Get runtime config
-GET http://localhost:8000/api/config/my-service/products?tenant_id=tenant-123
-
-# Get all signals
-GET http://localhost:8000/api/signals
-```
-
-### Demo Service
-
-```bash
-# Middleware approach
-POST http://localhost:3001/login
-GET http://localhost:3001/products
-
-# Manual tracking approach
-POST http://localhost:3001/checkout
-GET http://localhost:3001/search?q=laptop
-```
-
----
-
-## 🧪 Testing
-
-### Test the Control Plane
-
-```bash
-# Send a test signal
-curl -X POST http://localhost:8000/api/signals \
-  -H "Content-Type: application/json" \
-  -d '{
-    "service_name": "test-service",
-    "endpoint": "/test",
-    "latency_ms": 600,
-    "status": "success",
-    "tenant_id": "test-tenant"
-  }'
-
-# Get config
-curl http://localhost:8000/api/config/test-service/test?tenant_id=test-tenant
-```
-
-### Test the Demo Service
-
-```bash
-# Test products endpoint
-curl http://localhost:3001/products
-
-# Test login endpoint
-curl -X POST http://localhost:3001/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "test", "password": "test"}'
-```
-
----
-
 ## 🤝 Contributing
 
 We welcome contributions! Here's how:
@@ -430,9 +297,7 @@ See [CONTRIBUTOR_WORKFLOW.md](./CONTRIBUTOR_WORKFLOW.md) for detailed instructio
 ## 📚 Documentation
 
 - [Contributor Workflow](./CONTRIBUTOR_WORKFLOW.md) - How to contribute
-- [SDK Quick Reference](./SDK_QUICK_REFERENCE.md) - SDK usage guide
 - [Cache Strategy](./REDIS_GUIDE.md) - Caching implementation details
-- [Cache Flow Diagram](./CACHE_FLOW_DIAGRAM.md) - How caching work 
 
 ---
 
@@ -494,29 +359,119 @@ sudo usermod -aG docker $USER
 
 ## 🌟 Features in Detail
 
-### Dynamic Caching
+### 🚦 AI-Powered Rate Limiting
 
-- Automatically enables caching when latency > 500ms
-- Reduces database load
-- Improves response time
+Intelligent rate limiting that adapts to traffic patterns:
 
-### Circuit Breaker
+- **AI-Tuned Limits**: Automatically adjusts rate limits based on traffic patterns, error rates, and system load
+- **Per-Customer Limits**: Protects against individual abusers while allowing legitimate traffic
+- **Fair Usage**: Ensures equitable resource allocation across all tenants
+- **HTTP 429 Compliance**: Standards-compliant rate limit responses with Retry-After headers
 
-- Protects services during high error rates
-- Prevents cascade failures
-- Graceful degradation
+**When to Use**: Public APIs, resource-intensive endpoints, metered billing
 
-### Multi-Tenant
+📖 [Learn More](./RATE_LIMITING.md)
 
-- Isolated metrics per tenant
-- Per-tenant decisions
-- Scalable architecture
+---
 
-### AI-Powered
+### ⚖️ Load Shedding
 
-- Uses LangGraph for intelligent decisions
-- Learns from performance patterns
-- Adapts to changing conditions
+Graceful degradation during traffic spikes:
+
+- **Automatic Activation**: Engages when CPU > 80%, p95 latency spikes, or error rates elevate
+- **Priority-Based**: Sheds low-priority requests first, protecting critical operations
+- **Fallback Strategies**: Return cached data or degraded responses instead of failures
+- **HTTP 503 with Retry**: Proper status codes guide clients to retry later
+
+**When to Use**: Flash sales, traffic spikes, resource exhaustion scenarios
+
+📖 [Learn More](./LOAD_SHEDDING.md)
+
+---
+
+### 📋 Queue Deferral
+
+Async processing for non-critical operations:
+
+- **Smart Queuing**: AI identifies requests that can be processed asynchronously
+- **Job Tracking**: User-managed job IDs with status endpoints
+- **Notification Support**: Webhook and email notifications when jobs complete
+- **HTTP 202 Accepted**: Standards-compliant async request handling
+
+**When to Use**: Report generation, data exports, batch processing, background jobs
+
+📖 [Learn More](./QUEUE_DEFERRAL.md)
+
+---
+
+### 🔄 Dynamic Caching
+
+AI-driven caching decisions:
+
+- **Latency-Based**: Automatically enables caching when p95 latency exceeds AI-tuned thresholds
+- **Adaptive Thresholds**: Learns your service's normal patterns and adjusts accordingly
+- **Multi-Tenant Isolation**: Separate cache recommendations per tenant
+- **Real-Time Decisions**: Sub-50ms decision latency using Redis
+
+**When to Use**: Database-heavy endpoints, slow external API calls, frequently accessed data
+
+📖 [Learn More](./CACHING.md)
+
+---
+
+### ⚡ Circuit Breaker
+
+Protects against cascade failures:
+
+- **Error Detection**: Opens when error rate > 5% to prevent overwhelming failing services
+- **Automatic Recovery**: Closes when error rates normalize
+- **Fail Fast**: Returns immediate errors instead of waiting for timeouts
+- **Configurable**: AI-tuned retry windows based on historical recovery times
+
+**When to Use**: External API dependencies, microservice communication, unreliable services
+
+📖 [Learn More](./CIRCUIT_BREAKER.md)
+
+---
+
+### 🤖 AI Decision Engine
+
+Gemini-powered intelligent optimization:
+
+- **Real-Time Metrics**: Analyzes p50/p95/p99 latencies, error rates, and traffic patterns
+- **Redis Hot Data**: Sub-millisecond metric access with 60s TTL
+- **Threshold Learning**: Continuously tunes cache, rate limit, and load shedding thresholds
+- **SSE Updates**: Dashboard receives live AI decisions via Server-Sent Events (no polling!)
+- **Multi-Factor Analysis**: Considers latency, errors, traffic, and resource utilization
+
+📖 [Learn How AI Works](./AI_DECISIONS.md)
+
+---
+
+### 👥 Multi-Tenant Support
+
+Complete isolation per tenant:
+
+- **Separate Metrics**: Each tenant gets isolated performance tracking
+- **Independent Decisions**: AI decisions tailored per tenant
+- **Fair Resource Allocation**: Prevents one tenant from monopolizing resources
+- **Scalable Architecture**: Handles thousands of tenants efficiently
+
+**Best Practice**: Use different API keys and tenant IDs for each service
+
+---
+
+### 📊 Real-Time Monitoring
+
+Live dashboards with SSE:
+
+- **Server-Sent Events**: Real-time updates pushed to dashboard (no polling!)
+- **Percentile Latencies**: Track p50, p95, p99 for accurate performance insights
+- **Error Tracking**: Monitor 5xx errors, timeouts, and failure patterns
+- **Traffic Visualization**: See request rates, trends, and anomalies
+- **AI Insights**: View AI reasoning and threshold changes in real-time
+
+**Dashboard**: http://localhost:3000
 
 ---
 
