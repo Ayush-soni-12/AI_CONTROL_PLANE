@@ -18,10 +18,7 @@ export interface SSEResult<T> {
 }
 
 /**
- * Generic hook for Server-Sent Events (SSE) connections
- * 
- * Provides automatic connection management, reconnection, and type-safe data handling.
- * Replaces polling-based data fetching with efficient server-push architecture.
+
  * 
  * @param url - SSE endpoint URL (e.g., '/api/sse/signals')
  * @param eventType - Event type to listen for (e.g., 'signals', 'services')
@@ -30,13 +27,7 @@ export interface SSEResult<T> {
  * 
  * @example
  * ```tsx
- * const { data, status, error } = useSSE<SignalData[]>('/api/sse/signals', 'signals');
- * 
- * if (status === 'connecting') return <div>Connecting...</div>;
- * if (status === 'error') return <div>Error: {error}</div>;
- * if (!data) return <div>No data</div>;
- * 
- * return <div>{data.map(...)}</div>;
+
  * ```
  */
 export function useSSE<T>(

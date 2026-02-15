@@ -120,13 +120,13 @@ export function EndpointDetailView({
               </span>
             </div>
             <p
-              className={`text-4xl font-bold ${detail.avg_latency > 500 ? "text-yellow-400" : "text-green-400"}`}
+              className={`text-4xl font-bold ${detail.avg_latency > (detail.thresholds?.cache_latency_ms ?? 500) ? "text-yellow-400" : "text-green-400"}`}
             >
               {formatLatency(detail.avg_latency)}
             </p>
             <div className="mt-2 h-1 w-full bg-gray-800 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-1000 ${detail.avg_latency > 500 ? "bg-red-500" : detail.avg_latency > 400 ? "bg-yellow-500" : "bg-green-500"}`}
+                className={`h-full transition-all duration-1000 ${detail.avg_latency > (detail.thresholds?.cache_latency_ms ?? 500) ? "bg-red-500" : detail.avg_latency > (detail.thresholds?.cache_latency_ms ?? 500) * 0.8 ? "bg-yellow-500" : "bg-green-500"}`}
                 style={{
                   width: `${Math.min(100, (detail.avg_latency / 1000) * 100)}%`,
                 }}
@@ -144,7 +144,7 @@ export function EndpointDetailView({
               </span>
             </div>
             <p
-              className={`text-4xl font-bold ${detail.error_rate >= 0.3 ? "text-red-400" : "text-green-400"}`}
+              className={`text-4xl font-bold ${detail.error_rate >= (detail.thresholds?.circuit_breaker_error_rate ?? 0.3) ? "text-red-400" : "text-green-400"}`}
             >
               {(detail.error_rate * 100).toFixed(1)}%
             </p>

@@ -5,12 +5,7 @@ import { signup, login, logout, authenticate, authenticateSuspense } from '@/lib
 import type { User, EndpointDetail, Signal, ServicesResponse } from '@/lib/types';
 import { useSSE } from './useSSE';
 
-/**
- * Hook to stream signals from the control plane using Server-Sent Events
- * 
- * Replaces polling with real-time SSE streaming for better performance.
- * TanStack Query is NO LONGER used here (SSE handles real-time data).
- */
+
 export const useSignals = () => {
   return useSSE<{ signals: Signal[]; timestamp: number }>('/api/sse/signals', 'signals');
 }
@@ -30,7 +25,6 @@ export const useServices = (apiUrl: string = '/api/sse/services') => {
   
   // Always call both hooks unconditionally (React Hooks rules)
   const sseResult = useSSE<ServicesResponse>('/api/sse/services', 'services', isRealtime);
-  
   const queryResult = useQuery({
     queryKey: ['services', apiUrl],
     queryFn: async () => {

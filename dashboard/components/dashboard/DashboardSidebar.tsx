@@ -14,37 +14,13 @@ import {
   Menu,
   X,
   Sparkles,
+  Brain,
 } from "lucide-react";
 // import dynamic from "next/dynamic";
 import { useLogout } from "@/hooks/useSignals";
 import { DynamicUserProfile } from "@/components/dashboard/DynamicUserProfile";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// const DynamicUserProfile = dynamic(
-//   () =>
-//     import("@/components/dashboard/DynamicUserProfile").then(
-//       (mod) => mod.DynamicUserProfile,
-//     ),
-//   {
-//     ssr: false,
-//     loading: () => (
-//       <div className="px-6 pb-6">
-//         <div className="relative group">
-//           <div className="absolute inset-0 bg-linear-to-r from-purple-600/20 to-pink-600/20 rounded-2xl blur-sm"></div>
-//           <div className="relative p-4 rounded-2xl bg-gray-900/80 backdrop-blur-sm border border-gray-800">
-//             <div className="flex items-center gap-3">
-//               <Skeleton className="w-12 h-12 rounded-full" />
-//               <div className="flex-1 space-y-2">
-//                 <Skeleton className="h-4 w-24" />
-//                 <Skeleton className="h-3 w-32" />
-//               </div>
-//             </div>
-//           </div>
-//         </div>
-//       </div>
-//     ),
-//   },
-// );
 
 /**
  * Dashboard Sidebar Component
@@ -70,6 +46,7 @@ export function DashboardSidebar() {
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: Server, label: "Services", href: "/dashboard/services" },
     { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
+    { icon: Brain, label: "AI Insights", href: "/dashboard/ai-insights" },
     { icon: Key, label: "API Keys", href: "/dashboard/api-keys" },
     { icon: User, label: "Profile", href: "/dashboard/profile" },
     { icon: Settings, label: "Settings", href: "/dashboard/settings" },

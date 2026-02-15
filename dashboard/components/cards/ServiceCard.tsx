@@ -74,7 +74,7 @@ export function ServiceCard({ service }: ServiceCardProps) {
                 <p className="text-xs font-medium text-gray-400">Avg Latency</p>
               </div>
               <p
-                className={`text-2xl font-bold ${service.avg_latency > 500 ? "text-yellow-400" : "text-green-400"}`}
+                className={`text-2xl font-bold ${service.avg_latency > (service.endpoints?.[0]?.thresholds?.cache_latency_ms ?? 500) ? "text-yellow-400" : "text-green-400"}`}
               >
                 {formatLatency(service.avg_latency)}
               </p>
@@ -86,7 +86,7 @@ export function ServiceCard({ service }: ServiceCardProps) {
                 <p className="text-xs font-medium text-gray-400">Error Rate</p>
               </div>
               <p
-                className={`text-2xl font-bold ${service.error_rate > 0.1 ? "text-red-400" : "text-green-400"}`}
+                className={`text-2xl font-bold ${service.error_rate > (service.endpoints?.[0]?.thresholds?.circuit_breaker_error_rate ?? 0.1) ? "text-red-400" : "text-green-400"}`}
               >
                 {(service.error_rate * 100).toFixed(1)}%
               </p>

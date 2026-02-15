@@ -12,6 +12,8 @@ import {
   Shield,
   Database,
   ArrowLeft,
+  Clock,
+  ShieldOff,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -72,6 +74,7 @@ export function DynamicServiceDetails({
   }
 
   const service = data.services.find((s: Service) => s.name === serviceName);
+  console.log("Services", service);
 
   if (!service) {
     return (
@@ -186,7 +189,7 @@ export function DynamicServiceDetails({
           </CardHeader>
           <CardContent>
             <p
-              className={`text-3xl font-bold ${service.avg_latency > 500 ? "text-yellow-400" : "text-green-400"}`}
+              className={`text-3xl font-bold ${service.avg_latency > (service.endpoints?.[0]?.thresholds?.cache_latency_ms ?? 500) ? "text-yellow-400" : "text-green-400"}`}
             >
               {formatLatency(service.avg_latency)}
             </p>
@@ -202,7 +205,7 @@ export function DynamicServiceDetails({
           </CardHeader>
           <CardContent>
             <p
-              className={`text-3xl font-bold ${service.error_rate > 0.1 ? "text-red-400" : "text-green-400"}`}
+              className={`text-3xl font-bold ${service.error_rate > (service.endpoints?.[0]?.thresholds?.circuit_breaker_error_rate ?? 0.1) ? "text-red-400" : "text-green-400"}`}
             >
               {(service.error_rate * 100).toFixed(1)}%
             </p>
@@ -273,7 +276,7 @@ export function DynamicServiceDetails({
                         </p>
                       </div>
                       <p
-                        className={`text-2xl font-bold ${endpoint.avg_latency > 500 ? "text-yellow-400" : "text-green-400"}`}
+                        className={`text-2xl font-bold ${endpoint.avg_latency > (endpoint.thresholds?.cache_latency_ms ?? 500) ? "text-yellow-400" : "text-green-400"}`}
                       >
                         {formatLatency(endpoint.avg_latency)}
                       </p>
@@ -288,7 +291,7 @@ export function DynamicServiceDetails({
                         </p>
                       </div>
                       <p
-                        className={`text-2xl font-bold ${endpoint.error_rate > 0.1 ? "text-red-400" : "text-green-400"}`}
+                        className={`text-2xl font-bold ${endpoint.error_rate > (endpoint.thresholds?.circuit_breaker_error_rate ?? 0.1) ? "text-red-400" : "text-green-400"}`}
                       >
                         {(endpoint.error_rate * 100).toFixed(1)}%
                       </p>
@@ -334,7 +337,7 @@ export function DynamicServiceDetails({
                       </div>
                     </div>
 
-                    {/* Rate Limiting Status - NEW */}
+                    {/* Rate Limiting Status */}
                     {endpoint.rate_limit_enabled !== undefined && (
                       <div className="p-4 rounded-lg bg-linear-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/20">
                         <div className="flex items-center gap-2 mb-2">
@@ -367,6 +370,50 @@ export function DynamicServiceDetails({
                             {endpoint.rate_limit_enabled
                               ? "Enabled"
                               : "Disabled"}
+                          </Badge>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Queue Deferral Status */}
+                    {endpoint.queue_deferral !== undefined && (
+                      <div className="p-4 rounded-lg bg-linear-to-br from-amber-500/10 to-amber-500/5 border border-amber-500/20">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Clock className="w-4 h-4 text-amber-400" />
+                          <p className="text-xs font-medium text-gray-400">
+                            Queue Deferral
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={
+                              endpoint.queue_deferral ? "warning" : "success"
+                            }
+                            className="text-sm"
+                          >
+                            {endpoint.queue_deferral ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Load Shedding Status */}
+                    {endpoint.load_shedding !== undefined && (
+                      <div className="p-4 rounded-lg bg-linear-to-br from-red-500/10 to-red-500/5 border border-red-500/20">
+                        <div className="flex items-center gap-2 mb-2">
+                          <ShieldOff className="w-4 h-4 text-red-400" />
+                          <p className="text-xs font-medium text-gray-400">
+                            Load Shedding
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={
+                              endpoint.load_shedding ? "error" : "success"
+                            }
+                            className="text-sm"
+                          >
+                            {endpoint.load_shedding ? "Active" : "Inactive"}
                           </Badge>
                         </div>
                       </div>

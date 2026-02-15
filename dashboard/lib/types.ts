@@ -27,6 +27,15 @@ export interface Service {
   status: 'healthy' | 'degraded' | 'down';
 }
 
+export interface ThresholdData {
+  cache_latency_ms: number;
+  circuit_breaker_error_rate: number;
+  queue_deferral_rpm: number;
+  load_shedding_rpm: number;
+  rate_limit_customer_rpm: number;
+  source: 'ai' | 'default';
+}
+
 export interface Endpoint {
   path: string;
   avg_latency: number;
@@ -34,9 +43,12 @@ export interface Endpoint {
   signal_count: number;
   cache_enabled: boolean;
   circuit_breaker: boolean;
-  rate_limit_enabled?: boolean; // NEW: Rate limiting status
+  rate_limit_enabled?: boolean;
+  queue_deferral?: boolean;
+  load_shedding?: boolean;
   tenant_id?: string;
-  reasoning: string;  // AI decision reasoning
+  reasoning: string;
+  thresholds?: ThresholdData;
 }
 
 export interface EndpointDetail {
@@ -53,8 +65,9 @@ export interface EndpointDetail {
   suggestions: string[];
   cache_enabled: boolean;
   circuit_breaker: boolean;
-  rate_limit_enabled?: boolean; // NEW: Rate limiting status
+  rate_limit_enabled?: boolean;
   reasoning: string;
+  thresholds?: ThresholdData;
 }
 
 export interface ServicesResponse {
@@ -131,4 +144,37 @@ export interface AuthResponse {
 
 export interface AuthError {
   detail: string;
+}
+
+// AI Insights Types
+export interface AIInsight {
+  id: number;
+  service_name: string;
+  insight_type: 'pattern' | 'anomaly' | 'recommendation';
+  description: string;
+  confidence: number | null;
+  created_at: string;
+}
+
+export interface AIInsightsResponse {
+  insights: AIInsight[];
+  total: number;
+}
+
+export interface AIThreshold {
+  service_name: string;
+  endpoint: string;
+  cache_latency_ms: number;
+  circuit_breaker_error_rate: number;
+  queue_deferral_rpm: number;
+  load_shedding_rpm: number;
+  rate_limit_customer_rpm: number;
+  confidence: number;
+  reasoning: string;
+  last_updated: string;
+}
+
+export interface AIThresholdsResponse {
+  thresholds: AIThreshold[];
+  total: number;
 }
