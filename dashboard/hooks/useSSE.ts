@@ -18,17 +18,12 @@ export interface SSEResult<T> {
 }
 
 /**
-
+ * Custom React hook for Server-Sent Events (SSE) with auto-reconnection
  * 
  * @param url - SSE endpoint URL (e.g., '/api/sse/signals')
  * @param eventType - Event type to listen for (e.g., 'signals', 'services')
  * @param enabled - Whether to establish the connection (default: true)
  * @returns SSE connection state and data
- * 
- * @example
- * ```tsx
-
- * ```
  */
 export function useSSE<T>(
   url: string,
@@ -36,7 +31,7 @@ export function useSSE<T>(
   enabled: boolean = true
 ): SSEResult<T> {
   const [data, setData] = useState<T | null>(null);
-  const [status, setStatus] = useState<SSEStatus>('connecting');
+  const [status, setStatus] = useState<SSEStatus>(enabled ? 'connecting' : 'disconnected');
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -45,100 +40,83 @@ export function useSSE<T>(
   const baseDelay = 1000; // 1 second base delay
   const maxRetries = 10;
 
-  // Function to establish SSE connection
-  const connect = () => {
-    if (!enabled) return;
-
-    try {
-      setStatus('connecting');
-      setError(null);
-
-      // Create EventSource connection
-      const eventSource = new EventSource(`http://localhost:8000${url}`, {
-        withCredentials: true, // Include cookies for authentication
-      });
-
-      // Handle connection open
-      eventSource.onopen = () => {
-        console.log(`✅ SSE connected: ${url}`);
-        setStatus('connected');
-        reconnectAttemptRef.current = 0; // Reset reconnect attempts
-      };
-
-      // Handle incoming events
-      eventSource.addEventListener(eventType, (event) => {
-        try {
-          const parsedData = JSON.parse(event.data);
-          setData(parsedData);
-          setStatus('connected');
-        } catch (err) {
-          console.error(`❌ Failed to parse SSE data for ${eventType}:`, err);
-          setError('Failed to parse server data');
-        }
-      });
-
-      // Handle errors (connection lost, server error, etc.)
-      eventSource.onerror = (err) => {
-        console.error(`❌ SSE error on ${url}:`, err);
-        setStatus('error');
-        setError('Connection lost. Reconnecting...');
-
-        // Close the connection
-        eventSource.close();
-
-        // Attempt to reconnect with exponential backoff
-        if (reconnectAttemptRef.current < maxRetries) {
-          const delay = Math.min(
-            baseDelay * Math.pow(2, reconnectAttemptRef.current),
-            maxReconnectDelay
-          );
-
-          console.log(
-            `🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current + 1}/${maxRetries})...`
-          );
-
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptRef.current += 1;
-            connect();
-          }, delay);
-        } else {
-          setStatus('disconnected');
-          setError('Failed to connect after multiple attempts. Please refresh the page.');
-        }
-      };
-
-      eventSourceRef.current = eventSource;
-    } catch (err) {
-      console.error(`❌ Failed to create SSE connection to ${url}:`, err);
-      setStatus('error');
-      setError('Failed to establish connection');
-    }
-  };
-
-  // Manual reconnect function
-  const reconnect = () => {
-    // Close existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-
-    // Clear reconnect timeout
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    // Reset reconnect attempts and connect
-    reconnectAttemptRef.current = 0;
-    connect();
-  };
-
   // Establish connection on mount or when URL/enabled changes
   useEffect(() => {
-    if (enabled) {
-      connect();
+    // Don't connect if disabled
+    if (!enabled) {
+      setStatus('disconnected');
+      return;
     }
+
+    // Function to establish SSE connection
+    const connect = () => {
+      try {
+        setStatus('connecting');
+        setError(null);
+
+        // Create EventSource connection
+        const eventSource = new EventSource(`http://localhost:8000${url}`, {
+          withCredentials: true, // Include cookies for authentication
+        });
+
+        // Handle connection open
+        eventSource.onopen = () => {
+          console.log(`✅ SSE connected: ${url}`);
+          setStatus('connected');
+          reconnectAttemptRef.current = 0; // Reset reconnect attempts
+        };
+
+        // Handle incoming events
+        eventSource.addEventListener(eventType, (event) => {
+          try {
+            const parsedData = JSON.parse(event.data);
+            setData(parsedData);
+            setStatus('connected');
+          } catch (err) {
+            console.error(`❌ Failed to parse SSE data for ${eventType}:`, err);
+            setError('Failed to parse server data');
+          }
+        });
+
+        // Handle errors (connection lost, server error, etc.)
+        eventSource.onerror = (err) => {
+          console.error(`❌ SSE error on ${url}:`, err);
+          setStatus('error');
+          setError('Connection lost. Reconnecting...');
+
+          // Close the connection
+          eventSource.close();
+
+          // Attempt to reconnect with exponential backoff
+          if (reconnectAttemptRef.current < maxRetries) {
+            const delay = Math.min(
+              baseDelay * Math.pow(2, reconnectAttemptRef.current),
+              maxReconnectDelay
+            );
+
+            console.log(
+              `🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current + 1}/${maxRetries})...`
+            );
+
+            reconnectTimeoutRef.current = setTimeout(() => {
+              reconnectAttemptRef.current += 1;
+              connect(); // Recursive call for reconnection
+            }, delay);
+          } else {
+            setStatus('disconnected');
+            setError('Failed to connect after multiple attempts. Please refresh the page.');
+          }
+        };
+
+        eventSourceRef.current = eventSource;
+      } catch (err) {
+        console.error(`❌ Failed to create SSE connection to ${url}:`, err);
+        setStatus('error');
+        setError('Failed to establish connection');
+      }
+    };
+
+    connect();
 
     // Cleanup on unmount
     return () => {
@@ -154,6 +132,26 @@ export function useSSE<T>(
       }
     };
   }, [url, eventType, enabled]);
+
+  // Manual reconnect function
+  const reconnect = () => {
+    // Close existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    // Clear reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // Reset reconnect attempts and trigger re-mount via state change
+    reconnectAttemptRef.current = 0;
+    setStatus('connecting');
+    setError(null);
+  };
 
   return { data, status, error, reconnect };
 }

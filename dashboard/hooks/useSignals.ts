@@ -11,6 +11,21 @@ export const useSignals = () => {
 }
 
 /**
+ * Hook to fetch signals for a specific service via SSE
+ * 
+ * @param serviceName - Name of the service to filter signals
+ * @param enabled - Whether to connect (default: true, but should be false if serviceName is empty)
+ * @returns Signals filtered by service name
+ */
+export const useServiceSignals = (serviceName: string, enabled: boolean = true) => {
+  return useSSE<{ signals: Signal[]; timestamp: number }>(
+    `/api/sse/service-signals/${serviceName}`, 
+    'signals',  // Event type must match what backend sends
+    enabled && !!serviceName  // Only connect if enabled AND serviceName is not empty
+  );
+}
+
+/**
  * Hook to fetch aggregated services data
  * 
  * HYBRID APPROACH:

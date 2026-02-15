@@ -1,6 +1,6 @@
 "use client";
 
-import { useServices } from "@/hooks/useSignals";
+import { useServices, useServiceSignals } from "@/hooks/useSignals";
 import { formatLatency, formatTimestamp } from "@/lib/function";
 import {
   Activity,
@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { Endpoint, Service } from "@/lib/types";
 import { useState } from "react";
 import { EndpointDetailView } from "./EndpointDetailView";
+import { LatencyChart } from "@/components/cards/LatencyChart";
+import { ErrorRateChart } from "@/components/cards/ErrorRateChart";
 
 interface DynamicServiceDetailsProps {
   serviceName: string;
@@ -43,6 +45,19 @@ export function DynamicServiceDetails({
   const router = useRouter();
   const { data, status, error } = useServices();
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
+
+  // Fetch service-specific signals for graphs
+  const {
+    data: serviceSignalsData,
+    status: signalsStatus,
+    error: signalsError,
+  } = useServiceSignals(serviceName);
+
+  // Debug logging
+  console.log("Service Name:", serviceName);
+  console.log("Signals Data:", serviceSignalsData);
+  console.log("Signals Status:", signalsStatus);
+  console.log("Signals Error:", signalsError);
 
   // Show loading state while connecting
   if (status === "connecting" || !data) {
@@ -226,6 +241,19 @@ export function DynamicServiceDetails({
           </CardContent>
         </Card>
       </div>
+
+      {/* Service-Level Graphs */}
+      {serviceSignalsData?.signals && serviceSignalsData.signals.length > 0 && (
+        <>
+          <div className="mb-10">
+            <LatencyChart signals={serviceSignalsData.signals} />
+          </div>
+
+          <div className="mb-10">
+            <ErrorRateChart signals={serviceSignalsData.signals} />
+          </div>
+        </>
+      )}
 
       {/* Endpoints List */}
       <div>
