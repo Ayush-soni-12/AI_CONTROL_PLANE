@@ -6,6 +6,7 @@ Replaces polling-based data fetching with efficient server-push architecture.
 
 ENDPOINTS:
 - GET /api/sse/signals - Stream real-time signals
+- GET /api/sse/service-signals/{service_name} - Stream signals for a specific service
 - GET /api/sse/services - Stream service metrics  
 - GET /api/sse/endpoint-detail/{service_name}/{endpoint_path} - Stream endpoint details
 
@@ -103,6 +104,80 @@ async def stream_signals(
             }
     
     return EventSourceResponse(event_generator())
+
+
+@router.get("/service-signals/{service_name}")
+async def stream_service_signals(
+    service_name: str,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Stream signals for a specific service in real-time using Server-Sent Events.
+    
+    Similar to /api/sse/signals but filters by service_name to show only
+    signals for the selected service.
+    
+    Authentication: Requires session cookie (dashboard login)
+    """
+    # Authenticate user
+    current_user = await get_current_user(request, db)
+    
+    async def event_generator():
+        """Generate SSE events with service-specific signal data"""
+        try:
+            while True:
+                # Check if client disconnected
+                if await request.is_disconnected():
+                    print(f"🔌 Client disconnected from /sse/service-signals/{service_name} (user: {current_user.id})")
+                    break
+                
+                # Fetch latest signals for this service (last 20, same as polling)
+                stmt = select(models.Signal).filter(
+                    models.Signal.user_id == current_user.id,
+                    models.Signal.service_name == service_name
+                ).order_by(models.Signal.timestamp.desc()).limit(20)
+                result = await db.execute(stmt)
+                signals = result.scalars().all()
+                
+                # Convert to dict for JSON serialization
+                signals_data = []
+                for signal in signals:
+                    signals_data.append({
+                        "id": signal.id,
+                        "service_name": signal.service_name,
+                        "endpoint": signal.endpoint,
+                        "latency_ms": signal.latency_ms,
+                        "status": signal.status,
+                        "timestamp": signal.timestamp.isoformat(),
+                        "tenant_id": signal.tenant_id,
+                        "customer_identifier": signal.customer_identifier,
+                        "priority": signal.priority
+                    })
+                
+                # Send event to client
+                yield {
+                    "event": "signals",
+                    "data": json.dumps({
+                        "signals": signals_data,
+                        "timestamp": asyncio.get_event_loop().time()
+                    })
+                }
+                
+                # Wait 2 seconds before next update (same as polling interval)
+                await asyncio.sleep(2)
+                
+        except asyncio.CancelledError:
+            print(f"🛑 SSE stream cancelled for user {current_user.id} (service: {service_name})")
+        except Exception as e:
+            print(f"❌ Error in SSE stream: {e}")
+            yield {
+                "event": "error",
+                "data": json.dumps({"error": str(e)})
+            }
+    
+    return EventSourceResponse(event_generator())
+
 
 
 @router.get("/services")
