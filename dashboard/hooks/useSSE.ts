@@ -44,6 +44,7 @@ export function useSSE<T>(
   useEffect(() => {
     // Don't connect if disabled
     if (!enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus('disconnected');
       return;
     }
