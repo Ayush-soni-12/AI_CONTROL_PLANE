@@ -5,6 +5,11 @@ psycopg2-binary
 asyncpg
 pydantic
 pydantic-settings
+email-validator
+python-jose[cryptography]
+PyJWT
+passlib[bcrypt]
+pwdlib[argon2]
 python-dotenv
 redis
 langgraph
@@ -14,3 +19,4 @@ alembic
 apscheduler
 sse-starlette
 langchain-google-genai
+fastapi-mail
