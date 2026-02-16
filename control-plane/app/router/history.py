@@ -62,7 +62,7 @@ async def get_historical_services(
     total_records = 0
     
     if data_source == "raw":
-        # Use raw signals
+        # Use raw signalsp
         services, total_records = await _get_services_from_raw(db, current_user.id, start_date, end_date)
     elif data_source == "hourly":
         # Use hourly aggregates

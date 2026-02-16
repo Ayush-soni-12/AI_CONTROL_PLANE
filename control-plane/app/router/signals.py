@@ -34,9 +34,10 @@ async def receive_signal(
     Requires API key authentication via Authorization header.
     The signal will be associated with the user who owns the API key.
     
-    TWO-TIER APPROACH (Phase 3 Optimization):
+    TWO-TIER APPROACH (Updated):
     1. Update Redis real-time aggregates for ALL signals (100% - accurate metrics)
-    2. Apply sampling for PostgreSQL storage (10% success, 100% errors - efficient storage)
+    2. Store 100% of signals in PostgreSQL (cleanup job deletes >7 days)
+    3. Hourly/daily aggregation jobs create long-term summaries
     """
     
     print(f"Signals received: {signals}")
@@ -65,9 +66,8 @@ async def receive_signal(
           f"(customer: {signals.customer_identifier[:15] if signals.customer_identifier else 'N/A'}..., "
           f"priority: {signals.priority})")
     
-    # STEP 2: Apply sampling for database storage
-    # Store 100% of errors (critical for debugging)
-    # Store only SIGNAL_SAMPLING_RATE % of success (reduces storage)
+    # STEP 2: Store signals in database (100% now stored, cleanup job manages retention)
+    # Store ALL signals (errors + success) for complete analytics
     should_store = (signals.status == 'error') or (random.random() < settings.SIGNAL_SAMPLING_RATE)
     
     if should_store:
@@ -75,7 +75,7 @@ async def receive_signal(
         db.add(signal)
         await db.commit()
         await db.refresh(signal)
-        print(f"💾 Stored signal in database (sampled)")
+        print(f"💾 Stored signal in database")
     else:
         print(f"⏭️  Signal aggregated but not stored (sampling)")
     

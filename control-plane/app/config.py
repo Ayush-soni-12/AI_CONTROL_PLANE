@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Gemini API Key (for AI background analysis)
     GEMINI_API_KEY: str | None = None
     
-    SIGNAL_SAMPLING_RATE: float = 0.5  # 10% of success signals stored
+    SIGNAL_SAMPLING_RATE: float = 1.0  # 100% of success signals stored (cleanup job deletes >7 days)
     
 
     

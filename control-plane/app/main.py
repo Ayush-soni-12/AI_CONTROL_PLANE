@@ -6,7 +6,7 @@ from .database import engine, Base
 from .database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from .router import signals, auth, history, sse, ai_insights
+from .router import signals, auth, history, sse, ai_insights, analytics
 from .cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -79,7 +79,8 @@ async def startup():
     # Snapshot Redis aggregates: Run every 30 minutes
     scheduler.add_job(
         snapshot_redis_aggregates,
-        trigger=CronTrigger(minute='*/30'),
+        # trigger=CronTrigger(minute=30),
+        trigger=CronTrigger(minute='*/2'),
         id="snapshot_aggregates",
         name="Snapshot Redis aggregates to PostgreSQL",
         replace_existing=True
@@ -120,3 +121,6 @@ app.include_router(sse.router)
 
 # Import and include AI Insights router
 app.include_router(ai_insights.router)
+
+# Import and include Analytics router
+app.include_router(analytics.router)
