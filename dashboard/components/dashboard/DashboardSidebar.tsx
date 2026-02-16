@@ -7,7 +7,7 @@ import {
   LogOut,
   User,
   Key,
-  Settings,
+  // Settings,
   Server,
   LayoutDashboard,
   BarChart3,
@@ -20,7 +20,6 @@ import {
 import { useLogout } from "@/hooks/useSignals";
 import { DynamicUserProfile } from "@/components/dashboard/DynamicUserProfile";
 import { Skeleton } from "@/components/ui/skeleton";
-
 
 /**
  * Dashboard Sidebar Component
@@ -44,12 +43,13 @@ export function DashboardSidebar() {
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-    { icon: Server, label: "Services", href: "/dashboard/services" },
     { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
+    // { icon: Server, label: "Services", href: "/dashboard/services" },
+    // { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
     { icon: Brain, label: "AI Insights", href: "/dashboard/ai-insights" },
     { icon: Key, label: "API Keys", href: "/dashboard/api-keys" },
     { icon: User, label: "Profile", href: "/dashboard/profile" },
-    { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+    // { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   ];
 
   const isActive = (href: string) => pathname === href;
