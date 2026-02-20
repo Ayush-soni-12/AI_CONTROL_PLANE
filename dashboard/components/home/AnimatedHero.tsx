@@ -166,10 +166,12 @@ export function AnimatedHero() {
           className="px-8 py-4 rounded-xl border border-gray-700 hover:border-purple-500/50 hover:bg-gray-900/50 transition-all duration-300 backdrop-blur-sm"
           style={{ opacity: 0 }}
         >
-          <span className="flex items-center gap-3 text-gray-300 font-semibold text-lg">
-            <Code className="w-5 h-5" />
-            View Documentation
-          </span>
+          <Link href="/dashboard/docs">
+            <span className="flex items-center gap-3 text-gray-300 font-semibold text-lg">
+              <Code className="w-5 h-5" />
+              View Documentation
+            </span>
+          </Link>
         </button>
       </div>
     </div>
