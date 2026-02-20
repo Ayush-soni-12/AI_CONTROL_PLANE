@@ -1,67 +1,41 @@
 import { Globe } from "lucide-react";
 import { InteractiveBackground } from "@/components/home/InteractiveBackground";
-import { AnimatedSections } from "@/components/home/AnimatedSections";
+import { AnimatedHero } from "@/components/home/AnimatedHero";
+import { StatsCounter } from "@/components/home/StatsCounter";
+import { FeatureShowcase } from "@/components/home/FeatureShowcase";
+import { HowItWorks } from "@/components/home/HowItWorks";
+import { ArchitectureVisual } from "@/components/home/ArchitectureVisual";
+import { CTASection } from "@/components/home/CTASection";
 import { HomeNavigation } from "@/components/home/HomeNavigation";
 
 // This is now a SERVER COMPONENT (no "use client")
 // Can be cached and statically generated
 export default function HomePage() {
-  // Static data - use icon names as strings
-  const features = [
-    {
-      icon: "Cpu",
-      title: "AI-Powered Monitoring",
-      description: "Real-time anomaly detection and predictive analytics",
-      color: "from-blue-500 to-cyan-500",
-    },
-    {
-      icon: "BarChart3",
-      title: "Advanced Analytics",
-      description: "Deep insights into service performance and patterns",
-      color: "from-purple-500 to-pink-500",
-    },
-    {
-      icon: "Shield",
-      title: "Auto-Remediation",
-      description: "Autonomous issue resolution and system optimization",
-      color: "from-green-500 to-emerald-500",
-    },
-    {
-      icon: "Zap",
-      title: "Lightning Fast",
-      description: "Sub-millisecond response times for all operations",
-      color: "from-orange-500 to-red-500",
-    },
-    {
-      icon: "Lock",
-      title: "Secure by Design",
-      description: "Enterprise-grade security with zero-trust architecture",
-      color: "from-indigo-500 to-purple-500",
-    },
-    {
-      icon: "Brain",
-      title: "Self-Learning",
-      description: "Adaptive algorithms that improve over time",
-      color: "from-rose-500 to-pink-500",
-    },
-  ];
-
-  const stats = [
-    { value: "99.9%", label: "Uptime" },
-    { value: "<10ms", label: "Avg Latency" },
-    { value: "24/7", label: "Monitoring" },
-    { value: "1000+", label: "Services Supported" },
-  ];
-
   return (
     <InteractiveBackground>
       {/* Navigation */}
       <HomeNavigation />
 
       {/* Main Content */}
-      <main className="px-8 py-20">
+      <main className="px-6 sm:px-8 py-16 sm:py-20">
         <div className="max-w-7xl mx-auto">
-          <AnimatedSections stats={stats} features={features} />
+          {/* 1. Hero — GSAP text reveal */}
+          <AnimatedHero />
+
+          {/* 2. Stats — Scroll-triggered animated counters */}
+          <StatsCounter />
+
+          {/* 3. Features — Real project features with scroll reveals */}
+          <FeatureShowcase />
+
+          {/* 4. How It Works — Timeline with scroll-scrub */}
+          <HowItWorks />
+
+          {/* 5. Architecture — Animated flow diagram */}
+          <ArchitectureVisual />
+
+          {/* 6. CTA — Final call to action */}
+          <CTASection />
         </div>
       </main>
 
@@ -74,7 +48,7 @@ export default function HomePage() {
                 <Globe className="w-5 h-5 text-purple-400" />
               </div>
               <span className="text-gray-400">
-                © 2024 NeuralControl. All rights reserved.
+                © 2024 AI Control Plane. All rights reserved.
               </span>
             </div>
             <div className="flex items-center gap-6 text-gray-400">
