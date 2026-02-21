@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     
     SIGNAL_SAMPLING_RATE: float = 1.0  # 100% of success signals stored (cleanup job deletes >7 days)
     
+    # RabbitMQ URL for signal queue (@ in password must be URL-encoded as %40)
+    RABBITMQ_URL: str 
+    
 
     
     class Config:

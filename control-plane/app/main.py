@@ -13,6 +13,9 @@ from apscheduler.triggers.cron import CronTrigger
 from .jobs.aggregation_jobs import aggregate_signals_hourly, aggregate_signals_daily, cleanup_old_data
 from .aggregate_persistence import snapshot_redis_aggregates
 from .ai_engine.background_analyzer import analyze_all_services
+from .queue.consumer import start_signal_consumer
+from .queue.connection import close_rabbitmq_connection
+import asyncio
 
 # Create the app
 app = FastAPI()
@@ -103,11 +106,17 @@ async def startup():
     print("   - Aggregate snapshots: Every 30 minutes")
     print("   - 🤖 AI analysis: Every 5 minutes")
 
+    # Start RabbitMQ signal consumer as a background asyncio task
+    asyncio.create_task(start_signal_consumer())
+    print("✅ RabbitMQ signal consumer started")
+
 @app.on_event("shutdown")
 async def shutdown():
     await redis_client.close()
     scheduler.shutdown()
+    await close_rabbitmq_connection()
     print("🛑 Background jobs stopped")
+
 
 
 app.include_router(signals.router)

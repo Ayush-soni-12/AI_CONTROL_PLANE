@@ -1,0 +1,1 @@
+# RabbitMQ Signal Queue Module

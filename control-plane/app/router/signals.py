@@ -11,6 +11,7 @@ from collections import defaultdict
 from fastapi import BackgroundTasks
 from ..functions.mailer import send_alert_email
 from ..cache import cache_get, cache_set, invalidate_user_cache
+from ..queue.publisher import publish_signal
 import time
 
 
@@ -22,67 +23,46 @@ router = APIRouter(
 
 
 
-@router.post("/signals")
+@router.post("/signals", status_code=202)
 async def receive_signal(
-    signals: Schema.SignalSend, 
-    db: AsyncSession = Depends(get_async_db),
+    signals: Schema.SignalSend,
     current_user: models.User = Depends(verify_api_key)
 ):
     """
     Receive performance signals from services.
-    
+
     Requires API key authentication via Authorization header.
-    The signal will be associated with the user who owns the API key.
-    
-    TWO-TIER APPROACH (Updated):
-    1. Update Redis real-time aggregates for ALL signals (100% - accurate metrics)
-    2. Store 100% of signals in PostgreSQL (cleanup job deletes >7 days)
-    3. Hourly/daily aggregation jobs create long-term summaries
+
+    RABBITMQ APPROACH:
+    - Validates the API key and immediately publishes the signal to RabbitMQ.
+    - Returns 202 Accepted instantly (~1-2ms) — no DB/Redis wait.
+    - The background consumer (consumer.py) picks up the message and:
+        1. Updates Redis real-time aggregates
+        2. Stores signal in PostgreSQL (with sampling)
+        3. Invalidates user cache
+    - If the consumer is temporarily down, messages are safely buffered
+      in RabbitMQ (persisted to disk) and processed when it recovers.
     """
-    
-    print(f"Signals received: {signals}")
-    print(f"User: {current_user.email} (ID: {current_user.id})")
-    
-    # Prepare signal data
+
+    print(f"📥 Signal received: {signals.service_name}{signals.endpoint} | user={current_user.email}")
+
+    # Build the signal payload (include user_id so the consumer knows which user)
     signal_data = signals.model_dump()
     signal_data['user_id'] = current_user.id
-    
-    # STEP 1: Update real-time aggregates for ALL signals (100%)
-    # This ensures accurate metrics for caching decisions
-    from app.realtime_aggregates import update_realtime_aggregate
-    from app.config import settings
-    import random
-    
-    await update_realtime_aggregate(
-        user_id=current_user.id,
-        service_name=signals.service_name,
-        endpoint=signals.endpoint,
-        latency_ms=signals.latency_ms,
-        status=signals.status,
-        customer_identifier=signals.customer_identifier,  # NEW
-        priority=signals.priority  # NEW
-    )
-    print(f"✅ Updated real-time aggregates for {signals.service_name}{signals.endpoint} "
-          f"(customer: {signals.customer_identifier[:15] if signals.customer_identifier else 'N/A'}..., "
-          f"priority: {signals.priority})")
-    
-    # STEP 2: Store signals in database (100% now stored, cleanup job manages retention)
-    # Store ALL signals (errors + success) for complete analytics
-    should_store = (signals.status == 'error') or (random.random() < settings.SIGNAL_SAMPLING_RATE)
-    
-    if should_store:
-        signal = models.Signal(**signal_data)
-        db.add(signal)
-        await db.commit()
-        await db.refresh(signal)
-        print(f"💾 Stored signal in database")
-    else:
-        print(f"⏭️  Signal aggregated but not stored (sampling)")
-    
-    # Invalidate cache for this user so they see fresh data
-    await invalidate_user_cache(current_user.id)
-    
-    return Response(status_code=status.HTTP_201_CREATED)
+
+    # Publish to RabbitMQ — instant, non-blocking
+    # Raises 503 only if RabbitMQ itself is unreachable (very rare)
+    try:
+        await publish_signal(signal_data)
+    except Exception as exc:
+        print(f"❌ Failed to publish signal to RabbitMQ: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Signal queue temporarily unavailable. Please retry shortly."
+        )
+
+    # Return 202 Accepted immediately — consumer handles storage
+    return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
 
