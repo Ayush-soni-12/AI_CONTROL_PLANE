@@ -21,9 +21,9 @@ import aio_pika
 from ..config import settings
 from ..queue.connection import get_rabbitmq_channel, SIGNALS_QUEUE_NAME
 from ..realtime_aggregates import update_realtime_aggregate
-from ..cache import invalidate_user_cache
-from ..database import AsyncSessionLocal
-from .. import models
+from app.redis.cache import invalidate_user_cache
+from ..database.database import AsyncSessionLocal
+from ..database import models
 
 
 async def _process_signal(signal_data: dict) -> None:

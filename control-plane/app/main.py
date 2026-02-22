@@ -1,20 +1,20 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.middleware.cors import CORSMiddleware
-from .functions.decisionFunction import make_decision
-from . import models, Schema
-from .database import engine, Base
-from .database import get_db
+from app.functions.decisionFunction import make_decision
+from app.database import models, Schema
+from app.database.database import engine, Base
+from app.database.database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from .router import signals, auth, history, sse, ai_insights, analytics
-from .cache import redis_client
+from app.router import signals, auth, history, sse, ai_insights, analytics
+from app.redis.cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from .jobs.aggregation_jobs import aggregate_signals_hourly, aggregate_signals_daily, cleanup_old_data
-from .aggregate_persistence import snapshot_redis_aggregates
-from .ai_engine.background_analyzer import analyze_all_services
-from .queue.consumer import start_signal_consumer
-from .queue.connection import close_rabbitmq_connection
+from app.jobs.aggregation_jobs import aggregate_signals_hourly, aggregate_signals_daily, cleanup_old_data
+from app.redis.aggregate_persistence import snapshot_redis_aggregates
+from app.ai_engine.background_analyzer import analyze_all_services
+from app.queue.consumer import start_signal_consumer
+from app.queue.connection import close_rabbitmq_connection
 import asyncio
 
 # Create the app

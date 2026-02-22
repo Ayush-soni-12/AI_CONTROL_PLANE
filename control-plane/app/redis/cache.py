@@ -6,7 +6,7 @@ Provides caching utilities for high-frequency endpoints
 import json
 import os
 from typing import Optional, Any
-from .config import settings
+from ..config import settings
 
 import redis.asyncio as redis
 

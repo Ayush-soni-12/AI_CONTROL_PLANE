@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
-from ..database import get_async_db
-from ..models import Signal, AggregateSnapshot
-from ..router.token import get_current_user
+from app.database.database import get_async_db
+from app.database.models import Signal, AggregateSnapshot
+from app.router.token import get_current_user
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])

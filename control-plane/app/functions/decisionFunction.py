@@ -1,5 +1,5 @@
-from ..database import get_async_db
-from  ..import models
+from ..database.database import get_async_db
+from  ..database import models
 from fastapi import Depends
 from ..realtime_aggregates import get_realtime_metrics
 from ..customer_metrics import get_customer_metrics

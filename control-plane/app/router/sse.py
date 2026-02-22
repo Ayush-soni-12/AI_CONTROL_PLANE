@@ -21,11 +21,11 @@ from fastapi import APIRouter, Depends, Request, HTTPException
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from .. import models, Schema
-from ..database import get_async_db
-from ..router.token import get_current_user
+from app.database import models, Schema
+from app.database.database import get_async_db
+from app.router.token import get_current_user
 from collections import defaultdict
-from ..cache import cache_get, cache_set, invalidate_user_cache
+from app.redis.cache import cache_get, cache_set, invalidate_user_cache
 import asyncio
 import json
 

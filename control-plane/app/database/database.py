@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import QueuePool
 from sqlalchemy.ext.asyncio import create_async_engine , AsyncSession , async_sessionmaker
-from .config import settings
+from app.config import settings
 
 
 DATABASE_URL = settings.DATABASE_URL

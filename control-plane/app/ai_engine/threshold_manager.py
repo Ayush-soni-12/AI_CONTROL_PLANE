@@ -7,7 +7,7 @@ with fallback to sensible defaults when no AI data exists.
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app import models
+from app.database import models
 from datetime import datetime, timezone
 from typing import Dict, Optional
 

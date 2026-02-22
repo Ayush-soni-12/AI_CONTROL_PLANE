@@ -24,7 +24,7 @@ import json
 import statistics
 from typing import Optional, Dict, List
 from datetime import datetime, timedelta
-from app.cache import redis_client
+from app.redis.cache import redis_client
 # from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 

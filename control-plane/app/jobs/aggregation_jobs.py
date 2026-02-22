@@ -6,8 +6,8 @@ Handles data aggregation and cleanup tasks
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, and_, text, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import AsyncSessionLocal
-from app import models
+from app.database.database import AsyncSessionLocal
+from app.database import models
 import traceback
 
 

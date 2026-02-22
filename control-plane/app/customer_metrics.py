@@ -9,7 +9,7 @@ This is separate from the main get_realtime_metrics function because:
 
 import json
 from typing import Optional
-from app.cache import redis_client
+from app.redis.cache import redis_client
 
 
 async def get_customer_metrics(

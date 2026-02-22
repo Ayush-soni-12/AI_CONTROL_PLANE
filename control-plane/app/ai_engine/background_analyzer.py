@@ -9,11 +9,11 @@ import logging
 from datetime import datetime, timezone
 from sqlalchemy import select, distinct, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.database import AsyncSessionLocal
+from app.database.database import AsyncSessionLocal
 from app.realtime_aggregates import get_realtime_metrics
 from app.ai_engine.llm_analyzer import analyze_service_thresholds, analyze_service_patterns
 from app.ai_engine.threshold_manager import get_all_thresholds, update_thresholds
-from app import models
+from app.database import models
 from app.config import settings
 
 logger = logging.getLogger(__name__)

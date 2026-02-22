@@ -23,8 +23,8 @@ WHEN IT RUNS:
 import json
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_
-from app import models
-from app.database import SessionLocal, AsyncSessionLocal
+from app.database import models
+from app.database.database import SessionLocal, AsyncSessionLocal
 from typing import List, Dict
 import asyncio
 import redis.asyncio as aioredis

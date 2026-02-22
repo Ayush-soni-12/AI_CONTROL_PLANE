@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from typing import Optional
-from . import models
-from .database import get_async_db
+from app.database import models
+from app.database.database import get_async_db
 
 
 async def verify_api_key(

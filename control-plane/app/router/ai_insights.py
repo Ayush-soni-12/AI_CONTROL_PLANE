@@ -9,10 +9,10 @@ Provides endpoints for the dashboard to display:
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from .. import models
-from ..database import get_async_db
-from ..router.token import get_current_user
-from ..ai_engine.threshold_manager import get_all_thresholds
+from app.database import models
+from app.database.database import get_async_db
+from app.router.token import get_current_user
+from app.ai_engine.threshold_manager import get_all_thresholds
 
 router = APIRouter(
     prefix="/api/ai",

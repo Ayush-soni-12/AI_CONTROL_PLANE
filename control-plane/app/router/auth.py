@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, Response, status, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from .. import models, Schema
-from ..database import get_async_db
-from ..utils import get_password_hash, verify_password
-from .token import create_access_token, get_current_user
+from app.database import models, Schema
+from app.database.database import get_async_db
+from app.utils import get_password_hash, verify_password
+from app.router.token import create_access_token, get_current_user
 import secrets
 import time
 import hashlib 
