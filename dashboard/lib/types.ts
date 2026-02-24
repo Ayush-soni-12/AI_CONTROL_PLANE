@@ -178,3 +178,35 @@ export interface AIThresholdsResponse {
   thresholds: AIThreshold[];
   total: number;
 }
+
+
+
+
+export interface Override {
+  id: number;
+  service_name: string;
+  endpoint: string;
+  reason: string;
+  // Numeric threshold overrides — null means AI is deciding that threshold
+  cache_latency_ms: number | null;
+  circuit_breaker_error_rate: number | null;
+  queue_deferral_rpm: number | null;
+  load_shedding_rpm: number | null;
+  rate_limit_customer_rpm: number | null;
+  created_at: string;
+  expires_at: string;
+  is_active: boolean;
+  minutes_remaining: number | null;
+}
+
+export interface CreateOverridePayload {
+  service_name: string;
+  endpoint: string;
+  duration_minutes: number;
+  reason: string;
+  cache_latency_ms?: number | null;
+  circuit_breaker_error_rate?: number | null;
+  queue_deferral_rpm?: number | null;
+  load_shedding_rpm?: number | null;
+  rate_limit_customer_rpm?: number | null;
+}
