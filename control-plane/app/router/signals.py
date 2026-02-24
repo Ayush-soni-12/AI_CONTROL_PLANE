@@ -8,8 +8,7 @@ from app.functions.decisionFunction import make_decision
 from app.ai_engine.ai_engine import make_ai_decision
 from app.router.token import get_current_user
 from collections import defaultdict
-from fastapi import BackgroundTasks
-from app.functions.mailer import send_alert_email
+from app.queue.email_publisher import publish_email
 from app.redis.cache import cache_get, cache_set, invalidate_user_cache
 from app.queue.publisher import publish_signal
 import time
@@ -71,7 +70,6 @@ async def receive_signal(
 async def get_config(
     service_name: str, 
     endpoint: str, 
-    background_tasks: BackgroundTasks,
     request: Request,  # For future use if needed
     tenant_id: str = None,
     priority: str = 'medium',  # Request priority
@@ -103,31 +101,33 @@ async def get_config(
     
     # Get decision with ALL new parameters
     decision = await make_decision(
-        service_name, 
-        endpoint, 
-        tenant_id, 
-        db, 
+        service_name,
+        endpoint,
+        db,
         user_id=current_user.id,
-        customer_identifier=customer_identifier,  # NEW
-        priority=priority  # NEW
+        customer_identifier=customer_identifier,
+        priority=priority
     )
 
     # ===== EXISTING FEATURES: Alerts, Caching, Circuit Breaker =====
     
-    # Send alert if needed
+    # Send alert if needed — publish to RabbitMQ email queue for reliable delivery
+    # Wrapped in try/except: a queue hiccup must never block the config response
     if decision.get("send_alert"):
-        background_tasks.add_task(
-            send_alert_email,
-            to_email=current_user.email,
-            subject=f"🚨 Alert: {service_name}",
-            context={
-                "service_name": service_name,
-                "endpoint": endpoint,
-                "avg_latency": decision["metrics"]["avg_latency"],
-                "error_rate": decision["metrics"]["error_rate"] * 100,
-                "ai_decision": decision["ai_decision"],
-            }
-        )
+        try:
+            await publish_email(
+                to_email=current_user.email,
+                subject=f"🚨 Alert: {service_name}",
+                context={
+                    "service_name": service_name,
+                    "endpoint": endpoint,
+                    "avg_latency": decision["metrics"]["avg_latency"],
+                    "error_rate": decision["metrics"]["error_rate"] * 100,
+                    "ai_decision": decision["ai_decision"],
+                },
+            )
+        except Exception as exc:
+            print(f"⚠️  [signals] Failed to queue alert email: {exc} — continuing")
     
     
     # ===== TIER 1: PER-CUSTOMER RATE LIMITING =====

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from ..config import settings
+from app.database import models
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -56,8 +57,7 @@ async def get_current_user(
     db: AsyncSession,  # Async database session
     token: str = Depends(oauth2_scheme)
 ):
-    from .. import models
-    
+  
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
