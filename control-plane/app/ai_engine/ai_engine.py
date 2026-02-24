@@ -265,32 +265,50 @@ async def get_ai_tuned_decision(
     customer_requests_per_minute: float = 0,
     priority: str = 'medium',
     user_id: int = None,
-    db = None
+    db = None,
+    threshold_overrides: dict | None = None,   # merged in from ConfigOverride
 ) -> dict:
     """
     Make decision using AI-tuned thresholds from the database.
-    
-    Loads thresholds set by the background AI analyzer (Gemini),
-    then runs the same LangGraph decision logic but with dynamic values.
-    Falls back to hardcoded defaults if no AI thresholds exist.
+
+    If threshold_overrides is provided (from a ConfigOverride row), the
+    caller has already merged the user's values on top of AI thresholds.
+    We use those merged values directly, so the AI runs with the user's
+    numbers for the fields they specified and AI numbers for the rest.
     """
 
-    
-    # Load AI-tuned thresholds
+    # Load AI-tuned thresholds, then apply any manual overrides on top
     if db and user_id:
         thresholds = await get_all_thresholds(db, user_id, service_name, endpoint)
     else:
         thresholds = {**DEFAULTS, 'source': 'default'}
+
+    # Merge: user-specified values win, unset fields stay AI-controlled
+    if threshold_overrides:
+        for key, val in threshold_overrides.items():
+            if val is not None:
+                thresholds[key] = val
     
     # Build state with AI-tuned thresholds
     is_ai_tuned = thresholds.get('source') == 'ai'
+    has_override = bool(threshold_overrides)
     cache_threshold = thresholds['cache_latency_ms']
     cb_threshold = thresholds['circuit_breaker_error_rate']
     queue_threshold = thresholds['queue_deferral_rpm']
     shed_threshold = thresholds['load_shedding_rpm']
     customer_limit = thresholds['rate_limit_customer_rpm']
-    
-    prefix = "🧠 AI-Tuned" if is_ai_tuned else "📏 Default"
+
+    source = thresholds.get('source', 'default')
+    if source == 'ai' and has_override:
+        prefix = "🧠+✏️ AI+Override"
+    elif source == 'ai':
+        prefix = "🧠 AI-Tuned"
+    elif source == 'default_stale':
+        prefix = "⏳ Stale"
+    elif has_override:
+        prefix = "✏️  Override"
+    else:
+        prefix = "📏 Default"
     
     # ===== TIER 1: PER-CUSTOMER RATE LIMITING =====
     if customer_requests_per_minute > customer_limit:
