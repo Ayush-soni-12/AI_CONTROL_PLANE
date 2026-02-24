@@ -1,0 +1,7 @@
+# This is an empty marker file (PEP 561).
+#
+# Its presence tells type-checkers like mypy and pyright:
+#   "This package ships its own type information — honour it."
+#
+# Without this file, mypy would ignore the package's type annotations.
+# You don't need to add any content here — the file just needs to exist.

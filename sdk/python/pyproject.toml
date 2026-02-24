@@ -1,0 +1,61 @@
+# pyproject.toml — Python package metadata for pip
+#
+# This file replaces the old setup.py / setup.cfg approach.
+# It is the modern PEP 517 standard for Python packaging.
+#
+# To install locally for development:
+#     pip install -e ./sdk/python
+#
+# To build a distributable wheel:
+#     pip install build
+#     python -m build ./sdk/python
+#
+# To publish to PyPI:
+#     pip install twine
+#     twine upload ./sdk/python/dist/*
+
+[build-system]
+# hatchling is a modern, zero-config build backend.
+# It reads all metadata from [project] below — no extra config needed.
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-control-plane-sdk"           # the pip install name:  pip install ai-control-plane
+version = "1.0.1"
+description = "AI-powered SDK for autonomous microservices optimization — Python edition"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"           # we use typing features from 3.9+
+
+authors = [
+  { name = "Ayush", email = "" }
+]
+
+keywords = [
+  "ai", "microservices", "control-plane", "performance",
+  "optimization", "caching", "circuit-breaker", "monitoring",
+  "langgraph", "intelligent", "autonomous", "multi-tenant",
+  "fastapi", "flask", "django", "middleware", "api-key"
+]
+
+# Runtime dependencies
+# httpx: modern async HTTP client (replaces requests for async use)
+# Only one mandatory dep keeps the SDK lightweight!
+dependencies = [
+  "httpx>=0.27",
+]
+
+# Optional extras: users can install starlette if not already pulled in by FastAPI
+# e.g.: pip install "ai-control-plane[fastapi]"
+[project.optional-dependencies]
+fastapi = ["starlette>=0.27"]
+
+[project.urls]
+Homepage    = "https://github.com/Ayush-soni-12/AI_CONTROL_PLANE"
+Repository  = "https://github.com/Ayush-soni-12/AI_CONTROL_PLANE"
+Issues      = "https://github.com/Ayush-soni-12/AI_CONTROL_PLANE/issues"
+
+# Tell hatchling which directory contains the actual Python package
+[tool.hatch.build.targets.wheel]
+packages = ["ai_control_plane"]
