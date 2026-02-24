@@ -1,147 +1,79 @@
 # Changelog
 
-All notable changes to the AI Control Plane SDK will be documented in this file.
+All notable changes to the AI Control Plane Node.js SDK will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-01-26
+---
 
-### 🔐 Breaking Changes
+## [1.0.0] - 2026-02-24
 
-- **API Key Authentication Required**: All SDK operations now require a valid API key
-  - API keys must be obtained from the Control Plane dashboard
-  - API key is passed via the `apiKey` configuration parameter
-  - All requests include `Authorization: Bearer <api_key>` header
+> **Published on npm**: [`@ayushsoni12/ai-control-plane`](https://www.npmjs.com/package/@ayushsoni12/ai-control-plane)
 
 ### ✨ Added
 
-- **Secure Authentication**: API key-based authentication for all Control Plane communications
-- **User Association**: All signals are now associated with the user who owns the API key
-- **API Key Validation**: Server-side validation of API keys with helpful error messages
-- **Last Used Tracking**: API key usage timestamps are automatically updated
-- **Warning Messages**: Console warnings when SDK is initialized without an API key
-- **Graceful Error Handling**: Authentication failures don't crash your service
+- **API Key Authentication** — All SDK operations now require a valid API key obtained from the Control Plane dashboard. Passed as `apiKey` in the config; sent as `Authorization: Bearer <key>` on every request.
+- **Performance Tracking** (`track`) — Reports latency, success/error status, endpoint, priority, and customer identifier to the Control Plane AI engine.
+- **AI Runtime Config** (`getConfig`) — Fetches live AI-driven decisions (cache, circuit breaker, rate limit, queue deferral, load shedding) for any endpoint.
+- **Express Middleware** — One-line global middleware that auto-injects `req.controlPlane` before route handlers and fires a signal after the response.
+- **Per-Route Middleware** — Apply tracking to specific routes only, with different priority levels per route.
+- **Multi-Tenant Support** — `tenantId` namespaces signals per user/tenant.
+- **Priority Tiers** — `"critical"` / `"high"` / `"medium"` / `"low"` — used by the AI for load-shedding and queue-deferral ordering.
+- **Graceful Degradation** — Never throws; returns safe defaults (all flags `false`) if the Control Plane is unreachable.
+- **Warning on Missing API Key** — Logs a console warning at startup when `apiKey` is not provided.
+- **Last Used Tracking** — API key usage timestamps are updated server-side on every request.
+- **TypeScript Definitions** — Ships `index.d.ts` for full type support out of the box.
 
-### 📝 Changed
+### � `req.controlPlane` Shape
 
-- **Constructor Signature**: Added `apiKey` parameter (required)
+All middleware patterns expose the same object to your route handlers:
 
-  ```javascript
-  // Before (v1.x)
-  new ControlPlaneSDK({ serviceName: "my-service" });
+| Key                     | Type      | Description                          |
+| ----------------------- | --------- | ------------------------------------ |
+| `shouldCache`           | `boolean` | Cache this response                  |
+| `shouldSkip`            | `boolean` | Circuit breaker open — skip upstream |
+| `isRateLimitedCustomer` | `boolean` | End-user exceeded rate limit         |
+| `isQueueDeferral`       | `boolean` | Defer request (return 202)           |
+| `isLoadShedding`        | `boolean` | System overloaded — drop with 503    |
+| `statusCode`            | `number`  | Suggested HTTP status                |
+| `retryAfter`            | `number`  | Seconds client should wait           |
+| `estimatedDelay`        | `number`  | Estimated queue wait (seconds)       |
+| `reason`                | `string`  | Human-readable AI explanation        |
+| `priority`              | `string`  | This request's priority tier         |
+| `customerIdentifier`    | `string`  | End-user IP used for rate limiting   |
 
-  // After (v2.x)
-  new ControlPlaneSDK({
-    apiKey: "your-api-key",
-    serviceName: "my-service",
-  });
-  ```
+### 📝 Quick Start
 
-- **Track Method**: Automatically includes API key in Authorization header
-- **GetConfig Method**: Automatically includes API key in Authorization header
+```javascript
+import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import dotenv from "dotenv";
+dotenv.config();
 
-### 📚 Documentation
+const sdk = new ControlPlaneSDK({
+  apiKey: process.env.CONTROL_PLANE_API_KEY, // ← required
+  tenantId: process.env.TENANT_ID,
+  serviceName: "my-service",
+  controlPlaneUrl: process.env.CONTROL_PLANE_URL ?? "http://localhost:8000",
+});
 
-- Added comprehensive API Authentication section to README
-- Added environment variable best practices
-- Added error handling examples
-- Updated all code examples to include API key
-- Added security best practices section
+// Global Express middleware
+app.use(sdk.middleware({ priority: "medium" }));
 
-### 🔒 Security
-
-- All signals are now authenticated and associated with users
-- API keys can be rotated from the dashboard
-- API keys can be deactivated without deletion
-- Last used timestamp helps identify unused keys
-
-### Migration Guide
-
-#### For Existing Users (v1.x → v2.0)
-
-1. **Generate an API Key**:
-   - Login to your Control Plane dashboard
-   - Navigate to API Keys page
-   - Click "Generate New Key"
-   - Copy the generated key
-
-2. **Update Your Code**:
-
-   ```javascript
-   // Add apiKey to your SDK initialization
-   const controlPlane = new ControlPlaneSDK({
-     apiKey: process.env.CONTROL_PLANE_API_KEY, // ← Add this
-     serviceName: "my-service",
-     controlPlaneUrl: "http://localhost:8000",
-   });
-   ```
-
-3. **Set Environment Variable**:
-
-   ```bash
-   # .env file
-   CONTROL_PLANE_API_KEY=your-api-key-here
-   ```
-
-4. **Install dotenv** (if not already installed):
-
-   ```bash
-   npm install dotenv
-   ```
-
-5. **Load Environment Variables**:
-   ```javascript
-   import dotenv from "dotenv";
-   dotenv.config();
-   ```
-
-That's it! Your existing code will work with just these changes.
-
----
-
-## [1.0.1] - 2026-01-XX
-
-### Fixed
-
-- Minor bug fixes and improvements
-
-## [1.0.0] - 2026-01-XX
-
-### Added
-
-- Initial release
-- Performance tracking (latency, success/error rates)
-- Runtime configuration retrieval
-- Express middleware for automatic tracking
-- Manual tracking API
-- Tenant ID generation
-- Configuration caching
-
----
-
-## Upgrade Notes
-
-### v1.x to v2.0
-
-**Breaking Change**: API key authentication is now required.
-
-**Impact**: All existing SDK instances will log warnings and fail to send signals without an API key.
-
-**Action Required**:
-
-1. Generate API key from dashboard
-2. Add `apiKey` parameter to SDK initialization
-3. Store API key in environment variables
-
-**Timeline**: Update at your convenience. The SDK will continue to work but signals won't be tracked without an API key.
+// In any route:
+app.get("/products", (req, res) => {
+  const cp = req.controlPlane;
+  if (cp.shouldSkip) return res.status(503).json({ error: cp.reason });
+  if (cp.isLoadShedding)
+    return res.status(503).json({ error: "Try again later" });
+  // ... normal logic
+});
+```
 
 ---
 
 ## Support
 
-For questions or issues with upgrading, please:
-
-- Check the [README](README.md) for detailed documentation
-- Visit the [GitHub repository](https://github.com/Ayush-soni-12/AI_CONTROL_PLANE)
-- Open an issue on GitHub
+- [README](README.md) — full documentation
+- [GitHub Repository](https://github.com/Ayush-soni-12/AI_CONTROL_PLANE)
+- [Open an Issue](https://github.com/Ayush-soni-12/AI_CONTROL_PLANE/issues)
