@@ -263,3 +263,58 @@ class AIInsight(Base):
     __table_args__ = (
         Index('idx_ai_insight_user_time', 'user_id', 'created_at'),
     )
+
+
+class ConfigOverride(Base):
+    """
+    Manual threshold overrides for AI decisions.
+
+    Instead of forcing flags ON/OFF, a ConfigOverride lets you replace
+    *specific numeric thresholds* with your own values.  The AI engine
+    still runs normally — it just uses your threshold where you've set one.
+
+    Example
+    -------
+    You know a traffic spike is coming.  You want caching to kick in
+    earlier than the AI thinks (AI says 800ms, you want 300ms):
+
+        cache_latency_ms = 300    ← your value
+        others           = None   ← AI keeps deciding
+
+    The decision engine merges: AI thresholds + your overrides (wins).
+
+    Threshold fields
+    ----------------
+    All nullable — None = leave this threshold to the AI.
+
+    • cache_latency_ms          – enable cache when avg_latency > this (ms)
+    • circuit_breaker_error_rate – open circuit when error_rate > this (0–1)
+    • queue_deferral_rpm        – defer to queue when RPM > this
+    • load_shedding_rpm         – shed load when RPM > this
+    • rate_limit_customer_rpm   – rate-limit a single customer above this RPM
+    """
+    __tablename__ = "config_overrides"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    service_name = Column(String, nullable=False, index=True)
+    endpoint = Column(String, nullable=False, index=True)
+
+    # Threshold overrides — NULL means "let AI decide this threshold"
+    cache_latency_ms = Column(Integer, nullable=True)           # ms; lower = cache sooner
+    circuit_breaker_error_rate = Column(Float, nullable=True)   # 0.0–1.0
+    queue_deferral_rpm = Column(Integer, nullable=True)         # requests per minute
+    load_shedding_rpm = Column(Integer, nullable=True)          # requests per minute
+    rate_limit_customer_rpm = Column(Integer, nullable=True)    # requests per minute per customer
+
+    # Why the override was created (for audit / dashboard display)
+    reason = Column(String, nullable=False)
+
+    # Lifecycle
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
+    is_active = Column(Boolean, nullable=False, server_default=text('true'), index=True)
+
+    __table_args__ = (
+        Index('idx_override_active_lookup', 'user_id', 'service_name', 'endpoint', 'is_active', 'expires_at'),
+    )
