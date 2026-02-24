@@ -6,7 +6,7 @@ from app.database.database import engine, Base
 from app.database.database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from app.router import signals, auth, history, sse, ai_insights, analytics
+from app.router import signals, auth, history, sse, ai_insights, analytics, overrides
 from app.redis.cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -14,6 +14,7 @@ from app.jobs.aggregation_jobs import aggregate_signals_hourly, aggregate_signal
 from app.redis.aggregate_persistence import snapshot_redis_aggregates
 from app.ai_engine.background_analyzer import analyze_all_services
 from app.queue.consumer import start_signal_consumer
+from app.queue.email_consumer import start_email_consumer
 from app.queue.connection import close_rabbitmq_connection
 import asyncio
 
@@ -82,8 +83,8 @@ async def startup():
     # Snapshot Redis aggregates: Run every 30 minutes
     scheduler.add_job(
         snapshot_redis_aggregates,
-        # trigger=CronTrigger(minute=30),
-        trigger=CronTrigger(minute='*/2'),
+        trigger=CronTrigger(minute=30),
+        # trigger=CronTrigger(minute='*/2'),
         id="snapshot_aggregates",
         name="Snapshot Redis aggregates to PostgreSQL",
         replace_existing=True
@@ -110,6 +111,10 @@ async def startup():
     asyncio.create_task(start_signal_consumer())
     print("✅ RabbitMQ signal consumer started")
 
+    # Start RabbitMQ email consumer as a background asyncio task
+    asyncio.create_task(start_email_consumer())
+    print("✅ RabbitMQ email consumer started")
+
 @app.on_event("shutdown")
 async def shutdown():
     await redis_client.close()
@@ -133,3 +138,6 @@ app.include_router(ai_insights.router)
 
 # Import and include Analytics router
 app.include_router(analytics.router)
+
+# Import and include Config Overrides router
+app.include_router(overrides.router)
