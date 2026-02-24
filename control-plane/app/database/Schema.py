@@ -141,3 +141,54 @@ class EndpointDetailResponse(BaseModel):
     queue_deferral: bool = False  
     load_shedding: bool = False  
     reasoning: str
+
+
+
+
+class OverrideCreate(BaseModel):
+    service_name: str
+    endpoint: str
+    duration_minutes: int = Field(
+        default=30, ge=1, le=1440,
+        description="How long the override should stay active (1 min – 24 h)"
+    )
+    reason: str = Field(..., min_length=3, description="Why you are creating this override")
+
+    # Numeric threshold overrides — leave as None to let AI keep deciding that threshold.
+    # The AI engine still runs; it just uses your value instead of its computed one.
+    cache_latency_ms: Optional[int] = Field(
+        default=None, ge=50, le=30000,
+        description="Enable cache when avg latency > this (ms). AI default: 500ms"
+    )
+    circuit_breaker_error_rate: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Open circuit breaker when error rate > this (0–1). AI default: 0.3"
+    )
+    queue_deferral_rpm: Optional[int] = Field(
+        default=None, ge=1, le=10000,
+        description="Queue requests when global RPM > this. AI default: 80"
+    )
+    load_shedding_rpm: Optional[int] = Field(
+        default=None, ge=1, le=10000,
+        description="Shed load when global RPM > this. AI default: 150"
+    )
+    rate_limit_customer_rpm: Optional[int] = Field(
+        default=None, ge=1, le=1000,
+        description="Rate-limit single customer above this RPM. AI default: 15"
+    )
+
+
+class OverrideResponse(BaseModel):
+    id: int
+    service_name: str
+    endpoint: str
+    reason: str
+    cache_latency_ms: Optional[int]
+    circuit_breaker_error_rate: Optional[float]
+    queue_deferral_rpm: Optional[int]
+    load_shedding_rpm: Optional[int]
+    rate_limit_customer_rpm: Optional[int]
+    created_at: datetime
+    expires_at: datetime
+    is_active: bool
+    minutes_remaining: Optional[int]
