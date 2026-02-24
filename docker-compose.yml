@@ -15,8 +15,8 @@ services:
     # Environment variables for PostgreSQL
     environment:
       # Database credentials (from .env)
-      POSTGRES_USER: Ayush # your username
-      POSTGRES_PASSWORD: Ayush123 # your password
+      POSTGRES_USER: guest # your username
+      POSTGRES_PASSWORD: guest123 # your password
       POSTGRES_DB: ai_control_plane # your database name
     
     # Port mapping: host:container
@@ -58,10 +58,13 @@ services:
     environment:
       # Database connection string
       # Note: Use 'postgres' as hostname (service name in docker-compose)
-      DATABASE_URL: postgresql://Ayush:Ayush123@postgres:5432/ai_control_plane
+      DATABASE_URL: postgresql://guest:guest123@postgres:5432/ai_control_plane
       
       # Redis connection (use service name 'redis' as hostname)
-      REDIS_URL: redis://default:Ayush@123@redis:6379
+      REDIS_URL: redis://default:guest123@redis:6379
+      
+      # RabbitMQ connection (use service name 'rabbitmq' as hostname)
+      RABBITMQ_URL: amqp://guest:guest123@rabbitmq:5672/
       
       # JWT Configuration
       SECRET_KEY: ${SECRET_KEY:-09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7}
@@ -69,13 +72,13 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
       
       # SMTP Configuration for emails
-      SMTP_MAIL: ${SMTP_MAIL:-your_email_here}
-      SMTP_PASS: ${SMTP_PASS:-your_app_password_here}
-      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
-      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_MAIL: ${SMTP_MAIL}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
       
       # Gemini API key for AI features
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-your_gemini_api_key_here}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     #
     # Volume mounting for development
     # Maps local ./control-plane to /app in container
@@ -86,11 +89,13 @@ services:
       - /app/__pycache__
       - /app/venv
     
-    # Wait for postgres and redis to be healthy before starting
+    # Wait for postgres, redis, and rabbitmq to be healthy before starting
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     
     # Restart policy
@@ -151,7 +156,7 @@ services:
     # Port mapping: host:container
     # Access pgAdmin at http://localhost:5050
     ports:
-      - "5051:80"
+      - "5050:80"
     
     # Volume for persistent pgAdmin data
     volumes:
@@ -178,7 +183,7 @@ services:
       - "6379:6379"
     
     # Command to run Redis with persistence and password (matches .env)
-    command: redis-server --appendonly yes --requirepass "Ayush@123"
+    command: redis-server --appendonly yes --requirepass "guest123"
     
     # Volume for persistent Redis data
     volumes:
@@ -219,6 +224,41 @@ services:
     # Restart policy
     restart: unless-stopped
 
+  # RabbitMQ Service (Message Queue)
+  rabbitmq:
+    # Alpine image = lightweight. management tag = includes the web UI
+    image: rabbitmq:3.13-management-alpine
+    
+    # Container name
+    container_name: ai-control-plane-rabbitmq
+    
+    # Port mapping: host:container
+    # 5672  = AMQP protocol (used by the control plane to publish/consume messages)
+    # 15672 = Management UI  (open http://localhost:15672 to see queues)
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    
+    # Credentials — must match RABBITMQ_URL in control-plane environment above
+    environment:
+      RABBITMQ_DEFAULT_USER: guest # your username
+      RABBITMQ_DEFAULT_PASS: guest123 # your password
+    
+    # Volume for persistent queue data
+    # Queued messages survive container restarts
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    
+    # Health check — wait until RabbitMQ is fully ready before control-plane starts
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    
+    # Restart policy
+    restart: unless-stopped
+
 # Named volumes
 # These persist data even when containers are deleted
 volumes:
@@ -229,4 +269,6 @@ volumes:
   redis_data:
     driver: local
   redis_insight_data:
+    driver: local
+  rabbitmq_data:
     driver: local
