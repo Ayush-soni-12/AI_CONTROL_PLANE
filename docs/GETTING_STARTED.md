@@ -4,7 +4,8 @@ Get up and running in **5 minutes** with intelligent traffic management for your
 
 ## Prerequisites
 
-- Node.js >= 18.0.0
+- **Node.js SDK**: Node.js >= 18.0.0
+- **Python SDK**: Python >= 3.9 + pip
 - A running AI Control Plane instance (or use Docker Compose)
 - Terminal access (for generating tenant ID)
 
@@ -81,9 +82,23 @@ bfc3aed7948e46fafacac26faf8b3159
 
 ## Step 4: Install the SDK
 
+### Node.js / Express
+
 ```bash
 npm install @ayushsoni12/ai-control-plane
 ```
+
+### Python / FastAPI
+
+```bash
+pip install ai-control-plane-sdk
+```
+
+> **FastAPI extra** (installs Starlette if not already present):
+>
+> ```bash
+> pip install "ai-control-plane-sdk[fastapi]"
+> ```
 
 ---
 
@@ -103,6 +118,8 @@ SERVICE_NAME=my-awesome-service
 
 ## Step 6: Initialize the SDK
 
+### Node.js / Express
+
 ```javascript
 // server.js
 import express from "express";
@@ -120,9 +137,32 @@ const controlPlane = new ControlPlaneSDK({
 });
 ```
 
+### Python / FastAPI
+
+```python
+# main.py
+import os
+from fastapi import FastAPI
+from dotenv import load_dotenv
+from ai_control_plane import ControlPlaneSDK
+
+load_dotenv()
+
+app = FastAPI()
+
+sdk = ControlPlaneSDK(
+    api_key=os.getenv("CONTROL_PLANE_API_KEY"),
+    tenant_id=os.getenv("TENANT_ID"),
+    service_name=os.getenv("SERVICE_NAME", "my-awesome-service"),
+    control_plane_url=os.getenv("CONTROL_PLANE_URL", "http://localhost:8000"),
+)
+```
+
 ---
 
 ## Step 7: Add Middleware to Your Routes
+
+### Node.js / Express
 
 ```javascript
 // Simple endpoint with automatic traffic management
@@ -130,7 +170,6 @@ app.get(
   "/api/products",
   controlPlane.middleware("/api/products"),
   async (req, res) => {
-    // Access AI decisions via req.controlPlane
     const {
       shouldCache,
       shouldSkip,
@@ -141,71 +180,131 @@ app.get(
       estimatedDelay,
     } = req.controlPlane;
 
-    // Handle rate limiting
     if (isRateLimitedCustomer) {
-      return res.status(429).json({
-        error: "Rate limit exceeded",
-        retryAfter: retryAfter,
-      });
+      return res.status(429).json({ error: "Rate limit exceeded", retryAfter });
     }
-
-    // Handle load shedding
     if (isLoadShedding) {
-      return res.status(503).json({
-        error: "Service temporarily unavailable",
-        retryAfter: retryAfter,
-      });
+      return res
+        .status(503)
+        .json({ error: "Service temporarily unavailable", retryAfter });
     }
-
-    // Handle queue deferral
     if (isQueueDeferral) {
       const jobId = `job-${Date.now()}`;
       await queueJob(jobId, req.body);
-
-      return res.status(202).json({
-        message: "Request queued",
-        jobId: jobId,
-        estimatedWait: estimatedDelay,
-      });
+      return res
+        .status(202)
+        .json({
+          message: "Request queued",
+          jobId,
+          estimatedWait: estimatedDelay,
+        });
     }
-
-    // Check cache
     if (shouldCache && cache.products) {
-      return res.json({
-        source: "cache",
-        data: cache.products,
-      });
+      return res.json({ source: "cache", data: cache.products });
     }
 
-    // Fetch data
     const products = await getProductsFromDB();
-
-    // Cache if recommended
-    if (shouldCache) {
-      cache.products = products;
-    }
-
-    res.json({
-      source: "database",
-      data: products,
-    });
+    if (shouldCache) cache.products = products;
+    res.json({ source: "database", data: products });
   },
 );
 
-app.listen(3001, () => {
-  console.log("🚀 Service running on port 3001");
-  console.log("📊 Connected to AI Control Plane");
-});
+app.listen(3001, () => console.log("🚀 Service running on port 3001"));
 ```
+
+---
+
+### Python / FastAPI — Per-Route `Depends()` (Recommended)
+
+The Python SDK uses FastAPI's `Depends()` system instead of Express middleware.
+Add it to individual routes for full per-endpoint control:
+
+```python
+from fastapi import FastAPI, Request, Depends
+from fastapi.responses import JSONResponse
+from ai_control_plane import ControlPlaneSDK
+from ai_control_plane.middleware import control_plane_dep
+
+app = FastAPI()
+sdk = ControlPlaneSDK(
+    api_key=os.getenv("CONTROL_PLANE_API_KEY"),
+    tenant_id=os.getenv("TENANT_ID"),
+    service_name="my-awesome-service",
+)
+
+cache = {}
+
+@app.get("/api/products")
+async def get_products(
+    request: Request,
+    # Equivalent of controlPlane.middleware("/api/products") in Node.js
+    cp=Depends(control_plane_dep(sdk, "/api/products", priority="medium")),
+):
+    # cp is the same as req.controlPlane in Node.js
+
+    if cp["is_rate_limited_customer"]:
+        return JSONResponse(
+            status_code=429,
+            headers={"Retry-After": str(cp["retry_after"])},
+            content={"error": "Rate limit exceeded", "retry_after": cp["retry_after"]},
+        )
+
+    if cp["is_load_shedding"]:
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Service temporarily unavailable", "retry_after": cp["retry_after"]},
+        )
+
+    if cp["is_queue_deferral"]:
+        return JSONResponse(
+            status_code=202,
+            content={"message": "Request queued", "estimated_wait": cp["estimated_delay"]},
+        )
+
+    if cp["should_cache"] and "products" in cache:
+        return {"source": "cache", "data": cache["products"]}
+
+    products = await get_products_from_db()
+
+    if cp["should_cache"]:
+        cache["products"] = products
+
+    return {"source": "database", "data": products}
+```
+
+**Run it:**
+
+```bash
+uvicorn main:app --port 4001 --reload
+```
+
+> [!TIP]
+> **Node.js → Python Quick Reference**
+>
+> | Node.js (`req.controlPlane`) | Python (`cp` dict)               |
+> | ---------------------------- | -------------------------------- |
+> | `shouldCache`                | `cp["should_cache"]`             |
+> | `shouldSkip`                 | `cp["should_skip"]`              |
+> | `isRateLimitedCustomer`      | `cp["is_rate_limited_customer"]` |
+> | `isLoadShedding`             | `cp["is_load_shedding"]`         |
+> | `isQueueDeferral`            | `cp["is_queue_deferral"]`        |
+> | `retryAfter`                 | `cp["retry_after"]`              |
+> | `estimatedDelay`             | `cp["estimated_delay"]`          |
 
 ---
 
 ## Step 8: Test Your Integration
 
-### Send a Test Request
+### Node.js
 
 ```bash
 curl http://localhost:3001/api/products
+```
+
+### Python / FastAPI
+
+```bash
+curl http://localhost:4001/api/products
 ```
 
 ### View Live Metrics
@@ -302,7 +401,29 @@ curl http://localhost:8000/
 2. Check tenant ID is correct
 3. Verify service name in SDK config matches dashboard filter
 
-### req.controlPlane is undefined
+### `request.state.control_plane` is undefined (FastAPI)
+
+**Solution:**
+
+1. Make sure you have the `Depends()` on the route, not just imported
+2. Check that the `sdk` object is initialized before the route is defined
+3. Verify the SDK package is installed: `pip show ai-control-plane-sdk`
+
+```python
+# Correct ✅
+@app.get("/api/products")
+async def get_products(
+    cp=Depends(control_plane_dep(sdk, "/api/products")),  # ← required
+):
+    print(cp["should_cache"])  # ✅ defined
+
+# Wrong ❌ — no Depends, cp will not be injected
+@app.get("/api/products")
+async def get_products():
+    ...
+```
+
+### `req.controlPlane` is undefined (Node.js)
 
 **Solution:**
 

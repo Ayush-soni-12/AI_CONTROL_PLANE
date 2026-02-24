@@ -12,7 +12,7 @@ An intelligent control plane that uses AI to automatically optimize microservice
 - 📋 **Queue Deferral**: Async processing for non-critical operations
 - ⚡ **Circuit Breaker**: Protects services from cascade failures
 - 👥 **Multi-Tenant Support**: Isolated metrics and decisions per tenant
-- 📦 **Easy Integration**: Simple SDK integration for Node.js/Express services
+- 📦 **Easy Integration**: Simple SDK for **Node.js/Express** and **Python/FastAPI** services
 - 🐳 **Docker Ready**: Complete stack with one command
 
 ---
@@ -95,65 +95,99 @@ npm start
 
 #### 1. Install the SDK
 
+**Node.js / Express:**
+
 ```bash
 npm install @ayushsoni12/ai-control-plane
+```
+
+**Python / FastAPI:**
+
+```bash
+pip install ai-control-plane-sdk
 ```
 
 #### 2. Generate Tenant ID
 
 ```bash
-# Generate unique tenant ID using OpenSSL
+# Generate unique tenant ID
 openssl rand -hex 16
 # Output: bfc3aed7948e46fafacac26faf8b3159
 ```
 
 #### 3. Use in Your Code
 
+**Node.js / Express:**
+
 ```javascript
 import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
 
-// Initialize SDK
 const sdk = new ControlPlaneSDK({
-  apiKey: process.env.CONTROL_PLANE_API_KEY, // From dashboard
-  tenantId: process.env.TENANT_ID, // Generated above
+  apiKey: process.env.CONTROL_PLANE_API_KEY,
+  tenantId: process.env.TENANT_ID,
   serviceName: "my-service",
   controlPlaneUrl: "http://localhost:8000",
 });
 
-// Use as middleware (automatic traffic management)
 app.get("/products", sdk.middleware("/products"), async (req, res) => {
-  // Handle rate limiting
-  if (req.controlPlane.isRateLimitedCustomer) {
-    return res.status(429).json({
-      error: "Rate limited",
-      retryAfter: req.controlPlane.retryAfter,
-    });
-  }
-
-  // Handle load shedding
-  if (req.controlPlane.isLoadShedding) {
-    return res.status(503).json({
-      error: "Service overloaded",
-      retryAfter: req.controlPlane.retryAfter,
-    });
-  }
-
-  // Check cache recommendation
-  if (req.controlPlane.shouldCache && cache.products) {
+  if (req.controlPlane.isRateLimitedCustomer)
+    return res
+      .status(429)
+      .json({ error: "Rate limited", retryAfter: req.controlPlane.retryAfter });
+  if (req.controlPlane.isLoadShedding)
+    return res
+      .status(503)
+      .json({
+        error: "Service overloaded",
+        retryAfter: req.controlPlane.retryAfter,
+      });
+  if (req.controlPlane.shouldCache && cache.products)
     return res.json({ cached: true, data: cache.products });
-  }
 
-  // Fetch data
   const products = await getProductsFromDB();
-
-  // Cache if recommended
-  if (req.controlPlane.shouldCache) {
-    cache.products = products;
-  }
-
+  if (req.controlPlane.shouldCache) cache.products = products;
   res.json({ cached: false, data: products });
 });
 ```
+
+**Python / FastAPI:**
+
+```python
+from fastapi import FastAPI, Request, Depends
+from fastapi.responses import JSONResponse
+from ai_control_plane import ControlPlaneSDK
+from ai_control_plane.middleware import control_plane_dep
+
+app = FastAPI()
+sdk = ControlPlaneSDK(
+    api_key=os.getenv("CONTROL_PLANE_API_KEY"),
+    tenant_id=os.getenv("TENANT_ID"),
+    service_name="my-service",
+)
+
+cache = {}
+
+@app.get("/products")
+async def get_products(
+    request: Request,
+    cp=Depends(control_plane_dep(sdk, "/products", priority="medium")),
+):
+    if cp["is_rate_limited_customer"]:
+        return JSONResponse(status_code=429,
+            headers={"Retry-After": str(cp["retry_after"])},
+            content={"error": "Rate limited"})
+    if cp["is_load_shedding"]:
+        return JSONResponse(status_code=503, content={"error": "Service overloaded"})
+    if cp["should_cache"] and "products" in cache:
+        return {"cached": True, "data": cache["products"]}
+
+    products = await get_products_from_db()
+    if cp["should_cache"]:
+        cache["products"] = products
+    return {"cached": False, "data": products}
+```
+
+> 📖 **Full Getting Started →** [GETTING_STARTED.md](./GETTING_STARTED.md)
 
 ### For Contributors (Develop the Control Plane)
 
@@ -253,26 +287,33 @@ ai-control-plane/
 ├── control-plane/          # FastAPI backend
 │   ├── app/
 │   │   ├── main.py        # API endpoints
-│   │   ├── models.py      # Database models
-│   │   ├── database.py    # Database connection
-│   │   └── functions/
-│   │       └── decisionFunction.py  # Decision logic
-│   ├── ai_engine/
-│   │   └── ai_engine.py   # LangGraph AI workflow
+│   │   ├── ai_engine/     # LangGraph + Gemini AI
+│   │   ├── functions/     # Decision logic
+│   │   └── database/      # Models + migrations
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── demo-service/          # Express demo app
-│   ├── server.js          # Demo endpoints
-│   ├── Dockerfile
-│   └── package.json
+├── demo-service/
+│   ├── server.js          # Node.js / Express demo
+│   ├── python/            # Python / FastAPI demo
+│   │   ├── server.py
+│   │   ├── test-caching.sh
+│   │   ├── test-circuit-breaker.sh
+│   │   └── test-traffic-management.sh
+│   └── Dockerfile
 │
-├── sdk/                   # Node.js SDK package
-│   └── nodejs/
-│       └── index.js       # SDK implementation
+├── sdk/
+│   ├── nodejs/            # npm: @ayushsoni12/ai-control-plane
+│   │   └── index.js
+│   └── python/            # pip: ai-control-plane-sdk
+│       ├── ai_control_plane/
+│       │   ├── client.py      # ControlPlaneSDK class
+│       │   └── middleware.py  # FastAPI Depends() integration
+│       └── pyproject.toml
 │
-├── docker-compose.yml     # Docker orchestration
-└── README.md             # This file
+├── docs/                  # Documentation
+├── docker-compose.yml
+└── README.md
 ```
 
 ---
