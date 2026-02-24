@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Shield, AlertTriangle } from "lucide-react";
 import { useCreateOverride } from "@/hooks/useOverrides";
-import type { CreateOverridePayload } from "@/hooks/useOverrides";
+import type { CreateOverridePayload } from "@/lib/types";
 import { ThresholdInput } from "./ThresholdInput";
 
 // ─── Create form ─────────────────────────────────────────────────────────────

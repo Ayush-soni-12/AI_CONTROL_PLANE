@@ -16,6 +16,7 @@ import {
   Sparkles,
   Brain,
   BookOpen,
+  Shield,
 } from "lucide-react";
 // import dynamic from "next/dynamic";
 import { useLogout } from "@/hooks/useSignals";
@@ -45,13 +46,11 @@ export function DashboardSidebar() {
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
-    // { icon: Server, label: "Services", href: "/dashboard/services" },
-    // { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
     { icon: Brain, label: "AI Insights", href: "/dashboard/ai-insights" },
+    { icon: Shield, label: "Overrides", href: "/dashboard/overrides" },
     { icon: BookOpen, label: "Docs", href: "/dashboard/docs" },
     { icon: Key, label: "API Keys", href: "/dashboard/api-keys" },
     { icon: User, label: "Profile", href: "/dashboard/profile" },
-    // { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   ];
 
   const isActive = (href: string) => pathname === href;

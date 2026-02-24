@@ -2,7 +2,7 @@
 
 import { Clock, Trash2, Server, Brain } from "lucide-react";
 import { useCancelOverride } from "@/hooks/useOverrides";
-import type { Override } from "@/hooks/useOverrides";
+import type { Override } from "@/lib/types";
 import { ThresholdRow } from "./ThresholdRow";
 
 // ─── Override card ────────────────────────────────────────────────────────────
