@@ -1,25 +1,81 @@
-from ..database.database import get_async_db
-from  ..database import models
-from fastapi import Depends
 from ..realtime_aggregates import get_realtime_metrics
 from ..customer_metrics import get_customer_metrics
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
+from ..database import models
 from ..ai_engine import ai_engine
+from ..ai_engine.threshold_manager import get_all_thresholds
+from datetime import datetime, timezone
 make_ai_decision = ai_engine.make_ai_decision
 get_ai_tuned_decision = ai_engine.get_ai_tuned_decision
 
 
+async def _get_active_override(
+    db: AsyncSession,
+    user_id: int,
+    service_name: str,
+    endpoint: str,
+) -> models.ConfigOverride | None:
+    """
+    Return the active, non-expired ConfigOverride for this endpoint, or None.
+    Fast single-row query using covering index idx_override_active_lookup.
+    """
+    if db is None or user_id is None:
+        return None
+    now = datetime.now(timezone.utc)
+    stmt = (
+        select(models.ConfigOverride)
+        .where(
+            and_(
+                models.ConfigOverride.user_id == user_id,
+                models.ConfigOverride.service_name == service_name,
+                models.ConfigOverride.endpoint == endpoint,
+                models.ConfigOverride.is_active == True,
+                models.ConfigOverride.expires_at > now,
+            )
+        )
+        .order_by(models.ConfigOverride.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return result.scalars().first()
 
+
+def _merge_override_thresholds(thresholds: dict, override: models.ConfigOverride) -> dict:
+    """
+    Merge a ConfigOverride's numeric values into an existing thresholds dict.
+
+    Only non-None fields from the override replace the AI value.
+    The AI remains in full control of any threshold the user didn't set.
+
+    Returns a new merged dict (original is not mutated).
+    """
+    merged = dict(thresholds)
+
+    if override.cache_latency_ms is not None:
+        merged['cache_latency_ms'] = override.cache_latency_ms
+
+    if override.circuit_breaker_error_rate is not None:
+        merged['circuit_breaker_error_rate'] = override.circuit_breaker_error_rate
+
+    if override.queue_deferral_rpm is not None:
+        merged['queue_deferral_rpm'] = override.queue_deferral_rpm
+
+    if override.load_shedding_rpm is not None:
+        merged['load_shedding_rpm'] = override.load_shedding_rpm
+
+    if override.rate_limit_customer_rpm is not None:
+        merged['rate_limit_customer_rpm'] = override.rate_limit_customer_rpm
+
+    return merged
 
 async def make_decision(
-    service_name, 
-    endpoint, 
-    tenant_id=None,
-    db: AsyncSession = None, 
+    service_name,
+    endpoint,
+    db: AsyncSession = None,
     user_id: int = None,
-    customer_identifier: str = None,  # NEW: For per-customer rate limiting
-    priority: str = 'medium'  # NEW: For queue/shed decisions
+    customer_identifier: str = None,  # For per-customer rate limiting
+    priority: str = 'medium'          # For queue/shed decisions
 ):
     """
     Make AI decision using TWO-TIER APPROACH:
@@ -37,14 +93,30 @@ async def make_decision(
         endpoint: API endpoint path
         tenant_id: Optional tenant identifier for multi-tenant filtering
         db: Database session (used as fallback)
-        user_id: User ID (required for real-time aggregates)
+        user_id: User ID (required for real-time aggregates)_merge_override_thresholds
         customer_identifier: IP or session ID (for per-customer rate limiting)
         priority: Request priority (critical/high/medium/low)
     
     Returns: dictionary with decision
     """
 
-    
+    # ── STEP 1: Check for active override ─────────────────────────────────────
+    # If a user has set threshold overrides for this endpoint, we fetch them
+    # now so we can merge them into the AI thresholds below.
+    # We do NOT skip the AI engine — the AI still runs normally, it just
+    # uses the user's threshold values for the fields they've specified.
+    override = await _get_active_override(db, user_id, service_name, endpoint)
+    if override is not None:
+        expires = override.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        mins_left = int((expires - datetime.now(timezone.utc)).total_seconds() / 60)
+        print(
+            f"✏️  [Override] {service_name}{endpoint} — "
+            f"threshold override active ({mins_left} min remaining): {override.reason}"
+        )
+    # ──────────────────────────────────────────────────────────────────────────
+
     # Get global metrics (all customers combined)
     metrics = None
     if user_id:
@@ -70,6 +142,18 @@ async def make_decision(
               f"Count: {metrics['count']} (ALL signals), Total RPM: {total_rpm:.1f}, "
               f"p50: {metrics.get('p50', 0):.1f}ms, p95: {metrics.get('p95', 0):.1f}ms, p99: {metrics.get('p99', 0):.1f}ms")
         
+        # Build threshold overrides dict from the ConfigOverride row (if any).
+        # Only non-None fields will override AI thresholds inside get_ai_tuned_decision.
+        threshold_overrides = None
+        if override is not None:
+            threshold_overrides = {
+                'cache_latency_ms': override.cache_latency_ms,
+                'circuit_breaker_error_rate': override.circuit_breaker_error_rate,
+                'queue_deferral_rpm': override.queue_deferral_rpm,
+                'load_shedding_rpm': override.load_shedding_rpm,
+                'rate_limit_customer_rpm': override.rate_limit_customer_rpm,
+            }
+
         # Use AI-tuned decision (reads thresholds from DB) when db+user_id available
         if db and user_id:
             ai_decision = await get_ai_tuned_decision(
@@ -81,19 +165,21 @@ async def make_decision(
                 customer_requests_per_minute=customer_rpm,
                 priority=priority,
                 user_id=user_id,
-                db=db
+                db=db,
+                threshold_overrides=threshold_overrides,
             )
         else:
-            # Fallback to hardcoded thresholds
+            # Fallback to hardcoded thresholds (no DB session)
             ai_decision = make_ai_decision(
-                service_name, 
-                endpoint, 
-                avg_latency, 
+                service_name,
+                endpoint,
+                avg_latency,
                 error_rate,
                 requests_per_minute=total_rpm,
                 customer_requests_per_minute=customer_rpm,
                 priority=priority
             )
+
         
         print(f"🤖 AI Decision: {ai_decision['reasoning']}")
         
@@ -140,69 +226,16 @@ async def make_decision(
             "send_alert": False,
         }
     
-    # FALLBACK: Use database if no real-time data available
-    print(f"⚠️  No real-time aggregates found, falling back to database query")
-
-    # Build query with service_name and endpoint filters (async pattern)
-    stmt = select(models.Signal).filter(
-        models.Signal.service_name == service_name,
-        models.Signal.endpoint == endpoint
-    )
-    
-    # Add tenant_id filter if provided
-    if tenant_id:
-        stmt = stmt.filter(models.Signal.tenant_id == tenant_id)
-    
-    stmt = stmt.order_by(models.Signal.timestamp.desc()).limit(20)
-    result = await db.execute(stmt)
-    signals = result.scalars().all()
-
-    print(f"fetch signals for {service_name}{endpoint} (tenant: {tenant_id or 'all'}): {signals}")
-
-    if len(signals) < 3:
-        return {
-            'cache_enabled': False,
-            'circuit_breaker': False,
-            'reason': 'Not enough data yet (need 3+ signals)'
-        }
-    
-    # Calculate metrics from database (may be inaccurate due to sampling)
-    avg_latency = sum(s.latency_ms for s in signals) / len(signals)
-    error_count = sum(1 for s in signals if s.status == 'error')
-    error_rate = error_count / len(signals)
-
-    
-    
-    ai_decision = make_ai_decision(service_name, endpoint, avg_latency, error_rate)
-    
-    print(f"🤖 AI Decision: {ai_decision['reasoning']}")
-    
-    # Add circuit breaker status
-    if ai_decision.get('circuit_breaker'):
-        print(f"⚠️  Circuit breaker activated for {service_name}{endpoint}")
-    
-    if ai_decision.get('alert'):
-        print(f"🚨 Alert: Issues detected for {service_name}{endpoint}")
-        
-        subject = f"🚨 Alert: Issue Detected in {service_name}"
-
-        return {
-            "cache_enabled": ai_decision["cache_enabled"],
-            "circuit_breaker": ai_decision.get("circuit_breaker", False),
-            "reason": ai_decision["reasoning"],
-            "send_alert": True,
-            "metrics": {
-                "avg_latency": avg_latency,
-                "error_rate": error_rate,
-            },
-            "ai_decision": ai_decision,
-        }
-    
+    # No real-time data in Redis or snapshot — not enough data yet to make
+    # a reliable AI decision.  Return safe defaults so the service keeps
+    # running normally until enough signals have been collected.
+    print(f"⚠️  No metrics found for {service_name}{endpoint} — returning safe defaults (need 3+ signals)")
     return {
-        'cache_enabled': ai_decision['cache_enabled'],
-        'circuit_breaker': ai_decision.get('circuit_breaker', False),
-        'rate_limit_enabled': ai_decision.get('rate_limit_enabled', False),  # NEW
-        'reason': ai_decision['reasoning'],
-        "send_alert": False,
+        'cache_enabled': False,
+        'circuit_breaker': False,
+        'rate_limit_customer': False,
+        'queue_deferral': False,
+        'load_shedding': False,
+        'reason': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
+        'send_alert': False,
     }
-
