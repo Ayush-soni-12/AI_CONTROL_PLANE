@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import create_async_engine , AsyncSession , async_se
 from app.config import settings
 
 
-DATABASE_URL = settings.DATABASE_URL
-
+# Remove ?pgbouncer=true if present (SQLAlchemy drivers reject it)
+DATABASE_URL = settings.DATABASE_URL.replace("?pgbouncer=true", "")
 
 # ============================================================================
 # SYNC ENGINE (for background jobs that run in threads)
