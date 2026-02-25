@@ -54,6 +54,7 @@ async_engine = create_async_engine(
         # Required for Supabase Transaction Pooler (PgBouncer transaction mode)
         # PgBouncer transaction mode does not support prepared statements
         "prepared_statement_cache_size": 0,
+        "statement_cache_size": 0,  # asyncpg requires this as well
     }
 )
 
