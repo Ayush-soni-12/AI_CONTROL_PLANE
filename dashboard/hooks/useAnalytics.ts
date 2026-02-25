@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
+const API_BASE = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000';
+
 interface TrafficPattern {
   hour: number;
   day_of_week: number;
@@ -33,7 +35,7 @@ export const useTrafficPatterns = (days: number = 7) => {
     queryKey: ['trafficPatterns', days],
     queryFn: async () => {
       const response = await fetch(
-        `http://localhost:8000/api/analytics/traffic-patterns?days=${days}`,
+        `${API_BASE}/api/analytics/traffic-patterns?days=${days}`,
         {
           credentials: 'include'
         }
@@ -66,7 +68,7 @@ export const usePercentiles = (days: number = 7, serviceName?: string) => {
       }
       
       const response = await fetch(
-        `http://localhost:8000/api/analytics/percentiles?${params}`,
+        `${API_BASE}/api/analytics/percentiles?${params}`,
         {
           credentials: 'include'
         }

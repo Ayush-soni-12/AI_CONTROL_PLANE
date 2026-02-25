@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 
+const CONTROL_PLANE_URL = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000';
+
 /**
  * Connection status for SSE streams
  */
@@ -56,7 +58,7 @@ export function useSSE<T>(
         setError(null);
 
         // Create EventSource connection
-        const eventSource = new EventSource(`http://localhost:8000${url}`, {
+        const eventSource = new EventSource(`${CONTROL_PLANE_URL}${url}`, {
           withCredentials: true, // Include cookies for authentication
         });
 
