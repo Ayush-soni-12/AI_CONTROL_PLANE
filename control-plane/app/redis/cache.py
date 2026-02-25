@@ -14,9 +14,10 @@ REDIS_URL = settings.REDIS_URL
 
 redis_client = redis.from_url(
     REDIS_URL,
-    decode_responses=True,  # Return strings instead of bytes
-    socket_connect_timeout=2,
-    socket_timeout=2
+    decode_responses=True,      # Return strings instead of bytes
+    socket_connect_timeout=5,
+    socket_timeout=5,
+    ssl_cert_reqs=None,          # Required for Upstash TLS (rediss://)
 )
 
 

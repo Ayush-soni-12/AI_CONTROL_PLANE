@@ -15,8 +15,8 @@ engine = create_engine(
     DATABASE_URL,
     echo=False,
     poolclass=QueuePool,
-    pool_size=20,
-    max_overflow=10,
+    pool_size=5,           # Reduced: 2 containers × 5 = 10 sync connections
+    max_overflow=5,
     pool_timeout=30,
     pool_recycle=3600,
     pool_pre_ping=True
@@ -37,17 +37,24 @@ def get_db():
 # ============================================================================
 # ASYNC ENGINE (for FastAPI endpoints)
 # ============================================================================
-# Convert postgresql:// to postgresql+asyncpg:// for async driver
-async_database_url = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+# Strip ?pgbouncer=true from URL — asyncpg doesn't understand it.
+# PgBouncer compatibility is handled via connect_args instead.
+_async_url = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+async_database_url = _async_url.replace("?pgbouncer=true", "")
 
 async_engine = create_async_engine(
     async_database_url,
     echo=False,
-    pool_size=10,          # Reduced - async is more efficient
+    pool_size=5,           # Reduced: 2 containers × 5 = 10 async connections
     max_overflow=5,
     pool_timeout=30,
     pool_recycle=3600,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    connect_args={
+        # Required for Supabase Transaction Pooler (PgBouncer transaction mode)
+        # PgBouncer transaction mode does not support prepared statements
+        "prepared_statement_cache_size": 0,
+    }
 )
 
 AsyncSessionLocal = async_sessionmaker(
