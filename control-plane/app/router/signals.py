@@ -109,6 +109,8 @@ async def get_config(
         priority=priority
     )
 
+    print(f"Decision: {decision}")
+
     # ===== EXISTING FEATURES: Alerts, Caching, Circuit Breaker =====
     
     # Send alert if needed — publish to RabbitMQ email queue for reliable delivery

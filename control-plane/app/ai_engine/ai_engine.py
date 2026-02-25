@@ -1,4 +1,4 @@
-from app.ai_engine.threshold_manager import get_all_thresholds, DEFAULTS
+from app.ai_engine.threshold_manager import get_all_thresholds, get_all_thresholds_with_override, _get_active_override, _apply_override, DEFAULTS
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
 
@@ -277,17 +277,26 @@ async def get_ai_tuned_decision(
     numbers for the fields they specified and AI numbers for the rest.
     """
 
-    # Load AI-tuned thresholds, then apply any manual overrides on top
+    # Load AI-tuned thresholds, then apply any active ConfigOverride on top.
+    # If the caller already fetched the override and passed it as threshold_overrides,
+    # we use that directly (avoids a second DB round-trip).  Otherwise we fetch it
+    # ourselves so SSE and other callers that don't pass threshold_overrides still
+    # benefit from user-set values.
     if db and user_id:
         thresholds = await get_all_thresholds(db, user_id, service_name, endpoint)
     else:
         thresholds = {**DEFAULTS, 'source': 'default'}
 
-    # Merge: user-specified values win, unset fields stay AI-controlled
-    if threshold_overrides:
+    if threshold_overrides is not None:
+        # Caller pre-fetched the override dict — merge it directly
         for key, val in threshold_overrides.items():
             if val is not None:
                 thresholds[key] = val
+    elif db and user_id:
+        # Auto-fetch and apply any active ConfigOverride from the DB
+        override = await _get_active_override(db, user_id, service_name, endpoint)
+        if override is not None:
+            thresholds = _apply_override(thresholds, override)
     
     # Build state with AI-tuned thresholds
     is_ai_tuned = thresholds.get('source') == 'ai'

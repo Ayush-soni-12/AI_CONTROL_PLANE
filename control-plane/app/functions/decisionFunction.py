@@ -4,70 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from ..database import models
 from ..ai_engine import ai_engine
-from ..ai_engine.threshold_manager import get_all_thresholds
+from ..ai_engine.threshold_manager import get_all_thresholds, _get_active_override, _apply_override
 from datetime import datetime, timezone
 make_ai_decision = ai_engine.make_ai_decision
 get_ai_tuned_decision = ai_engine.get_ai_tuned_decision
 
-
-async def _get_active_override(
-    db: AsyncSession,
-    user_id: int,
-    service_name: str,
-    endpoint: str,
-) -> models.ConfigOverride | None:
-    """
-    Return the active, non-expired ConfigOverride for this endpoint, or None.
-    Fast single-row query using covering index idx_override_active_lookup.
-    """
-    if db is None or user_id is None:
-        return None
-    now = datetime.now(timezone.utc)
-    stmt = (
-        select(models.ConfigOverride)
-        .where(
-            and_(
-                models.ConfigOverride.user_id == user_id,
-                models.ConfigOverride.service_name == service_name,
-                models.ConfigOverride.endpoint == endpoint,
-                models.ConfigOverride.is_active == True,
-                models.ConfigOverride.expires_at > now,
-            )
-        )
-        .order_by(models.ConfigOverride.created_at.desc())
-        .limit(1)
-    )
-    result = await db.execute(stmt)
-    return result.scalars().first()
-
-
-def _merge_override_thresholds(thresholds: dict, override: models.ConfigOverride) -> dict:
-    """
-    Merge a ConfigOverride's numeric values into an existing thresholds dict.
-
-    Only non-None fields from the override replace the AI value.
-    The AI remains in full control of any threshold the user didn't set.
-
-    Returns a new merged dict (original is not mutated).
-    """
-    merged = dict(thresholds)
-
-    if override.cache_latency_ms is not None:
-        merged['cache_latency_ms'] = override.cache_latency_ms
-
-    if override.circuit_breaker_error_rate is not None:
-        merged['circuit_breaker_error_rate'] = override.circuit_breaker_error_rate
-
-    if override.queue_deferral_rpm is not None:
-        merged['queue_deferral_rpm'] = override.queue_deferral_rpm
-
-    if override.load_shedding_rpm is not None:
-        merged['load_shedding_rpm'] = override.load_shedding_rpm
-
-    if override.rate_limit_customer_rpm is not None:
-        merged['rate_limit_customer_rpm'] = override.rate_limit_customer_rpm
-
-    return merged
 
 async def make_decision(
     service_name,
@@ -93,7 +34,7 @@ async def make_decision(
         endpoint: API endpoint path
         tenant_id: Optional tenant identifier for multi-tenant filtering
         db: Database session (used as fallback)
-        user_id: User ID (required for real-time aggregates)_merge_override_thresholds
+        user_id: User ID (required for real-time aggregates)
         customer_identifier: IP or session ID (for per-customer rate limiting)
         priority: Request priority (critical/high/medium/low)
     

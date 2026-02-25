@@ -225,7 +225,7 @@ async def stream_services(
                 # Reuse the same logic from signals.py get_services endpoint
                 from app.realtime_aggregates import get_realtime_metrics
                 from app.ai_engine.ai_engine import get_ai_tuned_decision
-                from app.ai_engine.threshold_manager import get_all_thresholds
+                from app.ai_engine.threshold_manager import get_all_thresholds_with_override
                 
                 # STEP 1: Get unique service/endpoint combinations
                 stmt = select(
@@ -318,8 +318,8 @@ async def stream_services(
                         db=db
                     )
                     
-                    # Get threshold values for frontend dynamic icons
-                    thresholds = await get_all_thresholds(
+                    # Get effective threshold values (AI + override) for frontend
+                    thresholds = await get_all_thresholds_with_override(
                         db, current_user.id, service_name, endpoint_normalized
                     )
                     
@@ -472,7 +472,7 @@ async def stream_endpoint_detail(
                 
                 from app.realtime_aggregates import get_realtime_metrics
                 from app.ai_engine.ai_engine import get_ai_tuned_decision
-                from app.ai_engine.threshold_manager import get_all_thresholds
+                from app.ai_engine.threshold_manager import get_all_thresholds_with_override
                 
                 # Get metrics from Redis
                 metrics = await get_realtime_metrics(
@@ -540,8 +540,8 @@ async def stream_endpoint_detail(
                     db=db
                 )
                 
-                # Get threshold values for frontend dynamic icons
-                thresholds = await get_all_thresholds(
+                # Get effective threshold values (AI + override) for frontend
+                thresholds = await get_all_thresholds_with_override(
                     db, current_user.id, service_name, endpoint_path
                 )
                 
