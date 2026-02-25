@@ -363,20 +363,19 @@ function DocsPageInner() {
         {/* ── Page Header ───────────────────────────────────────── */}
         <div className="px-8 py-6 border-b border-gray-800/50 backdrop-blur-sm sticky top-0 z-10 bg-gray-950/80">
           <div className="max-w-7xl mx-auto flex items-center gap-4">
-            <div className="relative">
-              <div className="absolute inset-0 bg-linear-to-br from-purple-500 to-pink-500 rounded-xl blur-md opacity-50" />
-              <div className="relative p-2.5 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-                <BookOpen className="w-6 h-6 text-purple-400" />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                Documentation
-              </h1>
-              <p className="text-gray-500 text-sm">
-                Everything you need to know about AI Control Plane
-              </p>
-            </div>
+          <div className="flex items-center gap-4">
+          <div className="p-3 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+            <BookOpen className="w-8 h-8 text-purple-400" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+              Documentation
+            </h1>
+            <p className="text-gray-400 mt-1">
+               AI-powered threshold optimization and pattern detection
+            </p>
+          </div>
+        </div>
 
             {/* Breadcrumb */}
             {activeDocMeta && (

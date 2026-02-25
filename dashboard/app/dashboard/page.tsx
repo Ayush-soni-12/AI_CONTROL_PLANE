@@ -95,20 +95,22 @@ export default function DashboardPage() {
       <div className="lg:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
           {/* Header with Connection Status */}
-          <div className="mb-10">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-3 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-                <Server className="w-8 h-8 text-purple-400" />
-              </div>
-              <h1 className="text-5xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent animate-linear">
-                AI Control Plane
-              </h1>
-              <ConnectionStatus status={sseStatus} onReconnect={reconnectSSE} />
-            </div>
-            <p className="text-gray-400 text-lg ml-16">
+        <div className="flex items-center gap-4 mb-8">
+          <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+            <Server className="w-10 h-10 text-purple-400" />
+          </div>
+          <div>
+            <h1 className="text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+              Neural Control
+            </h1>
+            <p className="text-gray-400 mt-1">
               Real-time microservice monitoring and autonomous control
             </p>
           </div>
+          <div className="ml-auto">
+          <ConnectionStatus status={sseStatus} onReconnect={reconnectSSE} />
+          </div>
+        </div>
 
           {/* Dynamic Metrics - SSE handles own loading */}
           <DynamicMetrics />

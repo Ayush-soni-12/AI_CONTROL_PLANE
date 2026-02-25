@@ -84,14 +84,13 @@ export function DashboardSidebar() {
             <Link href="/dashboard" className="block">
               <div className="flex items-center gap-3 mb-2">
                 <div className="relative">
-                  <div className="absolute inset-0 bg-linear-to-br from-purple-500 to-pink-500 rounded-xl blur-md opacity-50"></div>
-                  <div className="relative p-2.5 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+                    <div className=" p-2.5 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
                     <Server className="w-6 h-6 text-purple-400" />
                   </div>
                 </div>
                 <div>
                   <h1 className="text-xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                    AI Control Plane
+                    Neural Control
                   </h1>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <Sparkles className="w-3 h-3 text-purple-400" />
