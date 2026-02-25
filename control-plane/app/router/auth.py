@@ -65,8 +65,10 @@ async def signup(response: Response, new_user: Schema.SignupRequest, db: AsyncSe
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,      # HTTPS only
-        max_age=60 * 60   # 1 hour
+        secure=True,              # Required for cross-site cookies (HTTPS)
+        samesite="none",          # Required for cross-site/cross-subdomain
+        domain=".neuralcontrol.online", # Allows cookie sharing across subdomains
+        max_age=60 * 60           # 1 hour
     )
 
 
@@ -111,8 +113,10 @@ async def login(response: Response, credentials: Schema.LoginRequest, db: AsyncS
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,      # HTTPS only
-        max_age=60 * 60   # 1 hour
+        secure=True,              # Required for cross-site cookies (HTTPS)
+        samesite="none",          # Required for cross-site/cross-subdomain
+        domain=".neuralcontrol.online", # Allows cookie sharing across subdomains
+        max_age=60 * 60           # 1 hour
     )
 
 
@@ -148,7 +152,9 @@ async def logout(response: Response):
     response.delete_cookie(
         key="access_token",
         httponly=True,
-        secure=False,
+        secure=True,
+        samesite="none",
+        domain=".neuralcontrol.online"
     )
     
     return {"message": "Successfully logged out"}
