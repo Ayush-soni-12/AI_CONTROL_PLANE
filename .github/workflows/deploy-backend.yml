@@ -1,0 +1,41 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "control-plane/**" # Only trigger when backend changes
+      - "docker-compose.prod.yml"
+      - "nginx/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via Docker Compose
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/AI_CONTROL_PLANE
+
+            # Pull latest code
+            git pull origin main
+
+            # Rebuild and restart with zero-downtime rolling update
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --build \
+              --scale control-plane-1=1 \
+              --scale control-plane-2=1
+
+            # Remove old unused images to save disk space
+            docker image prune -f
+
+            # Show running containers
+            docker compose -f docker-compose.prod.yml ps
