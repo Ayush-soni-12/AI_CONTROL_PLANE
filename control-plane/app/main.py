@@ -50,27 +50,11 @@ app.add_middleware(
 async def home():
     return {"message": "Control Plane is running!"}
 
-@app.get("/api/test")
-async def test_connection(db: AsyncSession = Depends(get_async_db)):
-    """Test endpoint to verify database and redis connections"""
-    status = {"api": "ok", "database": "checking...", "redis": "checking..."}
-    
-    # Test Database
-    try:
-        from sqlalchemy import text
-        await db.execute(text("SELECT 1"))
-        status["database"] = "connected (Supabase)"
-    except Exception as e:
-        status["database"] = f"error: {str(e)}"
-        
-    # Test Redis
-    try:
-        await redis_client.ping()
-        status["redis"] = "connected (Upstash)"
-    except Exception as e:
-        status["redis"] = f"error: {str(e)}"
-        
-    return status
+
+@app.get("/test")
+async def home():
+    return {"message": "test successful"}
+
 
 @app.on_event("startup")
 async def startup():
