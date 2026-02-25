@@ -18,10 +18,16 @@ from app.queue.email_consumer import start_email_consumer
 from app.queue.connection import close_rabbitmq_connection
 import asyncio
 
+from sqlalchemy.exc import IntegrityError, ProgrammingError
+
 # Create the app
 app = FastAPI()
 
-Base.metadata.create_all(bind=engine)
+# Wrap create_all in try/except to handle race condition when 2 containers start at same time
+try:
+    Base.metadata.create_all(bind=engine)
+except (IntegrityError, ProgrammingError) as e:
+    print(f"Table creation skipped (likely created by other container): {e}")
 
 # Initialize background scheduler (Async version for FastAPI loop)
 scheduler = AsyncIOScheduler()
