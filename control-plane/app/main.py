@@ -28,7 +28,11 @@ scheduler = AsyncIOScheduler()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://neuralcontrol.online",
+        "https://www.neuralcontrol.online",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
