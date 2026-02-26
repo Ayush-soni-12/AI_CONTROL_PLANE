@@ -17,6 +17,7 @@ from app.queue.consumer import start_signal_consumer
 from app.queue.email_consumer import start_email_consumer
 from app.queue.connection import close_rabbitmq_connection
 import asyncio
+# from app.config import settings
 
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 
@@ -36,6 +37,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
         "https://neuralcontrol.online",
         "https://www.neuralcontrol.online",
     ],
@@ -44,6 +47,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# print("environment: ", os.getenv("ENVIRONMENT"))
+# print("redis url: ", os.getenv("REDIS_URL"))
+
+# print("environment: ", settings.ENVIRONMENT)
+# print("redis url: ", settings.REDIS_URL)
 
 # Create one simple endpoint
 @app.get("/")

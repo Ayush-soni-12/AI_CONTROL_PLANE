@@ -5,9 +5,12 @@ from app.database import models, Schema
 from app.database.database import get_async_db
 from app.utils import get_password_hash, verify_password
 from app.router.token import create_access_token, get_current_user
+from app.config import settings
 import secrets
 import time
 import hashlib 
+import os
+
 
 router = APIRouter(
     prefix="/api/auth",
@@ -60,14 +63,16 @@ async def signup(response: Response, new_user: Schema.SignupRequest, db: AsyncSe
     # Create access token (use user.id, not new_user.id)
     access_token = create_access_token(data={"user_id": str(user.id)})
 
+    is_prod = settings.ENVIRONMENT == "production"
+    print("is_prod: ", is_prod)
 
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=True,              # Required for cross-site cookies (HTTPS)
-        samesite="none",          # Required for cross-site/cross-subdomain
-        domain=".neuralcontrol.online", # Allows cookie sharing across subdomains
+        secure=is_prod,              # Required for cross-site cookies (HTTPS)
+        samesite="none" if is_prod else "lax",          # Required for cross-site/cross-subdomain
+        domain=".neuralcontrol.online" if is_prod else None, # Allows cookie sharing across subdomains
         max_age=60 * 60           # 1 hour
     )
 
@@ -109,13 +114,15 @@ async def login(response: Response, credentials: Schema.LoginRequest, db: AsyncS
     # Create access token
     access_token = create_access_token(data={"user_id": str(user.id)})
 
+    is_prod = settings.ENVIRONMENT == "production"
+
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=True,              # Required for cross-site cookies (HTTPS)
-        samesite="none",          # Required for cross-site/cross-subdomain
-        domain=".neuralcontrol.online", # Allows cookie sharing across subdomains
+        secure=is_prod,              # Required for cross-site cookies (HTTPS)
+        samesite="none" if is_prod else "lax",          # Required for cross-site/cross-subdomain
+        domain=".neuralcontrol.online" if is_prod else None, # Allows cookie sharing across subdomains
         max_age=60 * 60           # 1 hour
     )
 
@@ -149,12 +156,14 @@ async def logout(response: Response):
     """
     Logout user by clearing the access token cookie
     """
+    is_prod = settings.ENVIRONMENT == "production"
+
     response.delete_cookie(
         key="access_token",
         httponly=True,
-        secure=True,
-        samesite="none",
-        domain=".neuralcontrol.online"
+        secure=is_prod,
+        samesite="none" if is_prod else "lax",
+        domain=".neuralcontrol.online" if is_prod else None
     )
     
     return {"message": "Successfully logged out"}

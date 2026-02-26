@@ -257,7 +257,7 @@ async def get_realtime_metrics(
         
         # TIER 2: Fallback to PostgreSQL snapshots (accurate but slightly stale)
         if db is not None:
-            from app.aggregate_persistence import get_snapshot_metrics
+            from app.redis.aggregate_persistence import get_snapshot_metrics
             
             snapshot_metrics = await get_snapshot_metrics(
                 user_id=user_id,

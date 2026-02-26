@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     
     # RabbitMQ URL for signal queue (@ in password must be URL-encoded as %40)
     RABBITMQ_URL: str 
+
+    ENVIRONMENT: str | None = "production"
     
 
     
