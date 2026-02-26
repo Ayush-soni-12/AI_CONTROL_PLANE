@@ -92,10 +92,10 @@ export default function DashboardPage() {
   return (
     <>
       <DashboardSidebar />
-      <div className="lg:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
+      <div className="2xl:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
           {/* Header with Connection Status */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 mb-8 mt-12 lg:mt-0 relative">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 mb-8 mt-12 2xl:mt-0 relative">
             <div className="shrink-0 p-3 sm:p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
               <Server className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
             </div>

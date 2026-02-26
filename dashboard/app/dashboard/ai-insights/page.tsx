@@ -66,10 +66,10 @@ export default function AIInsightsPage() {
   return (
     <>
       <DashboardSidebar />
-      <div className="lg:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
+      <div className="2xl:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          
+
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-8 text-center sm:text-left">
             <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
               <Brain className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
@@ -100,9 +100,9 @@ export default function AIInsightsPage() {
                 className="w-full sm:w-auto px-4 py-3 rounded-xl bg-gray-900/80 border border-gray-800 text-white text-sm focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all appearance-none pr-10"
                 style={{
                   backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 1rem center',
-                  backgroundSize: '1em'
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 1rem center",
+                  backgroundSize: "1em",
                 }}
               >
                 <option value="">All Services</option>

@@ -45,7 +45,7 @@ export default function ServiceDetailPage() {
   return (
     <>
       <DashboardSidebar />
-      <div className="lg:ml-64 min-h-screen p-4 sm:p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
+      <div className="2xl:ml-64 min-h-screen p-4 sm:p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
           {/* Static Back Button */}
           <button

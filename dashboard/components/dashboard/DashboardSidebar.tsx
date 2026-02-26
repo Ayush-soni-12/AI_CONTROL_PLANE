@@ -67,7 +67,7 @@ export function DashboardSidebar() {
       {/* Mobile Menu Button */}
       <button
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="lg:hidden fixed top-6 left-6 z-50 p-3 rounded-xl bg-gray-900/90 backdrop-blur-xl border border-gray-800 hover:bg-gray-800 transition-all duration-300 shadow-lg"
+        className="2xl:hidden fixed top-6 left-6 z-50 p-3 rounded-xl bg-gray-900/90 backdrop-blur-xl border border-gray-800 hover:bg-gray-800 transition-all duration-300 shadow-lg"
       >
         {isMobileMenuOpen ? (
           <X className="w-5 h-5 text-gray-300" />
@@ -81,7 +81,7 @@ export function DashboardSidebar() {
         className={`
           fixed top-0 left-0 h-screen w-72 bg-linear-to-b from-gray-950 via-gray-900 to-gray-950 border-r border-gray-800/50 z-40
           transform transition-transform duration-300 ease-in-out
-          lg:translate-x-0
+          2xl:translate-x-0
           ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
@@ -210,7 +210,7 @@ export function DashboardSidebar() {
       {isMobileMenuOpen && (
         <div
           onClick={() => setIsMobileMenuOpen(false)}
-          className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-30 animate-in fade-in duration-300"
+          className="2xl:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-30 animate-in fade-in duration-300"
           style={{ zIndex: 35 }}
         />
       )}

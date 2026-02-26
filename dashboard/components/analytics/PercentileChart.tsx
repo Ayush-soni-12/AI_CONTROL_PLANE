@@ -32,6 +32,7 @@ export function PercentileChart() {
 
     // For each timestamp, create an entry with all endpoints' data
     return percentileResponse.data.map((point) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const entry: any = {
         time: new Date(point.timestamp).toLocaleString("en-US", {
           month: "short",
