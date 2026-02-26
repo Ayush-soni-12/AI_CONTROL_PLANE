@@ -18,10 +18,17 @@ import {
   BookOpen,
   Shield,
 } from "lucide-react";
-// import dynamic from "next/dynamic";
+import dynamic from "next/dynamic";
 import { useLogout } from "@/hooks/useSignals";
-import { DynamicUserProfile } from "@/components/dashboard/DynamicUserProfile";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const DynamicUserProfile = dynamic(
+  () =>
+    import("@/components/dashboard/DynamicUserProfile").then(
+      (mod) => mod.DynamicUserProfile,
+    ),
+  { ssr: false },
+);
 
 /**
  * Dashboard Sidebar Component

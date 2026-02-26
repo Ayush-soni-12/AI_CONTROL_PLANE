@@ -110,7 +110,8 @@ export const useSignup = () => {
     mutationFn: signup,
     onSuccess: (data) => {
       // Update auth cache after successful signup
-      queryClient.setQueryData(['auth'], data.user);
+      queryClient.setQueryData(['auth', 'user'], data.user);
+      queryClient.setQueryData(['auth', 'user', 'suspense'], data.user);
     },
   });
 };
@@ -125,7 +126,8 @@ export const useLogin = () => {
     mutationFn: login,
     onSuccess: (data) => {
       // Update auth cache after successful login
-      queryClient.setQueryData(['auth'], data.user);
+      queryClient.setQueryData(['auth', 'user'], data.user);
+      queryClient.setQueryData(['auth', 'user', 'suspense'], data.user);
     },
   });
 };
@@ -158,6 +160,7 @@ export const useCheckAuth = () => {
     queryFn: authenticate,
     staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
     retry: false, // Don't retry if not authenticated
+    // enabled: typeof window !== 'undefined', // Skip SSR fetch because it lacks cookies
   });
 }
 

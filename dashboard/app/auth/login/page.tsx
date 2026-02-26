@@ -23,11 +23,10 @@ import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
 import { useLogin } from "@/hooks/useSignals";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 
 function LoginPage() {
   const router = useRouter();
-  const { mutate: login, isPending, isError, error, isSuccess } = useLogin();
+  const { mutate: login, isPending, isError, error } = useLogin();
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -38,18 +37,19 @@ function LoginPage() {
     },
   });
 
-  // Redirect to dashboard on successful login
-  useEffect(() => {
-    if (isSuccess) {
-      router.push("/dashboard");
-    }
-  }, [isSuccess, router]);
-
   const onSubmit = async (data: z.infer<typeof loginSchema>) => {
-    login({
-      email: data.email,
-      password: data.password,
-    });
+    login(
+      {
+        email: data.email,
+        password: data.password,
+      },
+      {
+        onSuccess: () => {
+          router.refresh(); // Clear Next.js router cache
+          router.push("/dashboard");
+        },
+      },
+    );
   };
 
   return (

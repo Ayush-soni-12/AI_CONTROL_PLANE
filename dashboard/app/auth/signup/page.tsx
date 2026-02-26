@@ -18,11 +18,10 @@ import { Spinner } from "@/components/ui/spinner";
 import Link from "next/link";
 import { useSignup } from "@/hooks/useSignals";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 
 function SignupPage() {
   const router = useRouter();
-  const { mutate: signup, isPending, isError, error, isSuccess } = useSignup();
+  const { mutate: signup, isPending, isError, error } = useSignup();
 
   const form = useForm<z.infer<typeof signupSchema>>({
     resolver: zodResolver(signupSchema),
@@ -35,20 +34,21 @@ function SignupPage() {
     },
   });
 
-  // Redirect to dashboard on successful signup
-  useEffect(() => {
-    if (isSuccess) {
-      router.push("/dashboard");
-    }
-  }, [isSuccess, router]);
-
   const onSubmit = async (data: z.infer<typeof signupSchema>) => {
-    signup({
-      name: data.name,
-      email: data.email,
-      password: data.password,
-      confirmPassword: data.confirmPassword,
-    });
+    signup(
+      {
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        confirmPassword: data.confirmPassword,
+      },
+      {
+        onSuccess: () => {
+          router.refresh(); // Clear Next.js router cache
+          router.push("/dashboard");
+        },
+      },
+    );
   };
 
   return (
