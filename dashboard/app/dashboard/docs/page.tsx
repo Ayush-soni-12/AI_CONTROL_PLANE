@@ -1,9 +1,7 @@
 "use client";
 
-import { useCheckAuth } from "@/hooks/useSignals";
-import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
-import { LogIn, BookOpen, ChevronRight, Search, X } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { BookOpen, ChevronRight, Search, X } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import {
   useEffect,
   useState,
@@ -104,12 +102,12 @@ function MarkdownContent({
       components={{
         // Headings
         h1: ({ children }) => (
-          <h1 className="text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent mb-6 mt-2 pb-4 border-b border-gray-800">
+          <h1 className="text-3xl sm:text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent mb-6 mt-2 pb-4 border-b border-gray-800">
             {children}
           </h1>
         ),
         h2: ({ children }) => (
-          <h2 className="text-2xl font-bold text-white mt-10 mb-4 pb-2 border-b border-gray-800/60 flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-white mt-10 mb-4 pb-2 border-b border-gray-800/60 flex items-center gap-2">
             {children}
           </h2>
         ),
@@ -283,7 +281,6 @@ function MarkdownContent({
 
 // ─── Inner page (uses useSearchParams) ───────────────────────────────────────
 function DocsPageInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const initialDoc = searchParams.get("doc") ?? "README";
 
@@ -291,15 +288,6 @@ function DocsPageInner() {
   const [content, setContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-
-  const { data: user, isLoading: isAuthLoading } = useCheckAuth();
-
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isAuthLoading && !user) {
-      router.push("/auth/login");
-    }
-  }, [user, isAuthLoading, router]);
 
   // Fetch markdown content when activeDoc changes
   const fetchDoc = useCallback(async (slug: string) => {
@@ -340,49 +328,32 @@ function DocsPageInner() {
 
   const activeDocMeta = docsList.find((d) => d.slug === activeDoc);
 
-  // Auth loading state
-  if (isAuthLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-purple-950/5 to-background">
-        <div className="text-center">
-          <div className="inline-block p-4 rounded-2xl bg-purple-500/10 mb-4">
-            <LogIn className="w-12 h-12 text-purple-400 animate-pulse" />
-          </div>
-          <p className="text-gray-400 text-lg">Verifying authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) return null;
-
   return (
     <>
-      <DashboardSidebar />
-      <div className="lg:ml-64 min-h-screen bg-linear-to-br from-background via-purple-950/5 to-background">
+      <div className="min-w-full min-h-screen bg-linear-to-br from-background via-purple-950/5 to-background">
         {/* ── Page Header ───────────────────────────────────────── */}
-        <div className="px-8 py-6 border-b border-gray-800/50 backdrop-blur-sm sticky top-0 z-10 bg-gray-950/80">
-          <div className="max-w-7xl mx-auto flex items-center gap-4">
-          <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-            <BookOpen className="w-8 h-8 text-purple-400" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-              Documentation
-            </h1>
-            <p className="text-gray-400 mt-1">
-               AI-powered threshold optimization and pattern detection
-            </p>
-          </div>
-        </div>
+        <div className="px-4 sm:px-8 py-6 border-b border-gray-800/50 backdrop-blur-sm sticky top-0 z-10 bg-gray-950/80">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
+                <BookOpen className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+                  Documentation
+                </h1>
+                <p className="text-sm sm:text-base text-gray-400 mt-1">
+                  AI-powered threshold optimization and pattern detection
+                </p>
+              </div>
+            </div>
 
             {/* Breadcrumb */}
             {activeDocMeta && (
-              <div className="ml-auto flex items-center gap-2 text-sm text-gray-500">
+              <div className="flex sm:ml-auto items-center gap-2 text-sm text-gray-500">
                 <span>Docs</span>
                 <ChevronRight className="w-3 h-3" />
-                <span className="text-purple-400 font-medium">
+                <span className="text-purple-400 font-medium whitespace-nowrap">
                   {activeDocMeta.title}
                 </span>
               </div>
@@ -390,9 +361,9 @@ function DocsPageInner() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto flex">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row">
           {/* ── Left Navigation Panel ────────────────────────────── */}
-          <aside className="w-72 shrink-0 sticky top-[73px] h-[calc(100vh-73px)] overflow-y-auto border-r border-gray-800/50 py-6 px-4">
+          <aside className="w-full md:w-72 shrink-0 md:sticky md:top-[98px] h-auto md:h-[calc(100vh-98px)] overflow-y-auto border-b md:border-b-0 md:border-r border-gray-800/50 py-6 px-4">
             {/* Search */}
             <div className="relative mb-6">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
@@ -480,7 +451,7 @@ function DocsPageInner() {
           </aside>
 
           {/* ── Right Content Panel ───────────────────────────────── */}
-          <main className="flex-1 min-w-0 px-10 py-8">
+          <main className="flex-1 min-w-0 px-4 sm:px-10 py-8">
             {isLoading ? (
               <div className="animate-pulse space-y-6">
                 <div className="h-10 w-3/4 rounded-2xl bg-gray-800/60" />

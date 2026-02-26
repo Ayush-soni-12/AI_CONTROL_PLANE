@@ -59,7 +59,7 @@ export function CreateOverrideForm({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* Service & Endpoint */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-xs font-medium text-gray-400 mb-1.5 block">
               Service Name
@@ -148,9 +148,9 @@ export function CreateOverrideForm({ onClose }: { onClose: () => void }) {
               aiDefault="0.3"
               value={form.circuit_breaker_error_rate ?? null}
               onChange={(v) => set("circuit_breaker_error_rate", v)}
-              min={0.01}
+              min={0.1}
               max={1.0}
-              step={0.01}
+              step={0.1}
             />
             <ThresholdInput
               label="Queue Deferral RPM"
@@ -205,19 +205,19 @@ export function CreateOverrideForm({ onClose }: { onClose: () => void }) {
         )}
 
         {/* Actions */}
-        <div className="flex gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row gap-3 pt-1">
           <button
             onClick={handleSubmit}
             disabled={
               isPending || !form.service_name || !form.endpoint || !form.reason
             }
-            className="flex-1 py-2.5 rounded-xl bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-purple-500/20"
+            className="w-full sm:flex-1 py-2.5 rounded-xl bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all duration-200 shadow-lg shadow-purple-500/20"
           >
             {isPending ? "Creating…" : "Create Override"}
           </button>
           <button
             onClick={onClose}
-            className="px-5 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 text-sm font-medium transition-colors"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 text-sm font-medium transition-colors"
           >
             Cancel
           </button>

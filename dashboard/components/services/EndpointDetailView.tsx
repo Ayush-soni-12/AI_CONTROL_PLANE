@@ -37,9 +37,9 @@ export function EndpointDetailView({
 
   if (status === "connecting" || !detail) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 bg-card/50 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
-        <div className="w-12 h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin mb-4" />
-        <p className="text-gray-400 animate-pulse">
+      <div className="flex flex-col items-center justify-center py-12 sm:py-20 px-4 bg-card/50 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
+        <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin mb-4" />
+        <p className="text-sm sm:text-base text-gray-400 animate-pulse text-center">
           Analyzing endpoint performance...
         </p>
       </div>
@@ -48,9 +48,9 @@ export function EndpointDetailView({
 
   if (status === "error" || error) {
     return (
-      <div className="text-center py-16 bg-card/50 rounded-2xl border border-red-500/20 backdrop-blur-sm">
-        <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-        <h3 className="text-xl font-bold text-gray-200">
+      <div className="text-center py-10 sm:py-16 px-4 bg-card/50 rounded-2xl border border-red-500/20 backdrop-blur-sm">
+        <AlertTriangle className="w-12 h-12 sm:w-16 sm:h-16 text-red-400 mx-auto mb-4" />
+        <h3 className="text-lg sm:text-xl font-bold text-gray-200">
           Failed to load details
         </h3>
         <p className="text-gray-400 mb-6">{error || "Connection error"}</p>
@@ -72,15 +72,15 @@ export function EndpointDetailView({
     >
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
           <button
             onClick={onBack}
-            className="p-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 transition-colors group"
+            className="p-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 transition-colors group shrink-0 mt-1 sm:mt-0"
           >
-            <ArrowLeft className="w-5 h-5 text-purple-400 group-hover:-translate-x-1 transition-transform" />
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 group-hover:-translate-x-1 transition-transform" />
           </button>
-          <div>
-            <h2 className="text-3xl font-mono font-bold text-purple-300">
+          <div className="min-w-0">
+            <h2 className="text-2xl sm:text-3xl font-mono font-bold text-purple-300 break-all">
               {detail.endpoint}
             </h2>
             <p className="text-gray-400">
@@ -91,19 +91,19 @@ export function EndpointDetailView({
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
           <Badge
             variant={detail.cache_enabled ? "success" : "secondary"}
-            className="px-3 py-1"
+            className="px-2 sm:px-3 py-1 text-xs sm:text-sm"
           >
-            <Database className="w-3.5 h-3.5 mr-1.5" />
+            <Database className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5" />
             Cache {detail.cache_enabled ? "Active" : "Inactive"}
           </Badge>
           <Badge
             variant={detail.circuit_breaker ? "error" : "success"}
-            className="px-3 py-1"
+            className="px-2 sm:px-3 py-1 text-xs sm:text-sm"
           >
-            <Shield className="w-3.5 h-3.5 mr-1.5" />
+            <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5" />
             Circuit Breaker {detail.circuit_breaker ? "Open" : "Closed"}
           </Badge>
         </div>

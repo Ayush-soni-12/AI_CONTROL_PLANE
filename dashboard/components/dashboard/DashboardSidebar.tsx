@@ -84,7 +84,7 @@ export function DashboardSidebar() {
             <Link href="/dashboard" className="block">
               <div className="flex items-center gap-3 mb-2">
                 <div className="relative">
-                    <div className=" p-2.5 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+                  <div className=" p-2.5 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
                     <Server className="w-6 h-6 text-purple-400" />
                   </div>
                 </div>
@@ -199,11 +199,12 @@ export function DashboardSidebar() {
         </div>
       </aside>
 
-      {/* Overlay for mobile */}
+      {/* Overlay for mobile - increased z-index to be behind sidebar but above everything else */}
       {isMobileMenuOpen && (
         <div
           onClick={() => setIsMobileMenuOpen(false)}
           className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-30 animate-in fade-in duration-300"
+          style={{ zIndex: 35 }}
         />
       )}
     </>

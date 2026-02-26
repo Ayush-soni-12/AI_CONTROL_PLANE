@@ -31,9 +31,8 @@ import { useRouter } from "next/navigation";
 export default function ApiKeysPage() {
   const { mutate: generateKey, isPending: isGenerating } = useGenerateApiKey();
 
-    const { data: user, isLoading: isAuthLoading } = useCheckAuth();
-    const router = useRouter();
-
+  const { data: user, isLoading: isAuthLoading } = useCheckAuth();
+  const router = useRouter();
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -42,8 +41,7 @@ export default function ApiKeysPage() {
     }
   }, [user, isAuthLoading, router]);
 
-
-    if (!user) {
+  if (!user) {
     return null;
   }
 
@@ -69,9 +67,9 @@ export default function ApiKeysPage() {
         <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-4 sm:py-0 mb-4">
               <div>
-                <h1 className="text-4xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                <h1 className="text-3xl sm:text-4xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                   API Keys
                 </h1>
                 <p className="text-gray-400 mt-2">
@@ -81,7 +79,7 @@ export default function ApiKeysPage() {
               <Button
                 onClick={() => generateNewKey()}
                 disabled={isGenerating}
-                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-lg bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
               >
                 {isGenerating ? (
                   <>

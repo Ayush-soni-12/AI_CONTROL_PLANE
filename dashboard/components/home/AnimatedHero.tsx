@@ -104,7 +104,7 @@ export function AnimatedHero() {
       {/* Heading */}
       <h1
         ref={headingRef}
-        className="text-6xl sm:text-7xl md:text-8xl font-bold mb-8 leading-tight"
+        className="text-4xl sm:text-6xl md:text-8xl font-bold mb-6 sm:mb-8 leading-tight tracking-tight px-2"
         style={{ perspective: "800px" }}
       >
         <span
@@ -131,7 +131,7 @@ export function AnimatedHero() {
       {/* Subtitle */}
       <p
         ref={subtitleRef}
-        className="text-lg sm:text-xl text-gray-400 max-w-3xl mx-auto mb-12 leading-relaxed"
+        className="text-base sm:text-xl text-gray-400 max-w-3xl mx-auto mb-8 sm:mb-12 leading-relaxed px-4 sm:px-0"
         style={{ opacity: 0 }}
       >
         Autonomous traffic management with{" "}
@@ -151,11 +151,11 @@ export function AnimatedHero() {
       >
         <Link
           href="/dashboard"
-          className="group relative px-8 py-4 rounded-xl bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg shadow-purple-500/20"
+          className="group relative px-8 py-4 w-full sm:w-auto rounded-xl bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg shadow-purple-500/20"
           style={{ opacity: 0 }}
         >
           <span className="absolute inset-0 rounded-xl bg-linear-to-r from-purple-400 to-pink-400 blur-xl opacity-0 group-hover:opacity-40 transition-opacity duration-300" />
-          <span className="relative flex items-center gap-3 text-white font-semibold text-lg">
+          <span className="relative flex justify-center items-center gap-3 text-white font-semibold text-lg">
             <Activity className="w-5 h-5" />
             Launch Dashboard
             <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
@@ -163,7 +163,7 @@ export function AnimatedHero() {
         </Link>
 
         <button
-          className="px-8 py-4 rounded-xl border border-gray-700 hover:border-purple-500/50 hover:bg-gray-900/50 transition-all duration-300 backdrop-blur-sm"
+          className="px-8 py-4 w-full sm:w-auto rounded-xl border border-gray-700 hover:border-purple-500/50 hover:bg-gray-900/50 transition-all duration-300 backdrop-blur-sm"
           style={{ opacity: 0 }}
         >
           <Link href="/dashboard/docs">

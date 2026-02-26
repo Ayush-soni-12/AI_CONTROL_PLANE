@@ -9,7 +9,7 @@ import { TimeRangeSelector, TimeRange } from "@/components/TimeRangeSelector";
 import { ConnectionStatus } from "@/components/ui/connection-status";
 import { Server, LogIn, Database } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 
 export default function DashboardPage() {
@@ -48,7 +48,7 @@ export default function DashboardPage() {
   };
 
   // Build API URL based on selected time range
-  const getServicesApiUrl = () => {
+  const servicesApiUrl = useMemo(() => {
     if (timeRange === "7d") {
       return "/api/sse/services";
     }
@@ -68,7 +68,7 @@ export default function DashboardPage() {
     const end = timeRange === "custom" ? customDates.end! : now;
 
     return `/api/history/services?start_date=${start.toISOString()}&end_date=${end.toISOString()}`;
-  };
+  }, [timeRange, customDates.start, customDates.end]);
 
   // Show loading while checking auth
   if (isAuthLoading) {
@@ -95,22 +95,29 @@ export default function DashboardPage() {
       <div className="lg:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
           {/* Header with Connection Status */}
-        <div className="flex items-center gap-4 mb-8">
-          <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-            <Server className="w-10 h-10 text-purple-400" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 mb-8 mt-12 lg:mt-0 relative">
+            <div className="shrink-0 p-3 sm:p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+              <Server className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
+            </div>
+            <div className="flex-1 w-full">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-3xl sm:text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+                    Neural Control
+                  </h1>
+                  <p className="text-sm sm:text-base text-gray-400 mt-1">
+                    Real-time microservice monitoring and autonomous control
+                  </p>
+                </div>
+                <div className="shrink-0 self-start sm:self-auto">
+                  <ConnectionStatus
+                    status={sseStatus}
+                    onReconnect={reconnectSSE}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <h1 className="text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-              Neural Control
-            </h1>
-            <p className="text-gray-400 mt-1">
-              Real-time microservice monitoring and autonomous control
-            </p>
-          </div>
-          <div className="ml-auto">
-          <ConnectionStatus status={sseStatus} onReconnect={reconnectSSE} />
-          </div>
-        </div>
 
           {/* Dynamic Metrics - SSE handles own loading */}
           <DynamicMetrics />
@@ -128,8 +135,8 @@ export default function DashboardPage() {
           </div>
 
           {/* Services Header with Historical Indicator */}
-          <div className="flex items-center gap-3 mb-6">
-            <h2 className="text-3xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+            <h2 className="text-2xl sm:text-3xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               Services
             </h2>
 
@@ -142,11 +149,11 @@ export default function DashboardPage() {
               </div>
             )}
 
-            <div className="h-px flex-1 bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent" />
+            <div className="h-px w-full sm:flex-1 bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent" />
           </div>
 
           {/* Dynamic Services List - SSE handles own loading */}
-          <DynamicServices apiUrl={getServicesApiUrl()} />
+          <DynamicServices apiUrl={servicesApiUrl} />
         </div>
       </div>
     </>

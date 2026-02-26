@@ -62,8 +62,8 @@ export function DynamicServiceDetails({
   // Show loading state while connecting
   if (status === "connecting" || !data) {
     return (
-      <div className="text-center py-16 bg-linear-to-br from-card to-purple-950/10 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
-        <div className="inline-block p-6 rounded-2xl bg-purple-500/10 mb-6">
+      <div className="text-center py-10 sm:py-16 px-4 bg-linear-to-br from-card to-purple-950/10 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
+        <div className="inline-block p-4 sm:p-6 rounded-2xl bg-purple-500/10 mb-4 sm:mb-6">
           <Server className="w-16 h-16 text-purple-400 animate-pulse" />
         </div>
         <h3 className="text-2xl font-bold mb-3 text-gray-200">
@@ -76,8 +76,8 @@ export function DynamicServiceDetails({
   // Show error state
   if (status === "error" || error) {
     return (
-      <div className="text-center py-16 bg-red-500/10 rounded-2xl border border-red-500/30">
-        <AlertTriangle className="w-16 h-16 text-red-400 mx-auto mb-4" />
+      <div className="text-center py-10 sm:py-16 px-4 bg-red-500/10 rounded-2xl border border-red-500/30">
+        <AlertTriangle className="w-12 h-12 sm:w-16 sm:h-16 text-red-400 mx-auto mb-4" />
         <h3 className="text-2xl font-bold mb-3 text-gray-200">
           Error loading service
         </h3>
@@ -93,9 +93,9 @@ export function DynamicServiceDetails({
 
   if (!service) {
     return (
-      <div className="text-center py-16 bg-linear-to-br from-card to-purple-950/10 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
-        <div className="inline-block p-6 rounded-2xl bg-purple-500/10 mb-6">
-          <Server className="w-16 h-16 text-purple-400" />
+      <div className="text-center py-10 sm:py-16 px-4 bg-linear-to-br from-card to-purple-950/10 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
+        <div className="inline-block p-4 sm:p-6 rounded-2xl bg-purple-500/10 mb-4 sm:mb-6">
+          <Server className="w-12 h-12 sm:w-16 sm:h-16 text-purple-400" />
         </div>
         <h3 className="text-2xl font-bold mb-3 text-gray-200">
           Service not found
@@ -150,16 +150,16 @@ export function DynamicServiceDetails({
 
   return (
     <>
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-            <Server className="w-10 h-10 text-purple-400" />
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
+          <div className="p-3 sm:p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
+            <Server className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
           </div>
-          <div>
-            <h1 className="text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+          <div className="min-w-0">
+            <h1 className="text-3xl sm:text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent wrap-break-word">
               {service.name}
             </h1>
-            <p className="text-gray-400 mt-1">
+            <p className="text-sm sm:text-base text-gray-400 mt-1">
               Service Overview & Endpoint Details
             </p>
           </div>
@@ -257,11 +257,11 @@ export function DynamicServiceDetails({
 
       {/* Endpoints List */}
       <div>
-        <div className="flex items-center gap-3 mb-6">
-          <h2 className="text-3xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+          <h2 className="text-2xl sm:text-3xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
             Endpoints
           </h2>
-          <div className="h-px flex-1 bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent" />
+          <div className="h-px w-full sm:flex-1 bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent" />
         </div>
 
         <div className="space-y-4">
@@ -275,16 +275,21 @@ export function DynamicServiceDetails({
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <CardTitle className="text-xl font-mono text-purple-300 mb-2 group-hover:text-purple-400 transition-colors">
+                      <CardTitle className="text-lg sm:text-xl font-mono text-purple-300 mb-2 group-hover:text-purple-400 transition-colors break-all">
                         {endpoint.path}
                       </CardTitle>
-                      <div className="flex items-center gap-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm mt-2 sm:mt-0">
                         <div className="flex items-center gap-2 text-gray-400">
-                          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-                          {endpoint.signal_count} signals
+                          <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0" />
+                          <span className="truncate">
+                            {endpoint.signal_count} signals
+                          </span>
                         </div>
                         {endpoint.tenant_id && (
-                          <Badge variant="outline" className="text-xs">
+                          <Badge
+                            variant="outline"
+                            className="text-xs shrink-0 max-w-full truncate"
+                          >
                             Tenant: {endpoint.tenant_id}
                           </Badge>
                         )}
@@ -294,42 +299,42 @@ export function DynamicServiceDetails({
                 </CardHeader>
 
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                     {/* Average Latency */}
-                    <div className="p-4 rounded-lg bg-linear-to-br from-green-500/10 to-green-500/5 border border-green-500/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Zap className="w-4 h-4 text-green-400" />
-                        <p className="text-xs font-medium text-gray-400">
+                    <div className="p-3 sm:p-4 rounded-lg bg-linear-to-br from-green-500/10 to-green-500/5 border border-green-500/20">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                        <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-400 shrink-0" />
+                        <p className="text-[10px] sm:text-xs font-medium text-gray-400 truncate">
                           Avg Latency
                         </p>
                       </div>
                       <p
-                        className={`text-2xl font-bold ${endpoint.avg_latency > (endpoint.thresholds?.cache_latency_ms ?? 500) ? "text-yellow-400" : "text-green-400"}`}
+                        className={`text-lg sm:text-2xl font-bold truncate ${endpoint.avg_latency > (endpoint.thresholds?.cache_latency_ms ?? 500) ? "text-yellow-400" : "text-green-400"}`}
                       >
                         {formatLatency(endpoint.avg_latency)}
                       </p>
                     </div>
 
                     {/* Error Rate */}
-                    <div className="p-4 rounded-lg bg-linear-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <AlertTriangle className="w-4 h-4 text-orange-400" />
-                        <p className="text-xs font-medium text-gray-400">
+                    <div className="p-3 sm:p-4 rounded-lg bg-linear-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/20">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                        <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400 shrink-0" />
+                        <p className="text-[10px] sm:text-xs font-medium text-gray-400 truncate">
                           Error Rate
                         </p>
                       </div>
                       <p
-                        className={`text-2xl font-bold ${endpoint.error_rate > (endpoint.thresholds?.circuit_breaker_error_rate ?? 0.1) ? "text-red-400" : "text-green-400"}`}
+                        className={`text-lg sm:text-2xl font-bold truncate ${endpoint.error_rate > (endpoint.thresholds?.circuit_breaker_error_rate ?? 0.1) ? "text-red-400" : "text-green-400"}`}
                       >
                         {(endpoint.error_rate * 100).toFixed(1)}%
                       </p>
                     </div>
 
                     {/* Cache Status */}
-                    <div className="p-4 rounded-lg bg-linear-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Database className="w-4 h-4 text-blue-400" />
-                        <p className="text-xs font-medium text-gray-400">
+                    <div className="p-3 sm:p-4 rounded-lg bg-linear-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                        <Database className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400 shrink-0" />
+                        <p className="text-[10px] sm:text-xs font-medium text-gray-400 truncate">
                           Cache
                         </p>
                       </div>
@@ -338,7 +343,7 @@ export function DynamicServiceDetails({
                           variant={
                             endpoint.cache_enabled ? "success" : "secondary"
                           }
-                          className="text-sm"
+                          className="text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0 sm:py-0.5"
                         >
                           {endpoint.cache_enabled ? "Enabled" : "Disabled"}
                         </Badge>
@@ -346,10 +351,10 @@ export function DynamicServiceDetails({
                     </div>
 
                     {/* Circuit Breaker Status */}
-                    <div className="p-4 rounded-lg bg-linear-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Shield className="w-4 h-4 text-purple-400" />
-                        <p className="text-xs font-medium text-gray-400">
+                    <div className="p-3 sm:p-4 rounded-lg bg-linear-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/20">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                        <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 shrink-0" />
+                        <p className="text-[10px] sm:text-xs font-medium text-gray-400 truncate">
                           Circuit Breaker
                         </p>
                       </div>
@@ -358,7 +363,7 @@ export function DynamicServiceDetails({
                           variant={
                             endpoint.circuit_breaker ? "error" : "success"
                           }
-                          className="text-sm"
+                          className="text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0 sm:py-0.5"
                         >
                           {endpoint.circuit_breaker ? "Active" : "Inactive"}
                         </Badge>
@@ -367,10 +372,10 @@ export function DynamicServiceDetails({
 
                     {/* Rate Limiting Status */}
                     {endpoint.rate_limit_enabled !== undefined && (
-                      <div className="p-4 rounded-lg bg-linear-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/20">
-                        <div className="flex items-center gap-2 mb-2">
+                      <div className="p-3 sm:p-4 rounded-lg bg-linear-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/20">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
                           <svg
-                            className="w-4 h-4 text-orange-400"
+                            className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400 shrink-0"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -382,7 +387,7 @@ export function DynamicServiceDetails({
                               d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                             />
                           </svg>
-                          <p className="text-xs font-medium text-gray-400">
+                          <p className="text-[10px] sm:text-xs font-medium text-gray-400 truncate">
                             Rate Limit
                           </p>
                         </div>
@@ -393,7 +398,7 @@ export function DynamicServiceDetails({
                                 ? "warning"
                                 : "success"
                             }
-                            className="text-sm"
+                            className="text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0 sm:py-0.5"
                           >
                             {endpoint.rate_limit_enabled
                               ? "Enabled"
@@ -405,10 +410,10 @@ export function DynamicServiceDetails({
 
                     {/* Queue Deferral Status */}
                     {endpoint.queue_deferral !== undefined && (
-                      <div className="p-4 rounded-lg bg-linear-to-br from-amber-500/10 to-amber-500/5 border border-amber-500/20">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Clock className="w-4 h-4 text-amber-400" />
-                          <p className="text-xs font-medium text-gray-400">
+                      <div className="p-3 sm:p-4 rounded-lg bg-linear-to-br from-amber-500/10 to-amber-500/5 border border-amber-500/20">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                          <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
+                          <p className="text-[10px] sm:text-xs font-medium text-gray-400 truncate">
                             Queue Deferral
                           </p>
                         </div>
@@ -417,7 +422,7 @@ export function DynamicServiceDetails({
                             variant={
                               endpoint.queue_deferral ? "warning" : "success"
                             }
-                            className="text-sm"
+                            className="text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0 sm:py-0.5"
                           >
                             {endpoint.queue_deferral ? "Active" : "Inactive"}
                           </Badge>
@@ -427,10 +432,10 @@ export function DynamicServiceDetails({
 
                     {/* Load Shedding Status */}
                     {endpoint.load_shedding !== undefined && (
-                      <div className="p-4 rounded-lg bg-linear-to-br from-red-500/10 to-red-500/5 border border-red-500/20">
-                        <div className="flex items-center gap-2 mb-2">
-                          <ShieldOff className="w-4 h-4 text-red-400" />
-                          <p className="text-xs font-medium text-gray-400">
+                      <div className="p-3 sm:p-4 rounded-lg bg-linear-to-br from-red-500/10 to-red-500/5 border border-red-500/20">
+                        <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                          <ShieldOff className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400 shrink-0" />
+                          <p className="text-[10px] sm:text-xs font-medium text-gray-400 truncate">
                             Load Shedding
                           </p>
                         </div>
@@ -439,7 +444,7 @@ export function DynamicServiceDetails({
                             variant={
                               endpoint.load_shedding ? "error" : "success"
                             }
-                            className="text-sm"
+                            className="text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0 sm:py-0.5"
                           >
                             {endpoint.load_shedding ? "Active" : "Inactive"}
                           </Badge>

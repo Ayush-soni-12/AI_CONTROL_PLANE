@@ -69,41 +69,20 @@ export default function AIInsightsPage() {
       <div className="lg:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
-          {/* <div className="mb-10">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="relative">
-                <div className="absolute inset-0 bg-linear-to-br from-purple-500 to-pink-500 rounded-xl blur-md opacity-50" />
-                <div className="relative p-3 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-                  <Brain className="w-8 h-8 text-purple-400" />
-                </div>
-              </div>
-              <div>
-                <h1 className="text-5xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                  AI Insights
-                </h1>
-                <div className="flex items-center gap-2 mt-1">
-                  <Sparkles className="w-4 h-4 text-purple-400" />
-                  <p className="text-gray-400">
-                    AI-powered threshold optimization and pattern detection
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div> */}
           
-          <div className="flex items-center gap-4 mb-8">
-          <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-            <Brain className="w-10 h-10 text-purple-400" />
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-8 text-center sm:text-left">
+            <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
+              <Brain className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
+                AI Insights
+              </h1>
+              <p className="text-sm sm:text-base text-gray-400 mt-1">
+                AI-powered threshold optimization and pattern detection
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-              AI Insights
-            </h1>
-            <p className="text-gray-400 mt-1">
-               AI-powered threshold optimization and pattern detection
-            </p>
-          </div>
-        </div>
 
           {/* Service Filter */}
           {servicesList.length > 0 && (
@@ -118,7 +97,13 @@ export default function AIInsightsPage() {
                 id="service-filter"
                 value={selectedService}
                 onChange={(e) => setSelectedService(e.target.value)}
-                className="px-4 py-3 rounded-xl bg-gray-900/80 border border-gray-800 text-white focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all"
+                className="w-full sm:w-auto px-4 py-3 rounded-xl bg-gray-900/80 border border-gray-800 text-white text-sm focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all appearance-none pr-10"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 1rem center',
+                  backgroundSize: '1em'
+                }}
               >
                 <option value="">All Services</option>
                 {servicesList.map((service) => (
@@ -131,11 +116,11 @@ export default function AIInsightsPage() {
           )}
 
           {/* Tabs */}
-          <div className="flex gap-2 mb-8">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-8">
             <button
               onClick={() => setActiveTab("thresholds")}
               className={`
-                flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-300
+                flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-3 rounded-xl font-semibold transition-all duration-300 w-full sm:w-auto text-sm sm:text-base
                 ${
                   activeTab === "thresholds"
                     ? "bg-linear-to-r from-purple-600/20 to-pink-600/20 text-white border border-purple-500/50 shadow-lg shadow-purple-500/10"
@@ -143,10 +128,10 @@ export default function AIInsightsPage() {
                 }
               `}
             >
-              <TrendingUp className="w-5 h-5" />
-              AI Thresholds
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+              <span>AI Thresholds</span>
               {thresholdsData && (
-                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-xs">
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-[10px] sm:text-xs shrink-0">
                   {thresholdsData.total}
                 </span>
               )}
@@ -155,7 +140,7 @@ export default function AIInsightsPage() {
             <button
               onClick={() => setActiveTab("insights")}
               className={`
-                flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all duration-300
+                flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-3 rounded-xl font-semibold transition-all duration-300 w-full sm:w-auto text-sm sm:text-base
                 ${
                   activeTab === "insights"
                     ? "bg-linear-to-r from-purple-600/20 to-pink-600/20 text-white border border-purple-500/50 shadow-lg shadow-purple-500/10"
@@ -163,10 +148,10 @@ export default function AIInsightsPage() {
                 }
               `}
             >
-              <Sparkles className="w-5 h-5" />
-              Insights Feed
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+              <span>Insights Feed</span>
               {insightsData && (
-                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-xs">
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-[10px] sm:text-xs shrink-0">
                   {insightsData.total}
                 </span>
               )}

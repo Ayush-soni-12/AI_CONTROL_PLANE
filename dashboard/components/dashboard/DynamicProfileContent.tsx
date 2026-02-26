@@ -24,16 +24,18 @@ export function DynamicProfileContent() {
             </div>
           </div>
 
-          <div className="text-center md:text-left space-y-2">
-            <div className="flex items-center justify-center md:justify-start gap-3">
-              <h2 className="text-3xl font-bold text-white">{user.name}</h2>
-              <BadgeCheck className="w-6 h-6 text-blue-400" />
+          <div className="text-center md:text-left space-y-3 sm:space-y-2">
+            <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-2 sm:gap-3">
+              <h2 className="text-2xl sm:text-3xl font-bold text-white break-all">
+                {user.name}
+              </h2>
+              <BadgeCheck className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400 shrink-0" />
             </div>
-            <p className="text-lg text-gray-400 font-medium flex items-center justify-center md:justify-start gap-2">
-              <Mail className="w-4 h-4" />
+            <p className="text-base sm:text-lg text-gray-400 font-medium flex items-center justify-center md:justify-start gap-2 break-all">
+              <Mail className="w-4 h-4 shrink-0" />
               {user.email}
             </p>
-            <div className="flex items-center justify-center md:justify-start gap-2 pt-2">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-2">
               <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
                 Pro Plan
               </span>
@@ -54,27 +56,29 @@ export function DynamicProfileContent() {
           </h3>
           <div className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-xl bg-gray-950/50 border border-gray-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gray-900 text-gray-400">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
+                <div className="p-2 rounded-lg bg-gray-900 text-gray-400 shrink-0">
                   <Shield className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-400">User ID</p>
-                  <p className="text-white font-mono">{user.id}</p>
+                  <p className="text-white font-mono text-sm sm:text-base break-all">
+                    {user.id}
+                  </p>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center justify-between p-4 rounded-xl bg-gray-950/50 border border-gray-800">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gray-900 text-gray-400">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full">
+                <div className="p-2 rounded-lg bg-gray-900 text-gray-400 shrink-0">
                   <Calendar className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-400">
                     Member Since
                   </p>
-                  <p className="text-white">
+                  <p className="text-white text-sm sm:text-base wrap-break-word">
                     {user.created_at
                       ? format(new Date(user.created_at), "MMMM db, yyyy")
                       : "Unknown"}

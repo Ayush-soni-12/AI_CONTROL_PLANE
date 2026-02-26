@@ -43,18 +43,18 @@ export function DynamicServices({
 
   if (services.length === 0) {
     return (
-      <div className="text-center py-16 bg-linear-to-br from-card to-purple-950/10 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
-        <div className="inline-block p-6 rounded-2xl bg-purple-500/10 mb-6">
-          <Activity className="w-16 h-16 text-purple-400" />
+      <div className="text-center py-10 sm:py-16 px-4 bg-linear-to-br from-card to-purple-950/10 rounded-2xl border border-purple-500/20 backdrop-blur-sm">
+        <div className="inline-flex p-6 rounded-2xl bg-purple-500/10 mb-6">
+          <Activity className="w-12 h-12 sm:w-16 sm:h-16 text-purple-400" />
         </div>
-        <h3 className="text-2xl font-bold mb-3 text-gray-200">
+        <h3 className="text-xl sm:text-2xl font-bold mb-3 text-gray-200">
           No services detected
         </h3>
-        <p className="text-gray-400 mb-6 text-lg">
+        <p className="text-sm sm:text-lg text-gray-400 mb-6 max-w-sm mx-auto">
           Start sending signals from your services
         </p>
-        <div className="inline-block">
-          <code className="text-sm bg-gray-900/80 px-6 py-3 rounded-lg border border-purple-500/30 text-purple-300">
+        <div className="inline-block w-full sm:w-auto overflow-x-auto">
+          <code className="text-xs sm:text-sm bg-gray-900/80 px-4 sm:px-6 py-3 rounded-lg border border-purple-500/30 text-purple-300 whitespace-nowrap">
             curl -X POST http://localhost:8000/api/signals
           </code>
         </div>

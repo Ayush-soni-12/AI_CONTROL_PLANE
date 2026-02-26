@@ -85,13 +85,13 @@ export function PercentileChart() {
   return (
     <Card className="bg-linear-to-br from-card to-purple-950/10 border-purple-500/20 mb-5">
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <CardTitle className="text-2xl font-bold text-gray-200 flex items-center gap-2">
-              <TrendingUp className="w-6 h-6 text-purple-400" />
+            <CardTitle className="text-xl sm:text-2xl font-bold text-gray-200 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" />
               Latency Percentiles
             </CardTitle>
-            <p className="text-gray-400 text-sm mt-1">
+            <p className="text-gray-400 text-xs sm:text-sm mt-1">
               p50, p95, and p99 latency over time (last 7 days)
             </p>
           </div>
@@ -100,7 +100,7 @@ export function PercentileChart() {
           <select
             value={selectedService || ""}
             onChange={(e) => setSelectedService(e.target.value || undefined)}
-            className="px-4 py-2 bg-gray-800/50 border border-purple-500/30 rounded-lg text-gray-200 focus:outline-none focus:border-purple-500"
+            className="w-full sm:w-auto px-4 py-2 bg-gray-800/50 border border-purple-500/30 rounded-lg text-gray-200 text-sm focus:outline-none focus:border-purple-500 transition-colors"
           >
             <option value="">All Services</option>
             {services.map((service) => (
@@ -117,33 +117,31 @@ export function PercentileChart() {
             No percentile data available
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis
-                dataKey="time"
-                stroke="#9CA3AF"
-                tick={{ fill: "#9CA3AF", fontSize: 12 }}
-              />
-              <YAxis
-                stroke="#9CA3AF"
-                tick={{ fill: "#9CA3AF", fontSize: 12 }}
-                label={{
-                  value: "Latency (ms)",
-                  angle: -90,
-                  position: "insideLeft",
-                  fill: "#9CA3AF",
-                }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1F2937",
-                  border: "1px solid #9333EA",
-                  borderRadius: "8px",
-                  color: "#F3F4F6",
-                }}
-              />
-              <Legend wrapperStyle={{ color: "#9CA3AF" }} />
+          <div className="w-full h-[300px] sm:h-[400px] mt-4 sm:mt-0 -ml-4 sm:ml-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis
+                  dataKey="time"
+                  stroke="#9CA3AF"
+                  tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                  tickMargin={10}
+                />
+                <YAxis
+                  stroke="#9CA3AF"
+                  tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                  width={45}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1F2937",
+                    border: "1px solid #9333EA",
+                    borderRadius: "8px",
+                    color: "#F3F4F6",
+                    fontSize: "12px",
+                  }}
+                />
+                <Legend wrapperStyle={{ color: "#9CA3AF", fontSize: "12px", paddingTop: "10px" }} />
 
               {/* Dynamically render lines for each endpoint's percentiles */}
               {endpoints.map((endpoint, idx) => {
@@ -191,15 +189,16 @@ export function PercentileChart() {
                   </React.Fragment>
                 );
               })}
-            </LineChart>
-          </ResponsiveContainer>
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
 
         {/* Info Box - Show max across all endpoints */}
-        <div className="mt-6 grid grid-cols-3 gap-4">
-          <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <div className="p-3 sm:p-4 rounded-lg bg-green-500/10 border border-green-500/30">
             <div className="text-xs text-gray-400">p50 (Median)</div>
-            <div className="text-lg font-bold text-green-400">
+            <div className="text-lg sm:text-xl font-bold text-green-400 my-0.5">
               {chartData.length > 0 &&
               percentileResponse?.data[percentileResponse.data.length - 1]
                 ? Math.max(
@@ -210,13 +209,13 @@ export function PercentileChart() {
                 : "0"}
               ms
             </div>
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-[11px] sm:text-xs text-gray-500 mt-1">
               50% of requests faster (worst endpoint)
             </div>
           </div>
-          <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+          <div className="p-3 sm:p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
             <div className="text-xs text-gray-400">p95</div>
-            <div className="text-lg font-bold text-yellow-400">
+            <div className="text-lg sm:text-xl font-bold text-yellow-400 my-0.5">
               {chartData.length > 0 &&
               percentileResponse?.data[percentileResponse.data.length - 1]
                 ? Math.max(
@@ -227,13 +226,13 @@ export function PercentileChart() {
                 : "0"}
               ms
             </div>
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-[11px] sm:text-xs text-gray-500 mt-1">
               95% of requests faster (worst endpoint)
             </div>
           </div>
-          <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
+          <div className="p-3 sm:p-4 rounded-lg bg-red-500/10 border border-red-500/30">
             <div className="text-xs text-gray-400">p99</div>
-            <div className="text-lg font-bold text-red-400">
+            <div className="text-lg sm:text-xl font-bold text-red-400 my-0.5">
               {chartData.length > 0 &&
               percentileResponse?.data[percentileResponse.data.length - 1]
                 ? Math.max(
@@ -244,7 +243,7 @@ export function PercentileChart() {
                 : "0"}
               ms
             </div>
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-[11px] sm:text-xs text-gray-500 mt-1">
               99% of requests faster (worst endpoint)
             </div>
           </div>
@@ -264,17 +263,17 @@ export function PercentileChart() {
                   key={ep.endpoint}
                   className="p-3 bg-gray-900/40 rounded border border-gray-700"
                 >
-                  <div className="text-xs font-mono text-purple-300 mb-2">
+                  <div className="text-xs font-mono text-purple-300 mb-2 truncate" title={ep.endpoint}>
                     {ep.endpoint}
                   </div>
-                  <div className="flex gap-3 text-xs">
-                    <span className="text-green-400">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] sm:text-xs">
+                    <span className="text-green-400 whitespace-nowrap">
                       p50: {ep.p50.toFixed(1)}ms
                     </span>
-                    <span className="text-yellow-400">
+                    <span className="text-yellow-400 whitespace-nowrap">
                       p95: {ep.p95.toFixed(1)}ms
                     </span>
-                    <span className="text-red-400">
+                    <span className="text-red-400 whitespace-nowrap">
                       p99: {ep.p99.toFixed(1)}ms
                     </span>
                   </div>

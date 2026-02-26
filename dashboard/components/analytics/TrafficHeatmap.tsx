@@ -108,54 +108,56 @@ export function TrafficHeatmap() {
         </p>
       </CardHeader>
       <CardContent>
-        <div className="p-4 bg-gray-950/40 rounded-lg border border-purple-900/30">
-          {/* Hour labels */}
-          <div className="grid grid-cols-[60px_repeat(24,1fr)] gap-0.5 mb-1">
-            <div className="text-center text-[10px] font-medium text-gray-500"></div>
-            {HOURS.map((hour) => (
-              <div
-                key={hour}
-                className="text-center text-[10px] font-medium text-gray-400"
-              >
-                {hour}
-              </div>
-            ))}
-          </div>
-
-          {/* Heatmap grid */}
-          <div className="space-y-0.5">
-            {DAYS.map((day, dayIndex) => (
-              <div
-                key={day}
-                className="grid grid-cols-[60px_repeat(24,1fr)] gap-0.5"
-              >
-                <div className="flex items-center text-xs font-medium text-gray-300 pr-2">
-                  {day}
+        <div className="p-4 bg-gray-950/40 rounded-lg border border-purple-900/30 overflow-x-auto">
+          <div className="min-w-[700px]">
+            {/* Hour labels */}
+            <div className="grid grid-cols-[60px_repeat(24,1fr)] gap-0.5 mb-1">
+              <div className="text-center text-[10px] font-medium text-gray-500"></div>
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  className="text-center text-[10px] font-medium text-gray-400"
+                >
+                  {hour}
                 </div>
-                {HOURS.map((hour) => {
-                  const key = `${dayIndex}-${hour}`;
-                  const data = patternMap.get(key);
-                  const count = data?.count || 0;
-                  const latency = data?.latency || 0;
-                  const isHovered = hoveredCell === key;
+              ))}
+            </div>
 
-                  return (
-                    <div
-                      key={hour}
-                      className={`
+            {/* Heatmap grid */}
+            <div className="space-y-0.5">
+              {DAYS.map((day, dayIndex) => (
+                <div
+                  key={day}
+                  className="grid grid-cols-[60px_repeat(24,1fr)] gap-0.5"
+                >
+                  <div className="flex items-center text-xs font-medium text-gray-300 pr-2">
+                    {day}
+                  </div>
+                  {HOURS.map((hour) => {
+                    const key = `${dayIndex}-${hour}`;
+                    const data = patternMap.get(key);
+                    const count = data?.count || 0;
+                    const latency = data?.latency || 0;
+                    const isHovered = hoveredCell === key;
+
+                    return (
+                      <div
+                        key={hour}
+                        className={`
                         aspect-square rounded ${getColor(count)}
                         transition-all duration-200 cursor-pointer
                         border
                         ${isHovered ? "scale-125 z-10 shadow-lg shadow-purple-500/50" : "hover:scale-110"}
                       `}
-                      onMouseEnter={() => setHoveredCell(key)}
-                      onMouseLeave={() => setHoveredCell(null)}
-                      title={`${day} ${hour}:00\n${count.toLocaleString()} requests\n${latency.toFixed(1)}ms avg`}
-                    />
-                  );
-                })}
-              </div>
-            ))}
+                        onMouseEnter={() => setHoveredCell(key)}
+                        onMouseLeave={() => setHoveredCell(null)}
+                        title={`${day} ${hour}:00\n${count.toLocaleString()} requests\n${latency.toFixed(1)}ms avg`}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Hover Info Card */}

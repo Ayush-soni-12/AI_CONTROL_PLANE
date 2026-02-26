@@ -73,13 +73,13 @@ export function CTASection() {
           limiting, and more.
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-4 w-full px-4 sm:px-0 mt-8">
           <Link
             href="/dashboard"
-            className="group relative inline-flex items-center gap-3 px-8 py-4 rounded-xl bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 hover:scale-105 shadow-lg shadow-purple-500/20"
+            className="group relative inline-flex justify-center items-center gap-3 w-full sm:w-auto px-6 sm:px-8 py-4 rounded-xl bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 transition-all duration-300 hover:scale-105 shadow-lg shadow-purple-500/20"
           >
             <span className="absolute inset-0 rounded-xl bg-linear-to-r from-purple-400 to-pink-400 blur-xl opacity-0 group-hover:opacity-40 transition-opacity" />
-            <span className="relative text-white font-semibold text-lg">
+            <span className="relative text-white font-semibold text-base sm:text-lg">
               Start Monitoring Now
             </span>
             <ArrowRight className="w-5 h-5 text-white group-hover:translate-x-2 transition-transform relative" />
@@ -87,9 +87,9 @@ export function CTASection() {
 
           <Link
             href="/auth/signup"
-            className="inline-flex items-center gap-3 px-8 py-4 rounded-xl border border-gray-700 hover:border-purple-500/50 hover:bg-gray-900/50 transition-all duration-300 backdrop-blur-sm"
+            className="inline-flex justify-center items-center gap-3 w-full sm:w-auto px-6 sm:px-8 py-4 rounded-xl border border-gray-700 hover:border-purple-500/50 hover:bg-gray-900/50 transition-all duration-300 backdrop-blur-sm"
           >
-            <span className="text-gray-300 font-semibold text-lg">
+            <span className="text-gray-300 font-semibold text-base sm:text-lg">
               Create Free Account
             </span>
           </Link>

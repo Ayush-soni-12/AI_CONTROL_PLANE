@@ -4,7 +4,7 @@ import { Suspense, useEffect } from "react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import { DynamicProfileContent } from "@/components/dashboard/DynamicProfileContent";
 import { Skeleton } from "@/components/ui/skeleton";
-import {  User } from "lucide-react";
+import { User } from "lucide-react";
 // import dynamic from "next/dynamic";
 import { useCheckAuth } from "@/hooks/useSignals";
 import { useRouter } from "next/navigation";
@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 //     import("@/components/dashboard/DynamicProfileContent").then(
 //       (mod) => mod.DynamicProfileContent,
 //     ),
-//   { ssr: false, 
+//   { ssr: false,
 //     loading:()=>(
 //                     <div className="space-y-6">
 //                 <div className="flex items-center gap-6 p-6 rounded-2xl border border-gray-800 bg-gray-900/50 backdrop-blur-sm">
@@ -33,11 +33,9 @@ import { useRouter } from "next/navigation";
 //   },
 // );
 
-export default function ProfilePage() {  
-  
+export default function ProfilePage() {
   const { data: user, isLoading: isAuthLoading } = useCheckAuth();
-    const router = useRouter();
-
+  const router = useRouter();
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -46,11 +44,9 @@ export default function ProfilePage() {
     }
   }, [user, isAuthLoading, router]);
 
-
-    if (!user) {
+  if (!user) {
     return null;
   }
-
 
   return (
     <>
@@ -59,15 +55,15 @@ export default function ProfilePage() {
         <div className="max-w-5xl mx-auto">
           {/* Header */}
           <div className="mb-8">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-                <User className="w-8 h-8 text-purple-400" />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 mb-2">
+              <div className="p-3 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
+                <User className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400" />
               </div>
               <div>
-                <h1 className="text-4xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                <h1 className="text-3xl sm:text-4xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
                   User Profile
                 </h1>
-                <p className="text-gray-400">
+                <p className="text-sm sm:text-base text-gray-400 mt-1">
                   Manage your personal information and account settings
                 </p>
               </div>

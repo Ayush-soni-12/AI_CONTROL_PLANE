@@ -99,7 +99,7 @@ export function AIThresholdsTable({
             </div>
 
             {/* Thresholds Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-4">
               {/* Cache Latency */}
               <div className="p-3 rounded-xl bg-gray-800/50 border border-gray-700/50">
                 <div className="flex items-center gap-2 mb-1">

@@ -50,101 +50,123 @@ export function LatencyChart({ signals, limit = 20 }: LatencyChartProps) {
 
   return (
     <Card className="border-purple-500/20 bg-linear-to-br from-card to-purple-950/10">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-purple-400" />
-            Real-time Latency Monitoring
+      <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
+          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
+            <span className="truncate">Real-time Latency Monitoring</span>
           </CardTitle>
-          <div className="text-sm text-gray-400">
+          <div className="text-xs sm:text-sm text-gray-400 shrink-0">
             Last {chartData.length} signals
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
           💡 Graph shows sampled data (10% of success signals, 100% of errors).
           Metrics are calculated from all signals.
         </p>
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={350}>
-          <AreaChart data={chartData}>
-            <defs>
-              <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#333" opacity={0.3} />
-            <XAxis
-              dataKey="index"
-              stroke="#666"
-              tick={{ fill: "#999", fontSize: 11 }}
-              angle={-45}
-              textAnchor="end"
-              height={80}
-              interval={xAxisInterval}
-              tickFormatter={(index) => {
-                const dataPoint = chartData[index];
-                return dataPoint ? dataPoint.time : "";
-              }}
-            />
-            <YAxis
-              stroke="#666"
-              tick={{ fill: "#999", fontSize: 12 }}
-              tickFormatter={(value) => `${value}ms`}
-              label={{
-                value: "Latency (ms)",
-                angle: -90,
-                position: "insideLeft",
-                style: { fill: "#999", fontSize: 12 },
-              }}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#1a1a1a",
-                border: "1px solid #8b5cf6",
-                borderRadius: "8px",
-                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.3)",
-              }}
-              labelStyle={{ color: "#fafafa", fontWeight: "bold" }}
-              formatter={(value: number | undefined) =>
-                value !== undefined
-                  ? [formatLatency(value), "Latency"]
-                  : ["N/A", "Latency"]
-              }
-              labelFormatter={(label, payload) => {
-                if (payload && payload[0]) {
-                  return payload[0].payload.fullTimestamp;
-                }
-                return label;
-              }}
-              cursor={{
-                stroke: "#8b5cf6",
-                strokeWidth: 1,
-                strokeDasharray: "5 5",
-              }}
-              animationDuration={0}
-              allowEscapeViewBox={{ x: false, y: true }}
-              position={{ y: 0 }}
-            />
-            <Area
-              type="monotone"
-              dataKey="latency"
-              stroke="#8b5cf6"
-              strokeWidth={3}
-              fill="url(#latencyGradient)"
-              dot={{ fill: "#8b5cf6", r: 4, strokeWidth: 2, stroke: "#1a1a1a" }}
-              activeDot={{
-                r: 7,
-                fill: "#a78bfa",
-                stroke: "#8b5cf6",
-                strokeWidth: 3,
-              }}
-              isAnimationActive={false}
-              connectNulls
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+      <CardContent className="px-2 sm:px-6">
+        <div className="overflow-x-auto overflow-y-hidden pb-4">
+          <div className="min-w-[600px] sm:min-w-0">
+            <ResponsiveContainer width="100%" height={350}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient
+                    id="latencyGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#333"
+                  opacity={0.3}
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="index"
+                  stroke="#666"
+                  tick={{ fill: "#999", fontSize: 10 }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                  interval={xAxisInterval}
+                  tickFormatter={(index) => {
+                    const dataPoint = chartData[index];
+                    return dataPoint ? dataPoint.time : "";
+                  }}
+                />
+                <YAxis
+                  stroke="#666"
+                  tick={{ fill: "#999", fontSize: 10 }}
+                  tickFormatter={(value) => `${value}ms`}
+                  width={45}
+                  label={{
+                    value: "Latency (ms)",
+                    angle: -90,
+                    position: "insideLeft",
+                    style: { fill: "#999", fontSize: 10 },
+                    dx: -10,
+                  }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1a1a1a",
+                    border: "1px solid #8b5cf6",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.3)",
+                  }}
+                  labelStyle={{ color: "#fafafa", fontWeight: "bold" }}
+                  formatter={(value: number | undefined) =>
+                    value !== undefined
+                      ? [formatLatency(value), "Latency"]
+                      : ["N/A", "Latency"]
+                  }
+                  labelFormatter={(label, payload) => {
+                    if (payload && payload[0]) {
+                      return payload[0].payload.fullTimestamp;
+                    }
+                    return label;
+                  }}
+                  cursor={{
+                    stroke: "#8b5cf6",
+                    strokeWidth: 1,
+                    strokeDasharray: "5 5",
+                  }}
+                  animationDuration={0}
+                  allowEscapeViewBox={{ x: false, y: true }}
+                  position={{ y: 0 }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="latency"
+                  stroke="#8b5cf6"
+                  strokeWidth={3}
+                  fill="url(#latencyGradient)"
+                  dot={{
+                    fill: "#8b5cf6",
+                    r: 4,
+                    strokeWidth: 2,
+                    stroke: "#1a1a1a",
+                  }}
+                  activeDot={{
+                    r: 7,
+                    fill: "#a78bfa",
+                    stroke: "#8b5cf6",
+                    strokeWidth: 3,
+                  }}
+                  isAnimationActive={false}
+                  connectNulls
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

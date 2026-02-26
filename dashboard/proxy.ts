@@ -21,14 +21,15 @@ export async function proxy(request: NextRequest) {
   const hasCookie = !!accessToken;
 
   const isAuthRoute = pathname.startsWith("/auth/login") || pathname.startsWith("/auth/signup");
-  const isProtectedRoute = pathname.startsWith("/dashboard");
+  const isDocsRoute = pathname.startsWith("/dashboard/docs");
+  const isProtectedRoute = pathname.startsWith("/dashboard") && !isDocsRoute;
 
   // Fast redirect: If has cookie and trying to access auth pages
   if (hasCookie && isAuthRoute) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  // Fast redirect: If no cookie and trying to access protected pages
+  // Fast redirect: If no cookie and trying to access protected pages (excluding docs)
   if (!hasCookie && isProtectedRoute) {
     const loginUrl = new URL("/auth/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);

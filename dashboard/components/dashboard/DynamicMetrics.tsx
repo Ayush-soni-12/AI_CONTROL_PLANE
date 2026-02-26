@@ -15,9 +15,9 @@ export function DynamicMetrics() {
   // Show loading skeleton while connecting
   if (status === "connecting" || !data) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-10">
         {[...Array(4)].map((_, i) => (
-          <Skeleton className="h-32 rounded-xl" key={i} />
+          <Skeleton className="h-28 sm:h-32 rounded-xl" key={i} />
         ))}
       </div>
     );
@@ -26,8 +26,8 @@ export function DynamicMetrics() {
   // Show error state
   if (status === "error" || error) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <div className="col-span-full p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-10">
+        <div className="col-span-full p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm sm:text-base">
           Error loading metrics: {error || "Connection error"}
         </div>
       </div>
@@ -38,7 +38,7 @@ export function DynamicMetrics() {
     data.overall;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-10">
       <MetricCard
         title="Total Signals"
         value={total_signals}

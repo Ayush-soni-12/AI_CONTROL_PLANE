@@ -101,29 +101,33 @@ export function AIInsightsList({ insights, isLoading }: AIInsightsListProps) {
 
             <div className="relative p-6">
               {/* Header */}
-              <div className="flex items-start gap-4 mb-4">
+              <div className="flex flex-col sm:flex-row items-start gap-4 mb-4">
                 {/* Icon */}
                 <div
-                  className={`p-3 rounded-xl ${config.bgColor} border ${config.borderColor}`}
+                  className={`p-3 rounded-xl ${config?.bgColor} border ${config?.borderColor} shrink-0`}
                 >
-                  <Icon className={`w-6 h-6 ${config.iconColor}`} />
+                  <Icon className={`w-6 h-6 ${config?.iconColor}`} />
                 </div>
 
                 {/* Content */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
+                <div className="flex-1 w-full">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
                     <span
-                      className={`text-sm font-semibold ${config.labelColor}`}
+                      className={`text-sm font-semibold ${config?.labelColor}`}
                     >
-                      {config.label}
+                      {config?.label}
                     </span>
-                    <span className="text-xs text-gray-500">•</span>
-                    <span className="text-sm text-gray-400 font-mono">
+                    <span className="text-xs text-gray-500 hidden sm:inline">
+                      •
+                    </span>
+                    <span className="text-sm text-gray-400 font-mono truncate max-w-[120px] sm:max-w-none">
                       {insight.service_name}
                     </span>
                     {insight.confidence !== null && (
                       <>
-                        <span className="text-xs text-gray-500">•</span>
+                        <span className="text-xs text-gray-500 hidden sm:inline">
+                          •
+                        </span>
                         <span className="text-xs text-gray-500">
                           {(insight.confidence * 100).toFixed(0)}% confidence
                         </span>
@@ -132,7 +136,7 @@ export function AIInsightsList({ insights, isLoading }: AIInsightsListProps) {
                   </div>
 
                   {/* Description */}
-                  <p className="text-base text-gray-300 leading-relaxed">
+                  <p className="text-sm sm:text-base text-gray-300 leading-relaxed">
                     {insight.description}
                   </p>
                 </div>

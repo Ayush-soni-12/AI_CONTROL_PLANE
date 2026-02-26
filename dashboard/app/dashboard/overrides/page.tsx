@@ -50,7 +50,7 @@ export default function OverridesPage() {
       <div className="lg:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* ── Header ──────────────────────────────────────── */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold text-white flex items-center gap-2">
                 <Shield className="w-6 h-6 text-purple-400" />
@@ -63,7 +63,7 @@ export default function OverridesPage() {
             </div>
             <button
               onClick={() => setShowForm((v) => !v)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-semibold transition-all duration-200 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-semibold transition-all duration-200 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 shrink-0"
             >
               <Plus className="w-4 h-4" />
               New Override
