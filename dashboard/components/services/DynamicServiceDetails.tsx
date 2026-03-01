@@ -204,7 +204,7 @@ export function DynamicServiceDetails({
           </CardHeader>
           <CardContent>
             <p
-              className={`text-3xl font-bold ${service.avg_latency > (service.endpoints?.[0]?.thresholds?.cache_latency_ms ?? 500) ? "text-yellow-400" : "text-green-400"}`}
+                className={`text-2xl font-bold ${service.status === "down" ? "text-red-400" : service.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
             >
               {formatLatency(service.avg_latency)}
             </p>
@@ -220,7 +220,7 @@ export function DynamicServiceDetails({
           </CardHeader>
           <CardContent>
             <p
-              className={`text-3xl font-bold ${service.error_rate > (service.endpoints?.[0]?.thresholds?.circuit_breaker_error_rate ?? 0.1) ? "text-red-400" : "text-green-400"}`}
+                className={`text-2xl font-bold ${service.status === "down" ? "text-red-400" : service.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
             >
               {(service.error_rate * 100).toFixed(1)}%
             </p>
@@ -309,7 +309,7 @@ export function DynamicServiceDetails({
                         </p>
                       </div>
                       <p
-                        className={`text-lg sm:text-2xl font-bold truncate ${endpoint.avg_latency > (endpoint.thresholds?.cache_latency_ms ?? 500) ? "text-yellow-400" : "text-green-400"}`}
+                       className={`text-lg sm:text-2xl font-bold truncate ${endpoint.status === "down" ? "text-red-400" : endpoint.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
                       >
                         {formatLatency(endpoint.avg_latency)}
                       </p>
@@ -324,7 +324,7 @@ export function DynamicServiceDetails({
                         </p>
                       </div>
                       <p
-                        className={`text-lg sm:text-2xl font-bold truncate ${endpoint.error_rate > (endpoint.thresholds?.circuit_breaker_error_rate ?? 0.1) ? "text-red-400" : "text-green-400"}`}
+                       className={`text-lg sm:text-2xl font-bold truncate ${endpoint.status === "down" ? "text-red-400" : endpoint.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
                       >
                         {(endpoint.error_rate * 100).toFixed(1)}%
                       </p>
