@@ -1,4 +1,5 @@
-from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, text, Float, Index
+from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, text, Float, Index, Text ,JSON , DateTime
+from datetime import datetime, timezone
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -21,6 +22,9 @@ class Signal(Base):
     
     # NEW: Customer identifier (IP, session ID) for per-customer rate limiting
     customer_identifier = Column(String, nullable=True, index=True)
+    
+    # NEW: Edge SDK Action Taken locally without hitting control plane decision
+    action_taken = Column(String, nullable=True, server_default=text("'none'"))
 
     user = relationship("User", back_populates="signals")
     
@@ -318,3 +322,121 @@ class ConfigOverride(Base):
     __table_args__ = (
         Index('idx_override_active_lookup', 'user_id', 'service_name', 'endpoint', 'is_active', 'expires_at'),
     )
+
+
+
+
+
+
+# ─── Incident severity levels ────────────────────────────────────────────────
+SEVERITY_INFO     = "info"       # Minor blip, no user impact
+SEVERITY_WARNING  = "warning"    # Degraded performance, some users affected
+SEVERITY_CRITICAL = "critical"   # Service down or severely degraded
+
+# ─── Incident status ──────────────────────────────────────────────────────────
+STATUS_OPEN       = "open"
+STATUS_RESOLVED   = "resolved"
+
+# ─── Event types (what happened at each step on the timeline) ─────────────────
+EVENT_LATENCY_SPIKE        = "latency_spike"
+EVENT_ERROR_SPIKE          = "error_spike"
+EVENT_TRAFFIC_SPIKE        = "traffic_spike"
+EVENT_CACHE_ENABLED        = "cache_enabled"
+EVENT_CIRCUIT_BREAKER      = "circuit_breaker"
+EVENT_LOAD_SHEDDING        = "load_shedding"
+EVENT_QUEUE_DEFERRAL       = "queue_deferral"
+EVENT_RATE_LIMITED         = "rate_limited"
+EVENT_RECOVERY_DETECTED    = "recovery_detected"
+EVENT_INCIDENT_OPENED      = "incident_opened"
+EVENT_INCIDENT_RESOLVED    = "incident_resolved"
+EVENT_AI_ROOT_CAUSE        = "ai_root_cause"
+
+
+class Incident(Base):
+    """
+    One incident = one degradation period for a service/endpoint.
+
+    Opens automatically when a serious event fires (circuit_breaker, load_shedding,
+    or latency/error crossing critical thresholds).
+    Resolves automatically when metrics return to healthy for 2+ consecutive checks.
+    """
+    __tablename__ = "incidents"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    service_name    = Column(String(255), nullable=False, index=True)
+    endpoint        = Column(String(255), nullable=False)
+    title           = Column(String(500), nullable=False)   # e.g. "High latency on /api/chat"
+    severity        = Column(String(50), nullable=False, default=SEVERITY_WARNING)
+    status          = Column(String(50), nullable=False, default=STATUS_OPEN, index=True)
+
+    # Metrics snapshot at incident start
+    peak_latency_ms    = Column(Float, default=0.0)
+    peak_error_rate    = Column(Float, default=0.0)
+    peak_rpm           = Column(Float, default=0.0)
+
+    # AI root cause analysis (filled by background job or on demand)
+    root_cause_summary = Column(Text, nullable=True)
+    ai_confidence      = Column(String(50), nullable=True)  # "low" | "medium" | "high"
+
+    # Duration tracking
+    started_at     = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    resolved_at    = Column(DateTime(timezone=True), nullable=True)
+    duration_secs  = Column(Integer, nullable=True)   # filled when resolved
+
+    # For detecting auto-resolution: count consecutive healthy checks
+    healthy_checks_count = Column(Integer, default=0)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    events = relationship("IncidentEvent", back_populates="incident",
+                          order_by="IncidentEvent.occurred_at", cascade="all, delete-orphan")
+
+    def duration_display(self) -> str:
+        """Human-readable duration string."""
+        end = self.resolved_at or datetime.now(timezone.utc)
+        secs = int((end - self.started_at).total_seconds())
+        if secs < 60:
+            return f"{secs}s"
+        if secs < 3600:
+            return f"{secs // 60}m {secs % 60}s"
+        return f"{secs // 3600}h {(secs % 3600) // 60}m"
+
+
+class IncidentEvent(Base):
+    """
+    A single timestamped event within an incident.
+    These are the individual steps shown on the visual timeline.
+
+    Examples:
+        14:23 — Latency spiked to 850ms (latency_spike)
+        14:24 — Caching turned on automatically (cache_enabled)
+        14:25 — Error rate hit 35% — emergency stop activated (circuit_breaker)
+        14:27 — Traffic overload — low-priority requests dropped (load_shedding)
+        14:31 — App returned to normal (recovery_detected)
+    """
+    __tablename__ = "incident_events"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id"), nullable=False, index=True)
+
+    event_type  = Column(String(100), nullable=False)   # from EVENT_* constants above
+    title       = Column(String(500), nullable=False)   # short human-readable label
+    description = Column(Text, nullable=True)           # longer plain-English explanation
+
+    # Metric values at the time of this event (for sparkline/tooltip on timeline)
+    latency_ms  = Column(Float, default=0.0)
+    error_rate  = Column(Float, default=0.0)
+    rpm         = Column(Float, default=0.0)
+
+    # Extra structured data (action flags, thresholds, etc.)
+    event_metadata    = Column(JSON, nullable=True)
+
+    occurred_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
+                         nullable=False, index=True)
+
+    # Relationship back to incident
+    incident = relationship("Incident", back_populates="events")
