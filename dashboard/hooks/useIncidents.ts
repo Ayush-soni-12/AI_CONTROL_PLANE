@@ -85,7 +85,8 @@ export const useAnalyzeIncident = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (incidentId: number) => {
-      const url = `${API_BASE_URL}/api/incidents/${incidentId}/analyze`;
+      const timezoneOffset = new Date().getTimezoneOffset();
+      const url = `${API_BASE_URL}/api/incidents/${incidentId}/analyze?timezone_offset=${timezoneOffset}`;
       const response = await fetch(url, { method: 'POST', credentials: 'include' });
       if (!response.ok) throw new Error('Failed to analyze incident');
       return response.json();
