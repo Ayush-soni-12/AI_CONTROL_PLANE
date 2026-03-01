@@ -220,6 +220,20 @@ async def cleanup_old_data():
         result_signals = await db.execute(stmt_signals)
         deleted_signals = result_signals.rowcount
         
+        # Delete incident events older than 7 days
+        stmt_events = delete(models.IncidentEvent).where(
+            models.IncidentEvent.occurred_at < signals_cutoff
+        )
+        result_events = await db.execute(stmt_events)
+        deleted_events = result_events.rowcount
+        
+        # Delete incidents older than 7 days
+        stmt_incidents = delete(models.Incident).where(
+            models.Incident.started_at < signals_cutoff
+        )
+        result_incidents = await db.execute(stmt_incidents)
+        deleted_incidents = result_incidents.rowcount
+        
         # Delete hourly aggregates older than 90 days
         hourly_cutoff = now - timedelta(days=90)
         stmt_hourly = delete(models.SignalAggregateHourly).where(
@@ -232,6 +246,7 @@ async def cleanup_old_data():
         
         print(f"🗑️  Cleanup complete:")
         print(f"   - Deleted {deleted_signals} raw signals older than 7 days")
+        print(f"   - Deleted {deleted_incidents} incidents and {deleted_events} events older than 7 days")
         print(f"   - Deleted {deleted_hourly} hourly aggregates older than 90 days")
         
     except Exception as e:
