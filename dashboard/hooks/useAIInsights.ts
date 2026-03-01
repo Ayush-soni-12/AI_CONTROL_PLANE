@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { AIInsightsResponse, AIThresholdsResponse } from '@/lib/types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000'
 
 /**
  * Hook to fetch AI insights with optional filters
