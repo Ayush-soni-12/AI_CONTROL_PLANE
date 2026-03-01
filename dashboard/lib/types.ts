@@ -42,6 +42,7 @@ export interface Endpoint {
   error_rate: number;
   signal_count: number;
   cache_enabled: boolean;
+  status: 'healthy' | 'degraded' | 'down';
   circuit_breaker: boolean;
   rate_limit_enabled?: boolean;
   queue_deferral?: boolean;
