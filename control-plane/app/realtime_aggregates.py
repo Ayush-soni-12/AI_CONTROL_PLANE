@@ -54,7 +54,8 @@ async def update_realtime_aggregate(
     latency_ms: float,
     status: str,
     customer_identifier: str = None,  # NEW: For per-customer rate limiting
-    priority: str = 'medium'  # NEW: For queue/shed decisions
+    priority: str = 'medium',  # NEW: For queue/shed decisions
+    action_taken: str = 'none' # NEW
 ):
     """
     Update real-time aggregates for ALL signals (100% coverage).
@@ -105,15 +106,35 @@ async def update_realtime_aggregate(
                     'count': 0,
                     'sum_latency': 0,
                     'errors': 0,
+                    'rate_limit_enabled': False,
                     'last_updated': None,
                     'window_start': current_timestamp if window == '1m' else None
                 }
+                
+                # FIX: Initialize from latest snapshot to prevent drop after Redis TTL expires
+                if window in ['1h', '24h']:
+                    try:
+                        from app.redis.aggregate_persistence import get_snapshot_metrics
+                        recent_snap = await get_snapshot_metrics(
+                            user_id=user_id,
+                            service_name=service_name,
+                            endpoint=endpoint,
+                            window=window
+                        )
+                        if recent_snap:
+                            agg['count'] = recent_snap.get('count', 0)
+                            agg['sum_latency'] = recent_snap.get('sum_latency', 0)
+                            agg['errors'] = recent_snap.get('errors', 0)
+                    except Exception as e:
+                        print(f"⚠️ Could not initialize from snapshot: {e}")
             
             # Update counters
             agg['count'] += 1
             agg['sum_latency'] += latency_ms
             if status == 'error':
                 agg['errors'] += 1
+            if action_taken == 'rate_limited':
+                agg['rate_limit_enabled'] = True
             agg['last_updated'] = datetime.now().isoformat()
             
             # Save back to Redis with appropriate TTL
@@ -121,8 +142,10 @@ async def update_realtime_aggregate(
             
             # Track individual latency in sorted set for percentile calculation
             # Use timestamp+random as member to allow duplicate latencies
+            import uuid
             latency_key = f"{key}:latencies"
-            member = f"{current_timestamp}:{latency_ms}"
+            unique_id = uuid.uuid4().hex[:8]
+            member = f"{current_timestamp}:{unique_id}:{latency_ms}"
             await redis_client.zadd(latency_key, {member: latency_ms})
             # Cap at 1000 samples (remove oldest)
             count = await redis_client.zcard(latency_key)
@@ -248,6 +271,7 @@ async def get_realtime_metrics(
                 'avg_latency': avg_latency,
                 'error_rate': error_rate,
                 'requests_per_minute': requests_per_minute,  # NEW: actual 60s rate
+                'rate_limit_enabled': agg.get('rate_limit_enabled', False),
                 'p50': round(p50, 2),
                 'p95': round(p95, 2),
                 'p99': round(p99, 2),
