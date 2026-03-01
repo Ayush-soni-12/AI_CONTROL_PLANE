@@ -22,7 +22,7 @@ from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import models, Schema
-from app.database.database import get_async_db
+from app.database.database import get_async_db, AsyncSessionLocal
 from app.router.token import get_current_user
 from collections import defaultdict
 from app.redis.cache import cache_get, cache_set, invalidate_user_cache
@@ -37,8 +37,7 @@ router = APIRouter(
 
 @router.get("/signals")
 async def stream_signals(
-    request: Request,
-    db: AsyncSession = Depends(get_async_db)
+    request: Request
 ):
     """
     Stream signals in real-time using Server-Sent Events.
@@ -49,7 +48,8 @@ async def stream_signals(
     Authentication: Requires session cookie (dashboard login)
     """
     # Authenticate user
-    current_user = await get_current_user(request, db)
+    async with AsyncSessionLocal() as db:
+        current_user = await get_current_user(request, db)
     
     async def event_generator():
         """Generate SSE events with signal data"""
@@ -61,11 +61,12 @@ async def stream_signals(
                     break
                 
                 # Fetch latest signals (last 20, same as polling)
-                stmt = select(models.Signal).filter(
-                    models.Signal.user_id == current_user.id
-                ).order_by(models.Signal.timestamp.desc()).limit(20)
-                result = await db.execute(stmt)
-                signals = result.scalars().all()
+                async with AsyncSessionLocal() as db:
+                    stmt = select(models.Signal).filter(
+                        models.Signal.user_id == current_user.id
+                    ).order_by(models.Signal.timestamp.desc()).limit(20)
+                    result = await db.execute(stmt)
+                    signals = result.scalars().all()
                 
                 # Convert to dict for JSON serialization
                 signals_data = []
@@ -95,13 +96,20 @@ async def stream_signals(
                 await asyncio.sleep(2)
                 
         except asyncio.CancelledError:
+            if 'db' in locals() and not db.is_active:
+                await getattr(db, 'close')()
             print(f"🛑 SSE stream cancelled for user {current_user.id}")
         except Exception as e:
+            if 'db' in locals() and not db.is_active:
+                await getattr(db, 'close')()
             print(f"❌ Error in SSE stream: {e}")
             yield {
                 "event": "error",
                 "data": json.dumps({"error": str(e)})
             }
+        finally:
+            if 'db' in locals():
+                await db.close()
     
     return EventSourceResponse(event_generator())
 
@@ -109,8 +117,7 @@ async def stream_signals(
 @router.get("/service-signals/{service_name}")
 async def stream_service_signals(
     service_name: str,
-    request: Request,
-    db: AsyncSession = Depends(get_async_db)
+    request: Request
 ):
     """
     Stream signals for a specific service in real-time using Server-Sent Events.
@@ -121,7 +128,8 @@ async def stream_service_signals(
     Authentication: Requires session cookie (dashboard login)
     """
     # Authenticate user
-    current_user = await get_current_user(request, db)
+    async with AsyncSessionLocal() as db:
+        current_user = await get_current_user(request, db)
     
     async def event_generator():
         """Generate SSE events with service-specific signal data"""
@@ -133,12 +141,13 @@ async def stream_service_signals(
                     break
                 
                 # Fetch latest signals for this service (last 20, same as polling)
-                stmt = select(models.Signal).filter(
-                    models.Signal.user_id == current_user.id,
-                    models.Signal.service_name == service_name
-                ).order_by(models.Signal.timestamp.desc()).limit(20)
-                result = await db.execute(stmt)
-                signals = result.scalars().all()
+                async with AsyncSessionLocal() as db:
+                    stmt = select(models.Signal).filter(
+                        models.Signal.user_id == current_user.id,
+                        models.Signal.service_name == service_name
+                    ).order_by(models.Signal.timestamp.desc()).limit(20)
+                    result = await db.execute(stmt)
+                    signals = result.scalars().all()
                 
                 # Convert to dict for JSON serialization
                 signals_data = []
@@ -182,8 +191,7 @@ async def stream_service_signals(
 
 @router.get("/services")
 async def stream_services(
-    request: Request,
-    db: AsyncSession = Depends(get_async_db)
+    request: Request
 ):
     """
     Stream service metrics in real-time using Server-Sent Events.
@@ -194,7 +202,8 @@ async def stream_services(
     Authentication: Requires session cookie (dashboard login)
     """
     # Authenticate user
-    current_user = await get_current_user(request, db)
+    async with AsyncSessionLocal() as db:
+        current_user = await get_current_user(request, db)
     
     async def event_generator():
         """Generate SSE events with service metrics"""
@@ -226,6 +235,9 @@ async def stream_services(
                 from app.realtime_aggregates import get_realtime_metrics
                 from app.ai_engine.ai_engine import get_ai_tuned_decision
                 from app.ai_engine.threshold_manager import get_all_thresholds_with_override
+                from app.functions.decisionFunction import _compute_trends
+                
+                db = AsyncSessionLocal()
                 
                 # STEP 1: Get unique service/endpoint combinations
                 stmt = select(
@@ -250,6 +262,7 @@ async def stream_services(
                             }
                         })
                     }
+                    await db.close()
                     await asyncio.sleep(2)
                     continue
                 
@@ -262,8 +275,15 @@ async def stream_services(
                 })
                 
                 for service_name, endpoint in distinct_endpoints:
-                    # Get metrics from Redis
-                    metrics = await get_realtime_metrics(
+                    # Get metrics from Redis (1h and 24h for trends)
+                    metrics_1h = await get_realtime_metrics(
+                        user_id=current_user.id,
+                        service_name=service_name,
+                        endpoint=endpoint,
+                        window='1h',
+                        db=db
+                    )
+                    metrics_24h = await get_realtime_metrics(
                         user_id=current_user.id,
                         service_name=service_name,
                         endpoint=endpoint,
@@ -271,18 +291,24 @@ async def stream_services(
                         db=db
                     )
                     
-                    if metrics and metrics['count'] >= 1:
-                        avg_latency = metrics['avg_latency']
-                        error_rate = metrics['error_rate']
-                        signal_count = metrics['count']
-                        requests_per_minute = metrics.get('requests_per_minute', 0)
+                    trends = _compute_trends(metrics_1h, metrics_24h)
+                    
+                    if metrics_1h and metrics_1h['count'] >= 1:
+                        avg_latency = metrics_1h['avg_latency']
+                        error_rate = metrics_1h['error_rate']
+                        signal_count = metrics_1h['count']
+                        requests_per_minute = metrics_1h.get('requests_per_minute', 0)
+                        p50 = metrics_1h.get('p50', 0)
+                        p95 = metrics_1h.get('p95', 0)
+                        p99 = metrics_1h.get('p99', 0)
+                        rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
                     else:
                         # Fallback to database
                         stmt = select(models.Signal).filter(
                             models.Signal.user_id == current_user.id,
                             models.Signal.service_name == service_name,
                             models.Signal.endpoint == endpoint
-                        ).order_by(models.Signal.timestamp.desc()).limit(20)
+                        ).order_by(models.Signal.timestamp.desc())
                         result = await db.execute(stmt)
                         signals = result.scalars().all()
                         
@@ -294,6 +320,8 @@ async def stream_services(
                         error_count = sum(1 for s in signals if s.status == 'error')
                         error_rate = error_count / signal_count
                         requests_per_minute = 0
+                        rate_limit_enabled = False
+                        p50 = p95 = p99 = 0
                     
                     # Get most recent signal for tenant_id
                     stmt = select(models.Signal).filter(
@@ -315,7 +343,13 @@ async def stream_services(
                         error_rate,
                         requests_per_minute=requests_per_minute,
                         user_id=current_user.id,
-                        db=db
+                        db=db,
+                        p50_latency=p50,
+                        p95_latency=p95,
+                        p99_latency=p99,
+                        latency_trend=trends['latency_trend'],
+                        error_trend=trends['error_trend'],
+                        rpm_trend=trends['rpm_trend']
                     )
                     
                     # Get effective threshold values (AI + override) for frontend
@@ -332,10 +366,11 @@ async def stream_services(
                         'tenant_id': tenant_id,
                         'cache_enabled': ai_decision['cache_enabled'],
                         'circuit_breaker': ai_decision['circuit_breaker'],
-                        'rate_limit_enabled': ai_decision.get('rate_limit_enabled', False),
+                        'rate_limit_enabled': rate_limit_enabled,
                         'queue_deferral': ai_decision.get('queue_deferral', False),
                         'load_shedding': ai_decision.get('load_shedding', False),
                         'reasoning': ai_decision['reasoning'],
+                        'status': ai_decision.get('status', 'healthy'),
                         'thresholds': {
                             'cache_latency_ms': thresholds['cache_latency_ms'],
                             'circuit_breaker_error_rate': thresholds['circuit_breaker_error_rate'],
@@ -374,9 +409,10 @@ async def stream_services(
                     last_signal = last_signal_record.timestamp.isoformat() if last_signal_record else None
                     
                     # Determine status
-                    if error_rate > thresholds['circuit_breaker_error_rate']:
+                    endpoint_statuses = [e.get('status', 'healthy') for e in data['endpoints']]
+                    if 'down' in endpoint_statuses:
                         status = 'down'
-                    elif error_rate > thresholds['circuit_breaker_error_rate'] or avg_latency > thresholds['cache_latency_ms']:
+                    elif 'degraded' in endpoint_statuses:
                         status = 'degraded'
                     else:
                         status = 'healthy'
@@ -424,17 +460,26 @@ async def stream_services(
                     "data": json.dumps(response_data)
                 }
                 
+                await db.close()
+                
                 # Wait 2 seconds before next update
                 await asyncio.sleep(2)
                 
         except asyncio.CancelledError:
+            if 'db' in locals() and not db.is_active:
+                await getattr(db, 'close')()
             print(f"🛑 SSE stream cancelled for user {current_user.id}")
         except Exception as e:
+            if 'db' in locals() and not db.is_active:
+                await getattr(db, 'close')()
             print(f"❌ Error in SSE stream: {e}")
             yield {
                 "event": "error",
                 "data": json.dumps({"error": str(e)})
             }
+        finally:
+            if 'db' in locals():
+                await getattr(db, 'close')()
     
     return EventSourceResponse(event_generator())
 
@@ -443,8 +488,7 @@ async def stream_services(
 async def stream_endpoint_detail(
     service_name: str,
     endpoint_path: str,
-    request: Request,
-    db: AsyncSession = Depends(get_async_db)
+    request: Request
 ):
     """
     Stream detailed endpoint metrics in real-time using Server-Sent Events.
@@ -459,7 +503,8 @@ async def stream_endpoint_detail(
         endpoint_path = '/' + endpoint_path
     
     # Authenticate user
-    current_user = await get_current_user(request, db)
+    async with AsyncSessionLocal() as db:
+        current_user = await get_current_user(request, db)
     
     async def event_generator():
         """Generate SSE events with endpoint detail data"""
@@ -473,9 +518,19 @@ async def stream_endpoint_detail(
                 from app.realtime_aggregates import get_realtime_metrics
                 from app.ai_engine.ai_engine import get_ai_tuned_decision
                 from app.ai_engine.threshold_manager import get_all_thresholds_with_override
+                from app.functions.decisionFunction import _compute_trends
                 
-                # Get metrics from Redis
-                metrics = await get_realtime_metrics(
+                db = AsyncSessionLocal()
+                
+                # Get metrics from Redis (1h and 24h for trends)
+                metrics_1h = await get_realtime_metrics(
+                    user_id=current_user.id,
+                    service_name=service_name,
+                    endpoint=endpoint_path,
+                    window='1h',
+                    db=db
+                )
+                metrics_24h = await get_realtime_metrics(
                     user_id=current_user.id,
                     service_name=service_name,
                     endpoint=endpoint_path,
@@ -483,11 +538,17 @@ async def stream_endpoint_detail(
                     db=db
                 )
                 
-                if metrics and metrics['count'] >= 1:
-                    total_signals = metrics['count']
-                    avg_latency = metrics['avg_latency']
-                    error_rate = metrics['error_rate']
-                    requests_per_minute = metrics.get('requests_per_minute', 0)
+                trends = _compute_trends(metrics_1h, metrics_24h)
+                
+                if metrics_1h and metrics_1h['count'] >= 1:
+                    total_signals = metrics_1h['count']
+                    avg_latency = metrics_1h['avg_latency']
+                    error_rate = metrics_1h['error_rate']
+                    requests_per_minute = metrics_1h.get('requests_per_minute', 0)
+                    p50 = metrics_1h.get('p50', 0)
+                    p95 = metrics_1h.get('p95', 0)
+                    p99 = metrics_1h.get('p99', 0)
+                    rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
                 else:
                     # Fallback to database
                     stmt = select(models.Signal).filter(
@@ -503,6 +564,7 @@ async def stream_endpoint_detail(
                             "event": "error",
                             "data": json.dumps({"error": "Endpoint not found or no signals recorded"})
                         }
+                        await db.close()
                         await asyncio.sleep(3)
                         continue
                     
@@ -511,6 +573,8 @@ async def stream_endpoint_detail(
                     error_count = sum(1 for s in signals if s.status == 'error')
                     error_rate = error_count / total_signals
                     requests_per_minute = 0
+                    rate_limit_enabled = False
+                    p50 = p95 = p99 = 0
                 
                 # Get history for graph
                 stmt = select(models.Signal).filter(
@@ -537,7 +601,13 @@ async def stream_endpoint_detail(
                     error_rate,
                     requests_per_minute=requests_per_minute,
                     user_id=current_user.id,
-                    db=db
+                    db=db,
+                    p50_latency=p50,
+                    p95_latency=p95,
+                    p99_latency=p99,
+                    latency_trend=trends['latency_trend'],
+                    error_trend=trends['error_trend'],
+                    rpm_trend=trends['rpm_trend']
                 )
                 
                 # Get effective threshold values (AI + override) for frontend
@@ -579,8 +649,9 @@ async def stream_endpoint_detail(
                         "suggestions": suggestions,
                         "cache_enabled": ai_decision['cache_enabled'],
                         "circuit_breaker": ai_decision.get('circuit_breaker', False),
-                        "rate_limit_enabled": ai_decision.get('rate_limit_enabled', False),
+                        "rate_limit_enabled": rate_limit_enabled,
                         "reasoning": ai_decision['reasoning'],
+                        "status": ai_decision.get('status', 'healthy'),
                         "thresholds": {
                             'cache_latency_ms': thresholds['cache_latency_ms'],
                             'circuit_breaker_error_rate': thresholds['circuit_breaker_error_rate'],
@@ -592,16 +663,25 @@ async def stream_endpoint_detail(
                     })
                 }
                 
+                await db.close()
+                
                 # Wait 3 seconds before next update (same as polling interval)
                 await asyncio.sleep(3)
                 
         except asyncio.CancelledError:
+            if 'db' in locals() and not db.is_active:
+                await getattr(db, 'close')()
             print(f"🛑 SSE stream cancelled for user {current_user.id}")
         except Exception as e:
+            if 'db' in locals() and not db.is_active:
+                await getattr(db, 'close')()
             print(f"❌ Error in SSE stream: {e}")
             yield {
                 "event": "error",
                 "data": json.dumps({"error": str(e)})
             }
+        finally:
+            if 'db' in locals():
+                await getattr(db, 'close')()
     
     return EventSourceResponse(event_generator())
