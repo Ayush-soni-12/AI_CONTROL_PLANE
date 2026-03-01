@@ -5,7 +5,6 @@ Get up and running in **5 minutes** with intelligent traffic management for your
 ## Prerequisites
 
 - **Node.js SDK**: Node.js >= 18.0.0
-- **Python SDK**: Python >= 3.9 + pip
 - A running AI Control Plane instance (or use Docker Compose)
 - Terminal access (for generating tenant ID)
 
@@ -85,20 +84,8 @@ bfc3aed7948e46fafacac26faf8b3159
 ### Node.js / Express
 
 ```bash
-npm install @ayushsoni12/ai-control-plane
+npm install neuralcontrol
 ```
-
-### Python / FastAPI
-
-```bash
-pip install ai-control-plane-sdk
-```
-
-> **FastAPI extra** (installs Starlette if not already present):
->
-> ```bash
-> pip install "ai-control-plane-sdk[fastapi]"
-> ```
 
 ---
 
@@ -109,7 +96,7 @@ Create a `.env` file in your project:
 ```bash
 # .env
 CONTROL_PLANE_API_KEY=acp_2d936ad37aae3cea5635b46db3708d93897c96af
-CONTROL_PLANE_URL=http://localhost:8000
+CONTROL_PLANE_URL=https://api.neuralcontrol.online
 TENANT_ID=bfc3aed7948e46fafacac26faf8b3159
 SERVICE_NAME=my-awesome-service
 ```
@@ -123,7 +110,7 @@ SERVICE_NAME=my-awesome-service
 ```javascript
 // server.js
 import express from "express";
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import ControlPlaneSDK from "neuralcontrol";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -135,27 +122,6 @@ const controlPlane = new ControlPlaneSDK({
   serviceName: process.env.SERVICE_NAME,
   controlPlaneUrl: process.env.CONTROL_PLANE_URL,
 });
-```
-
-### Python / FastAPI
-
-```python
-# main.py
-import os
-from fastapi import FastAPI
-from dotenv import load_dotenv
-from ai_control_plane import ControlPlaneSDK
-
-load_dotenv()
-
-app = FastAPI()
-
-sdk = ControlPlaneSDK(
-    api_key=os.getenv("CONTROL_PLANE_API_KEY"),
-    tenant_id=os.getenv("TENANT_ID"),
-    service_name=os.getenv("SERVICE_NAME", "my-awesome-service"),
-    control_plane_url=os.getenv("CONTROL_PLANE_URL", "http://localhost:8000"),
-)
 ```
 
 ---
@@ -191,13 +157,11 @@ app.get(
     if (isQueueDeferral) {
       const jobId = `job-${Date.now()}`;
       await queueJob(jobId, req.body);
-      return res
-        .status(202)
-        .json({
-          message: "Request queued",
-          jobId,
-          estimatedWait: estimatedDelay,
-        });
+      return res.status(202).json({
+        message: "Request queued",
+        jobId,
+        estimatedWait: estimatedDelay,
+      });
     }
     if (shouldCache && cache.products) {
       return res.json({ source: "cache", data: cache.products });
@@ -209,87 +173,13 @@ app.get(
   },
 );
 
-app.listen(3001, () => console.log("🚀 Service running on port 3001"));
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, async () => {
+  console.log(`🚀 Service running on port ${PORT}`);
+  // Initialize Control Plane SDK with known endpoints
+  await controlPlane.initialize(["/api/products"]);
+});
 ```
-
----
-
-### Python / FastAPI — Per-Route `Depends()` (Recommended)
-
-The Python SDK uses FastAPI's `Depends()` system instead of Express middleware.
-Add it to individual routes for full per-endpoint control:
-
-```python
-from fastapi import FastAPI, Request, Depends
-from fastapi.responses import JSONResponse
-from ai_control_plane import ControlPlaneSDK
-from ai_control_plane.middleware import control_plane_dep
-
-app = FastAPI()
-sdk = ControlPlaneSDK(
-    api_key=os.getenv("CONTROL_PLANE_API_KEY"),
-    tenant_id=os.getenv("TENANT_ID"),
-    service_name="my-awesome-service",
-)
-
-cache = {}
-
-@app.get("/api/products")
-async def get_products(
-    request: Request,
-    # Equivalent of controlPlane.middleware("/api/products") in Node.js
-    cp=Depends(control_plane_dep(sdk, "/api/products", priority="medium")),
-):
-    # cp is the same as req.controlPlane in Node.js
-
-    if cp["is_rate_limited_customer"]:
-        return JSONResponse(
-            status_code=429,
-            headers={"Retry-After": str(cp["retry_after"])},
-            content={"error": "Rate limit exceeded", "retry_after": cp["retry_after"]},
-        )
-
-    if cp["is_load_shedding"]:
-        return JSONResponse(
-            status_code=503,
-            content={"error": "Service temporarily unavailable", "retry_after": cp["retry_after"]},
-        )
-
-    if cp["is_queue_deferral"]:
-        return JSONResponse(
-            status_code=202,
-            content={"message": "Request queued", "estimated_wait": cp["estimated_delay"]},
-        )
-
-    if cp["should_cache"] and "products" in cache:
-        return {"source": "cache", "data": cache["products"]}
-
-    products = await get_products_from_db()
-
-    if cp["should_cache"]:
-        cache["products"] = products
-
-    return {"source": "database", "data": products}
-```
-
-**Run it:**
-
-```bash
-uvicorn main:app --port 4001 --reload
-```
-
-> [!TIP]
-> **Node.js → Python Quick Reference**
->
-> | Node.js (`req.controlPlane`) | Python (`cp` dict)               |
-> | ---------------------------- | -------------------------------- |
-> | `shouldCache`                | `cp["should_cache"]`             |
-> | `shouldSkip`                 | `cp["should_skip"]`              |
-> | `isRateLimitedCustomer`      | `cp["is_rate_limited_customer"]` |
-> | `isLoadShedding`             | `cp["is_load_shedding"]`         |
-> | `isQueueDeferral`            | `cp["is_queue_deferral"]`        |
-> | `retryAfter`                 | `cp["retry_after"]`              |
-> | `estimatedDelay`             | `cp["estimated_delay"]`          |
 
 ---
 
@@ -299,12 +189,6 @@ uvicorn main:app --port 4001 --reload
 
 ```bash
 curl http://localhost:3001/api/products
-```
-
-### Python / FastAPI
-
-```bash
-curl http://localhost:4001/api/products
 ```
 
 ### View Live Metrics
@@ -400,28 +284,6 @@ curl http://localhost:8000/
 1. Ensure you've sent at least one request
 2. Check tenant ID is correct
 3. Verify service name in SDK config matches dashboard filter
-
-### `request.state.control_plane` is undefined (FastAPI)
-
-**Solution:**
-
-1. Make sure you have the `Depends()` on the route, not just imported
-2. Check that the `sdk` object is initialized before the route is defined
-3. Verify the SDK package is installed: `pip show ai-control-plane-sdk`
-
-```python
-# Correct ✅
-@app.get("/api/products")
-async def get_products(
-    cp=Depends(control_plane_dep(sdk, "/api/products")),  # ← required
-):
-    print(cp["should_cache"])  # ✅ defined
-
-# Wrong ❌ — no Depends, cp will not be injected
-@app.get("/api/products")
-async def get_products():
-    ...
-```
 
 ### `req.controlPlane` is undefined (Node.js)
 
