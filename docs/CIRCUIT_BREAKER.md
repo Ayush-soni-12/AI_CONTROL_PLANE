@@ -139,13 +139,18 @@ The AI Control Plane monitors multiple signals to determine when to open the cir
 ### Basic Setup
 
 ```javascript
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import express from "express";
+import ControlPlaneSDK from "neuralcontrol";
+import dotenv from "dotenv";
 
+dotenv.config();
+
+const app = express();
 const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY,
   tenantId: process.env.TENANT_ID,
   serviceName: "my-service",
-  controlPlaneUrl: process.env.CONTROL_PLANE_URL,
+  controlPlaneUrl: "https://api.neuralcontrol.online",
 });
 
 app.post(
@@ -171,6 +176,11 @@ app.post(
     }
   },
 );
+
+app.listen(3001, async () => {
+  console.log("Server running on http://localhost:3001");
+  await controlPlane.initialize(["/api/external-call"]);
+});
 ```
 
 ### Available SDK Properties

@@ -84,6 +84,8 @@ export default function AIInsightsPage() {
             </div>
           </div>
 
+        <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
+
           {/* Service Filter */}
           {servicesList.length > 0 && (
             <div className="mb-6">

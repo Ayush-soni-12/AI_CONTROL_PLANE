@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status, HTTPException, Request
+from fastapi import APIRouter, Depends, Response, status, HTTPException, Request, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import models, Schema
@@ -12,6 +12,9 @@ from app.queue.email_publisher import publish_email
 from app.redis.cache import cache_get, cache_set, invalidate_user_cache
 from app.queue.publisher import publish_signal
 import time
+from typing import List, Optional
+from pydantic import BaseModel
+from datetime import datetime, timezone
 
 
 router = APIRouter(
@@ -63,6 +66,63 @@ async def receive_signal(
     # Return 202 Accepted immediately — consumer handles storage
     return Response(status_code=status.HTTP_202_ACCEPTED)
 
+
+class SignalItem(BaseModel):
+    service_name: str
+    endpoint: str
+    latency_ms: float
+    status: str
+    tenant_id: str
+    priority: Optional[str] = "medium"
+    customer_identifier: Optional[str] = None
+    action_taken: Optional[str] = "none"
+    recorded_at: Optional[str] = None
+
+class BatchSignalRequest(BaseModel):
+    signals: List[SignalItem]
+
+@router.post("/signals/batch", status_code=202)
+async def receive_signal_batch(
+    payload: BatchSignalRequest,
+    current_user: models.User = Depends(verify_api_key)
+):
+    """
+    Receive a batch of signals from the SDK.
+    The SDK sends all queued signals every 5 seconds in one call
+    instead of one HTTP call per request.
+    """
+    
+    print(f"📥 Batch received: {len(payload.signals)} signals | user={current_user.email}")
+    
+    processed = 0
+    errors = 0
+
+    for signal in payload.signals:
+        try:
+            signal_data = signal.model_dump()
+            signal_data['user_id'] = current_user.id
+            
+            # Map SDK 'recorded_at' to backend 'timestamp' ORM attribute
+            if 'recorded_at' in signal_data:
+                recorded_val = signal_data.pop('recorded_at')
+                if recorded_val:
+                    # Keep it as string, Pydantic/SQLAlchemy will parse it from ISO or consumer will handle
+                    signal_data['timestamp'] = datetime.fromisoformat(recorded_val.replace('Z', '+00:00'))
+            
+            # Send each to RabbitMQ just like the single endpoint does
+            await publish_signal(signal_data)
+            processed += 1
+        except Exception as e:
+            print(f"❌ Failed to publish signal in batch: {e}")
+            errors += 1
+            
+    if errors > 0 and processed == 0:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Signal queue temporarily unavailable."
+        )
+
+    return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
 
@@ -147,6 +207,7 @@ async def get_config(
             'tenant_id': tenant_id,
             'customer_identifier': customer_identifier,
             'rate_limited_customer': True,  # NEW: Indicates per-customer block
+            'rate_limit_rule_rpm': decision.get('rate_limit_rule_rpm'),
             'retry_after': retry_after,
             'status_code': 429,  # SDK should return 429
             'reason': f"Per-customer rate limit: {decision['reason']}"
@@ -166,6 +227,7 @@ async def get_config(
             'endpoint': endpoint,
             'tenant_id': tenant_id,
             'load_shedding': True,  # NEW
+            'rate_limit_rule_rpm': decision.get('rate_limit_rule_rpm'),
             'retry_after': retry_after,
             'status_code': 503,  # SDK should return 503
             'reason': decision['reason'],
@@ -181,6 +243,7 @@ async def get_config(
             'endpoint': endpoint,
             'tenant_id': tenant_id,
             'queue_deferral': True,  # NEW
+            'rate_limit_rule_rpm': decision.get('rate_limit_rule_rpm'),
             'status_code': 202,  # SDK should return 202
             'reason': decision['reason'],
             'estimated_delay': 10  # Seconds (SDK can queue for later)
@@ -195,6 +258,7 @@ async def get_config(
         'cache_enabled': decision['cache_enabled'],
         'circuit_breaker': decision['circuit_breaker'],
         'rate_limited_customer': False,  # Passed per-customer check
+        'rate_limit_rule_rpm': decision.get('rate_limit_rule_rpm'),
         'queue_deferral': False,  # Not queued
         'load_shedding': False,  # Not shed
         'status_code': 200,  # Normal request

@@ -90,13 +90,18 @@ The AI Control Plane analyzes multiple factors to recommend caching:
 ### Basic Setup
 
 ```javascript
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import express from "express";
+import ControlPlaneSDK from "neuralcontrol";
+import dotenv from "dotenv";
 
+dotenv.config();
+
+const app = express();
 const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY,
   tenantId: process.env.TENANT_ID,
   serviceName: "my-service",
-  controlPlaneUrl: process.env.CONTROL_PLANE_URL,
+  controlPlaneUrl: "https://api.neuralcontrol.online",
 });
 
 app.get(
@@ -125,6 +130,11 @@ app.get(
     });
   },
 );
+
+app.listen(3001, async () => {
+  console.log("Server running on http://localhost:3001");
+  await controlPlane.initialize(["/api/products"]);
+});
 ```
 
 ### Available SDK Properties
@@ -217,8 +227,6 @@ All servers share the SAME cache!
 ---
 
 ## Redis Setup
-
-
 
 Create `docker-compose.yml`:
 
@@ -334,13 +342,16 @@ module.exports = {
 
 ```javascript
 import express from "express";
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import ControlPlaneSDK from "neuralcontrol";
+import dotenv from "dotenv";
 import {
   getCacheKey,
   getFromCache,
   setInCache,
   deleteFromCache,
 } from "./redis-helper.js";
+
+dotenv.config();
 
 const app = express();
 app.use(express.json());
@@ -349,7 +360,7 @@ const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY,
   tenantId: process.env.TENANT_ID,
   serviceName: "product-service",
-  controlPlaneUrl: process.env.CONTROL_PLANE_URL,
+  controlPlaneUrl: "https://api.neuralcontrol.online",
 });
 
 // GET /products - With Redis caching
@@ -403,8 +414,9 @@ app.put("/api/products/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-app.listen(3000, () => {
+app.listen(3000, async () => {
   console.log("🚀 Server running on port 3000");
+  await controlPlane.initialize(["/api/products"]);
 });
 ```
 

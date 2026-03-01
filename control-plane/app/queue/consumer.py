@@ -24,6 +24,8 @@ from ..realtime_aggregates import update_realtime_aggregate
 from app.redis.cache import invalidate_user_cache
 from ..database.database import AsyncSessionLocal
 from ..database import models
+from datetime import datetime
+
 
 
 async def _process_signal(signal_data: dict) -> None:
@@ -36,13 +38,14 @@ async def _process_signal(signal_data: dict) -> None:
       2. Store in PostgreSQL (with sampling rate)
       3. Invalidate user cache
     """
-    user_id        = signal_data["user_id"]
-    service_name   = signal_data["service_name"]
-    endpoint       = signal_data["endpoint"]
-    latency_ms     = signal_data["latency_ms"]
-    sig_status     = signal_data["status"]
+    user_id        = signal_data.get("user_id")
+    service_name   = signal_data.get("service_name")
+    endpoint       = signal_data.get("endpoint")
+    latency_ms     = signal_data.get("latency_ms")
+    sig_status     = signal_data.get("status")
     customer_id    = signal_data.get("customer_identifier")
     priority       = signal_data.get("priority", "medium")
+    action_taken   = signal_data.get("action_taken", "none")
 
     # ── STEP 1: Update Redis real-time aggregates ──────────────────────────
     await update_realtime_aggregate(
@@ -53,6 +56,7 @@ async def _process_signal(signal_data: dict) -> None:
         status=sig_status,
         customer_identifier=customer_id,
         priority=priority,
+        action_taken=action_taken,
     )
     print(
         f"✅ [Consumer] Redis updated | "
@@ -67,6 +71,15 @@ async def _process_signal(signal_data: dict) -> None:
 
     if should_store:
         async with AsyncSessionLocal() as db:
+            # The timestamp from JS might be a string (e.g. from recorded_at or timestamp)
+            ts_str = signal_data.get("timestamp") or signal_data.get("recorded_at")
+            if ts_str and isinstance(ts_str, str):
+                try:
+                    # Remove 'Z' if present for fromisoformat compatibility in <3.11
+                    signal_data["timestamp"] = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                except ValueError:
+                    pass
+                    
             signal = models.Signal(**signal_data)
             db.add(signal)
             await db.commit()

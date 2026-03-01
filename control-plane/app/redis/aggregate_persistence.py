@@ -102,8 +102,8 @@ async def snapshot_redis_aggregates(db: AsyncSession = None):
                     # Format: rt_agg:user:{user_id}:service:{service}:endpoint:{endpoint}:{window}
                     key_str = key.decode('utf-8') if isinstance(key, bytes) else key
                     
-                    # Skip latency sorted set keys (auxiliary data structures)
-                    if key_str.endswith(':latencies'):
+                    # Skip latency sorted set keys and per-customer rate-limiting counters
+                    if key_str.endswith(':latencies') or ':customer:' in key_str:
                         snapshots_skipped += 1
                         continue
                     

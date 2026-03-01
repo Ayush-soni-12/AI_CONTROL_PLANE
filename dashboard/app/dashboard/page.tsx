@@ -118,6 +118,8 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+          
+        <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
 
           {/* Dynamic Metrics - SSE handles own loading */}
           <DynamicMetrics />

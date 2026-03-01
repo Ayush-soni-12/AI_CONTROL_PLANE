@@ -17,6 +17,7 @@ import {
   Brain,
   BookOpen,
   Shield,
+  AlertTriangle,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useLogout } from "@/hooks/useSignals";
@@ -54,6 +55,7 @@ export function DashboardSidebar() {
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
     { icon: Brain, label: "AI Insights", href: "/dashboard/ai-insights" },
+    { icon: AlertTriangle, label: "Incidents", href: "/dashboard/incidents" },
     { icon: Shield, label: "Overrides", href: "/dashboard/overrides" },
     { icon: BookOpen, label: "Docs", href: "/dashboard/docs" },
     { icon: Key, label: "API Keys", href: "/dashboard/api-keys" },

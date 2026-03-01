@@ -38,7 +38,7 @@ TENANT_ID=your_tenant_id_here
 
 # Service Configuration
 SERVICE_NAME=my-service
-CONTROL_PLANE_URL=http://localhost:8000
+CONTROL_PLANE_URL=https://api.neuralcontrol.online
 
 # Optional: Node Environment
 NODE_ENV=development  # development, production
@@ -114,7 +114,7 @@ SERVICE_NAME=order-service
 ### Full Configuration
 
 ```javascript
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import ControlPlaneSDK from "neuralcontrol";
 
 const controlPlane = new ControlPlaneSDK({
   // Required
@@ -123,7 +123,7 @@ const controlPlane = new ControlPlaneSDK({
   serviceName: process.env.SERVICE_NAME,
 
   // Optional
-  controlPlaneUrl: process.env.CONTROL_PLANE_URL || "http://localhost:8000",
+  controlPlaneUrl: process.env.CONTROL_PLANE_URL || "https://api.neuralcontrol.online",
 });
 ```
 
@@ -134,7 +134,7 @@ const controlPlane = new ControlPlaneSDK({
 | `apiKey`           | string  | **Required**            | API key from dashboard               |
 | `tenantId`         | string  | **Required**            | Unique tenant identifier             |
 | `serviceName`      | string  | **Required**            | Name of your service                 |
-| `controlPlaneUrl`  | string  | `http://localhost:8000` | Control Plane API URL                |
+| `controlPlaneUrl`  | string  | `https://api.neuralcontrol.online` | Control Plane API URL                |
 
 ---
 
@@ -182,7 +182,7 @@ services:
   frontend:
     build: ./frontend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: https://api.neuralcontrol.online
     ports:
       - "3000:3000"
     depends_on:

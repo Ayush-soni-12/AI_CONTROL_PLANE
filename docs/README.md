@@ -12,7 +12,7 @@ An intelligent control plane that uses AI to automatically optimize microservice
 - 📋 **Queue Deferral**: Async processing for non-critical operations
 - ⚡ **Circuit Breaker**: Protects services from cascade failures
 - 👥 **Multi-Tenant Support**: Isolated metrics and decisions per tenant
-- 📦 **Easy Integration**: Simple SDK for **Node.js/Express** and **Python/FastAPI** services
+- 📦 **Easy Integration**: Simple SDK for **Node.js/Express** services
 - 🐳 **Docker Ready**: Complete stack with one command
 
 ---
@@ -98,13 +98,7 @@ npm start
 **Node.js / Express:**
 
 ```bash
-npm install @ayushsoni12/ai-control-plane
-```
-
-**Python / FastAPI:**
-
-```bash
-pip install ai-control-plane-sdk
+npm install neuralcontrol
 ```
 
 #### 2. Generate Tenant ID
@@ -120,27 +114,30 @@ openssl rand -hex 16
 **Node.js / Express:**
 
 ```javascript
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import express from "express";
+import ControlPlaneSDK from "neuralcontrol";
+import dotenv from "dotenv";
 
-const sdk = new ControlPlaneSDK({
+dotenv.config();
+
+const app = express();
+const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY,
   tenantId: process.env.TENANT_ID,
   serviceName: "my-service",
-  controlPlaneUrl: "http://localhost:8000",
+  controlPlaneUrl: "https://api.neuralcontrol.online",
 });
 
-app.get("/products", sdk.middleware("/products"), async (req, res) => {
+app.get("/products", controlPlane.middleware("/products"), async (req, res) => {
   if (req.controlPlane.isRateLimitedCustomer)
     return res
       .status(429)
       .json({ error: "Rate limited", retryAfter: req.controlPlane.retryAfter });
   if (req.controlPlane.isLoadShedding)
-    return res
-      .status(503)
-      .json({
-        error: "Service overloaded",
-        retryAfter: req.controlPlane.retryAfter,
-      });
+    return res.status(503).json({
+      error: "Service overloaded",
+      retryAfter: req.controlPlane.retryAfter,
+    });
   if (req.controlPlane.shouldCache && cache.products)
     return res.json({ cached: true, data: cache.products });
 
@@ -148,43 +145,12 @@ app.get("/products", sdk.middleware("/products"), async (req, res) => {
   if (req.controlPlane.shouldCache) cache.products = products;
   res.json({ cached: false, data: products });
 });
-```
 
-**Python / FastAPI:**
-
-```python
-from fastapi import FastAPI, Request, Depends
-from fastapi.responses import JSONResponse
-from ai_control_plane import ControlPlaneSDK
-from ai_control_plane.middleware import control_plane_dep
-
-app = FastAPI()
-sdk = ControlPlaneSDK(
-    api_key=os.getenv("CONTROL_PLANE_API_KEY"),
-    tenant_id=os.getenv("TENANT_ID"),
-    service_name="my-service",
-)
-
-cache = {}
-
-@app.get("/products")
-async def get_products(
-    request: Request,
-    cp=Depends(control_plane_dep(sdk, "/products", priority="medium")),
-):
-    if cp["is_rate_limited_customer"]:
-        return JSONResponse(status_code=429,
-            headers={"Retry-After": str(cp["retry_after"])},
-            content={"error": "Rate limited"})
-    if cp["is_load_shedding"]:
-        return JSONResponse(status_code=503, content={"error": "Service overloaded"})
-    if cp["should_cache"] and "products" in cache:
-        return {"cached": True, "data": cache["products"]}
-
-    products = await get_products_from_db()
-    if cp["should_cache"]:
-        cache["products"] = products
-    return {"cached": False, "data": products}
+app.listen(3001, async () => {
+  console.log("Server running on http://localhost:3001");
+  // Initialize Control Plane SDK with known endpoints
+  await controlPlane.initialize(["/products"]);
+});
 ```
 
 > 📖 **Full Getting Started →** [GETTING_STARTED.md](./GETTING_STARTED.md)
@@ -303,7 +269,7 @@ ai-control-plane/
 │   └── Dockerfile
 │
 ├── sdk/
-│   ├── nodejs/            # npm: @ayushsoni12/ai-control-plane
+│   ├── nodejs/            # npm: neuralcontrol
 │   │   └── index.js
 │   └── python/            # pip: ai-control-plane-sdk
 │       ├── ai_control_plane/

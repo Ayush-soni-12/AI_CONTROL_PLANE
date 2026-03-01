@@ -27,12 +27,14 @@ EMAIL_QUEUE_NAME = "email_queue"
 EMAIL_DLQ_NAME = "email_dead_letter"
 
 
+_queue_declared = False
+
 async def get_rabbitmq_channel() -> aio_pika.abc.AbstractChannel:
     """
     Returns the shared RabbitMQ channel, creating it if needed.
     Uses RobustConnection which auto-reconnects on disconnect.
     """
-    global _connection, _channel
+    global _connection, _channel, _queue_declared
 
     if _connection is None or _connection.is_closed:
         _connection = await aio_pika.connect_robust(
@@ -43,7 +45,9 @@ async def get_rabbitmq_channel() -> aio_pika.abc.AbstractChannel:
 
     if _channel is None or _channel.is_closed:
         _channel = await _connection.channel()
+        _queue_declared = False # Reset on new channel
 
+    if not _queue_declared:
         # Set prefetch so consumer only takes 1 message at a time
         # (ensures fair dispatch and no message overload)
         await _channel.set_qos(prefetch_count=10)
@@ -66,7 +70,8 @@ async def get_rabbitmq_channel() -> aio_pika.abc.AbstractChannel:
                 "x-message-ttl": 86_400_000,  # messages expire after 24h if unprocessed
             }
         )
-
+        
+        _queue_declared = True
         print(f"✅ RabbitMQ channel ready | Queue: '{SIGNALS_QUEUE_NAME}'")
 
     return _channel

@@ -51,6 +51,7 @@ export default function AnalyticsPage() {
               </p>
             </div>
           </div>
+        <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
 
           {/* Percentile Analysis */}
           <PercentileChart />
