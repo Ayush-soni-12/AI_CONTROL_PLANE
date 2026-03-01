@@ -135,6 +135,8 @@ async def update_realtime_aggregate(
                 agg['errors'] += 1
             if action_taken == 'rate_limited':
                 agg['rate_limit_enabled'] = True
+            else:
+                agg['rate_limit_enabled'] = False
             agg['last_updated'] = datetime.now().isoformat()
             
             # Save back to Redis with appropriate TTL

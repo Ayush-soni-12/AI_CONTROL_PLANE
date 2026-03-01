@@ -232,7 +232,7 @@ async def make_decision(
         else:
              from ..ai_engine.threshold_manager import get_all_thresholds
              current_thresholds = await get_all_thresholds(db, user_id, service_name, endpoint)
-             customer_rpm_limit = current_thresholds.get("rate_limit_customer_rpm", 50) 
+             customer_rpm_limit = current_thresholds.get("rate_limit_customer_rpm", 15) 
 
     # ── STEP 4: Compute trends ────────────────────────────────────────────────
     trends = _compute_trends(metrics_1h, metrics_24h)
@@ -300,7 +300,7 @@ async def make_decision(
                 avg_latency,
                 error_rate,
                 requests_per_minute=total_rpm,
-                customer_requests_per_minute=customer_rpm,
+                customer_requests_per_minute=0,
                 priority=priority,
                 p50_latency=p50,
                 p95_latency=p95,

@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.database.database import get_async_db
 from app.router.token import get_current_user
@@ -291,6 +291,7 @@ async def get_incident(
 async def trigger_root_cause_analysis(
     request: Request,
     incident_id: int,
+    timezone_offset: int = Query(0, description="Browser timezone offset in minutes"),
     db: AsyncSession = Depends(get_async_db),
 ):
     """
@@ -320,7 +321,7 @@ async def trigger_root_cause_analysis(
             "latency_ms": e.latency_ms,
             "error_rate": e.error_rate,
             "rpm": e.rpm,
-            "occurred_at": e.occurred_at.isoformat(),
+            "occurred_at": (e.occurred_at - timedelta(minutes=timezone_offset)).isoformat() if timezone_offset else e.occurred_at.isoformat(),
         }
         for e in events
     ]
