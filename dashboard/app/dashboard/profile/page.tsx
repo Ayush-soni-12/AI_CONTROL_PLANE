@@ -70,6 +70,8 @@ export default function ProfilePage() {
             </div>
           </div>
 
+        <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
+
           {/* Dynamic Profile Section */}
           <Suspense
             fallback={
