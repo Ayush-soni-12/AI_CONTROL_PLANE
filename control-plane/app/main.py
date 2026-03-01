@@ -6,7 +6,7 @@ from app.database.database import engine, Base
 from app.database.database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from app.router import signals, auth, history, sse, ai_insights, analytics, overrides
+from app.router import signals, auth, history, sse, ai_insights, analytics, overrides , IncidentTracker
 from app.redis.cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -133,17 +133,31 @@ async def startup():
     print("   - 🤖 AI analysis: Every 5 minutes")
 
     # Start RabbitMQ signal consumer as a background asyncio task
-    asyncio.create_task(start_signal_consumer())
+    app.state.signal_consumer_task = asyncio.create_task(start_signal_consumer())
     print("✅ RabbitMQ signal consumer started")
 
     # Start RabbitMQ email consumer as a background asyncio task
-    asyncio.create_task(start_email_consumer())
+    app.state.email_consumer_task = asyncio.create_task(start_email_consumer())
     print("✅ RabbitMQ email consumer started")
 
 @app.on_event("shutdown")
 async def shutdown():
     await redis_client.close()
     scheduler.shutdown()
+    
+    # Gracefully cancel background consumer tasks
+    tasks = []
+    if hasattr(app.state, "signal_consumer_task"):
+        app.state.signal_consumer_task.cancel()
+        tasks.append(app.state.signal_consumer_task)
+        
+    if hasattr(app.state, "email_consumer_task"):
+        app.state.email_consumer_task.cancel()
+        tasks.append(app.state.email_consumer_task)
+        
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
     await close_rabbitmq_connection()
     print("🛑 Background jobs stopped")
 
@@ -166,3 +180,5 @@ app.include_router(analytics.router)
 
 # Import and include Config Overrides router
 app.include_router(overrides.router)
+
+app.include_router(IncidentTracker.router)
