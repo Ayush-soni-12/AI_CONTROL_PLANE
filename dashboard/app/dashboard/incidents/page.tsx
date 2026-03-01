@@ -19,7 +19,7 @@ export default function IncidentTimeline() {
     return (
       <>
         <DashboardSidebar />
-        <div className="2xl:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background text-white">
+        <div className="2xl:ml-64 min-h-screen p-4 sm:p-8 bg-linear-to-br from-background via-purple-950/5 to-background text-white">
           <div className="max-w-4xl mx-auto pt-6">
             <IncidentDetail
               incidentId={selectedId}
@@ -34,12 +34,12 @@ export default function IncidentTimeline() {
   return (
     <>
       <DashboardSidebar />
-      <div className="2xl:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
+      <div className="2xl:ml-64 min-h-screen p-4 sm:p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
         <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="mb-8 mt-12 2xl:mt-0">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 relative">
-              <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
+              <div className="p-3 sm:p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
                 <Siren className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
               </div>
               <div className="flex-1 w-full">
@@ -67,7 +67,7 @@ export default function IncidentTimeline() {
 
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-2 mb-6">
-            <div className="flex bg-gray-900/40 p-1 rounded-xl border border-gray-800/50 backdrop-blur-sm">
+            <div className="flex flex-wrap bg-gray-900/40 p-1 rounded-xl border border-gray-800/50 backdrop-blur-sm">
               {[
                 ["all", "All"],
                 ["open", "🔴 Active"],

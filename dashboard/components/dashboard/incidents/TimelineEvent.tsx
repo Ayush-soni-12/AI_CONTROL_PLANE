@@ -124,7 +124,7 @@ export function TimelineEvent({
   return (
     <div className="flex relative">
       {/* Left: time column */}
-      <div className="w-20 shrink-0 pt-3.5 text-right pr-4">
+      <div className="w-16 sm:w-20 shrink-0 pt-3.5 text-right pr-3 sm:pr-4">
         <span className="text-[11px] text-gray-500 font-mono tracking-tight">
           {fmt(event.occurred_at)}
         </span>
@@ -150,10 +150,10 @@ export function TimelineEvent({
       </div>
 
       {/* Right: content card */}
-      <div className="flex-1 pl-4 pb-6 pt-2 min-w-0">
+      <div className="flex-1 pl-2 sm:pl-4 pb-6 pt-2 min-w-0">
         <div
           onClick={() => setExpanded(!expanded)}
-          className={`bg-gray-800/20 backdrop-blur-md rounded-xl p-3 cursor-pointer transition-all duration-200 border ${
+          className={`bg-gray-800/20 backdrop-blur-md rounded-xl p-3 sm:p-4 cursor-pointer transition-all duration-200 border ${
             expanded
               ? "border-opacity-40 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.3)]"
               : "border-gray-700/50 hover:border-gray-600 hover:bg-gray-800/40"

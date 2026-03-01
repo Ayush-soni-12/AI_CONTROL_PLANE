@@ -67,7 +67,7 @@ export function IncidentDetail({
       </button>
 
       {/* Incident header */}
-      <div className="bg-gray-900/40 border border-gray-800/50 backdrop-blur-xl rounded-2xl p-6 mb-6">
+      <div className="bg-gray-900/40 border border-gray-800/50 backdrop-blur-xl rounded-2xl p-4 sm:p-6 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div className="flex-1">
             <h2 className="text-2xl font-bold text-white mb-3">
@@ -100,7 +100,7 @@ export function IncidentDetail({
             </div>
           </div>
 
-          <div className="shrink-0 text-right">
+          <div className="shrink-0 text-left sm:text-right mt-4 sm:mt-0">
             <div className="text-3xl font-mono font-bold text-white tracking-tight">
               {incident.duration_display}
             </div>
@@ -138,6 +138,7 @@ export function IncidentDetail({
           ].map(({ label, value, color }) => (
             <div
               key={label}
+              className="flex-1 min-w-[120px] sm:min-w-[140px]"
               style={{
                 background: color + "10",
                 border: `1px solid ${color}25`,
@@ -168,7 +169,7 @@ export function IncidentDetail({
 
       {/* AI Root Cause */}
       {incident.root_cause_summary ? (
-        <div className="bg-cyan-500/10 border border-cyan-500/20 backdrop-blur-xl rounded-2xl p-6 mb-6">
+        <div className="bg-cyan-500/10 border border-cyan-500/20 backdrop-blur-xl rounded-2xl p-4 sm:p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3 flex-1">
               <span className="text-2xl">🤖</span>
@@ -194,7 +195,7 @@ export function IncidentDetail({
           </p>
         </div>
       ) : (
-        <div className="bg-gray-900/40 border border-gray-800/50 rounded-2xl p-8 mb-6 text-center flex flex-col items-center justify-center">
+        <div className="bg-gray-900/40 border border-gray-800/50 rounded-2xl p-6 sm:p-8 mb-6 text-center flex flex-col items-center justify-center">
           <span className="text-4xl mb-3">🤖</span>
           <h3 className="text-lg font-semibold text-gray-200 mb-2">
             No AI Analysis Yet
@@ -216,7 +217,7 @@ export function IncidentDetail({
       )}
 
       {/* Timeline */}
-      <div className="bg-gray-900/40 border border-gray-800/50 backdrop-blur-xl rounded-2xl p-6">
+      <div className="bg-gray-900/40 border border-gray-800/50 backdrop-blur-xl rounded-2xl p-4 sm:p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-bold text-white">Event Timeline</h3>
           <span className="text-xs text-gray-400">

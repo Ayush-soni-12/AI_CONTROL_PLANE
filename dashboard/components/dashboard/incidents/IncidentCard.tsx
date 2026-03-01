@@ -66,7 +66,7 @@ export function IncidentCard({
   return (
     <div
       onClick={onClick}
-      className={`group bg-gray-900/40 border backdrop-blur-xl rounded-2xl p-5 cursor-pointer transition-all duration-300 mb-3 ${
+      className={`group bg-gray-900/40 border backdrop-blur-xl rounded-2xl p-4 sm:p-5 cursor-pointer transition-all duration-300 mb-3 ${
         isOpen
           ? "border-amber-500/30 hover:border-amber-500/50 hover:shadow-[0_4px_24px_-4px_rgba(245,158,11,0.15)]"
           : "border-gray-800/50 hover:border-gray-700 hover:bg-gray-800/40"
@@ -115,7 +115,7 @@ export function IncidentCard({
             />
           </div>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 text-left sm:text-right mt-2 sm:mt-0">
           <div className="text-2xl font-mono font-bold text-gray-200 group-hover:text-white transition-colors">
             {incident.duration_display}
           </div>
