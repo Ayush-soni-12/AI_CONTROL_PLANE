@@ -2,7 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-   reactStrictMode: true,
+  reactStrictMode: true,
+  
+  // Expose cloud mode flag to client bundle
+  env: {
+    NEXT_PUBLIC_IS_CLOUD_MODE: process.env.NEXT_PUBLIC_IS_CLOUD_MODE ?? "false",
+  },
   
   // Remove console logs in production
   compiler: {

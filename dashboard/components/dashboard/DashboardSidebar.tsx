@@ -18,6 +18,7 @@ import {
   BookOpen,
   Shield,
   AlertTriangle,
+  CreditCard,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useLogout } from "@/hooks/useSignals";
@@ -51,6 +52,8 @@ export function DashboardSidebar() {
     });
   };
 
+  const isCloudMode = process.env.NEXT_PUBLIC_IS_CLOUD_MODE === "true";
+
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
@@ -60,6 +63,10 @@ export function DashboardSidebar() {
     { icon: BookOpen, label: "Docs", href: "/dashboard/docs" },
     { icon: Key, label: "API Keys", href: "/dashboard/api-keys" },
     { icon: User, label: "Profile", href: "/dashboard/profile" },
+    // Billing: only visible on the managed cloud (neuralcontrol.online)
+    ...(isCloudMode
+      ? [{ icon: CreditCard, label: "Billing", href: "/dashboard/billing" }]
+      : []),
   ];
 
   const isActive = (href: string) => pathname === href;

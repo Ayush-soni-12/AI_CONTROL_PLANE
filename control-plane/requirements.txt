@@ -21,3 +21,4 @@ sse-starlette
 langchain-google-genai
 fastapi-mail
 aio-pika
+razorpay
