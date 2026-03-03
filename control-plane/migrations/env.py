@@ -17,8 +17,12 @@ from app.config import settings
 # access to the values within the .ini file in use.
 config = context.config
 
-# Set the database URL from our settings
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Strip the pgbouncer query parameter as it causes psycopg2 to crash
+db_url = settings.DATABASE_URL
+if db_url and "pgbouncer=true" in db_url:
+    db_url = db_url.replace("?pgbouncer=true", "").replace("&pgbouncer=true", "").replace("pgbouncer=true&", "")
+
+config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
