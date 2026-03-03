@@ -6,7 +6,7 @@ from app.database.database import engine, Base
 from app.database.database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from app.router import signals, auth, history, sse, ai_insights, analytics, overrides , IncidentTracker
+from app.router import signals, auth, history, sse, ai_insights, analytics, overrides, IncidentTracker, billing
 from app.redis.cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -124,6 +124,25 @@ async def startup():
     #     replace_existing=True
     # )
     
+    # Monthly quota reset: Run on the 1st of every month at 00:00 UTC
+    async def reset_monthly_signal_counters():
+        """Reset signals_used_month to 0 for all users at the start of each billing period."""
+        from app.database.database import get_async_db as _get_db
+        from sqlalchemy import update as _update
+        async for db in _get_db():
+            await db.execute(_update(models.User).values(signals_used_month=0))
+            await db.commit()
+            print("✅ Monthly signal counters reset for all users")
+            break
+
+    scheduler.add_job(
+        reset_monthly_signal_counters,
+        trigger=CronTrigger(day=1, hour=0, minute=0),
+        id="monthly_quota_reset",
+        name="Reset monthly signal quota counters",
+        replace_existing=True
+    )
+
     scheduler.start()
     print("✅ Background jobs scheduled:")
     print("   - Hourly aggregation: Every hour at :05")
@@ -182,3 +201,6 @@ app.include_router(analytics.router)
 app.include_router(overrides.router)
 
 app.include_router(IncidentTracker.router)
+
+# Billing router (IS_CLOUD_MODE-gated inside the router itself)
+app.include_router(billing.router)
