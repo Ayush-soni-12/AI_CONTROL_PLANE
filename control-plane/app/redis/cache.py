@@ -17,7 +17,7 @@ redis_client = redis.from_url(
     decode_responses=True,      # Return strings instead of bytes
     socket_connect_timeout=5,
     socket_timeout=5,
-    # ssl_cert_reqs=None,          # Required for Upstash TLS (rediss://)
+    ssl_cert_reqs=None,          # Required for Upstash TLS (rediss://)
 )
 
 
