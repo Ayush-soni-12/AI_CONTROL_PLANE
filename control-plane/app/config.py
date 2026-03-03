@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     SMTP_MAIL: str | None = None
     SMTP_PASS: str | None = None
 
-    # Redis api key
+    # Redis
     REDIS_URL: str
     
     # Gemini API Key (for AI background analysis)
@@ -26,6 +26,19 @@ class Settings(BaseSettings):
     RABBITMQ_URL: str 
 
     ENVIRONMENT: str | None = "production"
+
+    # ── Managed Cloud Mode ────────────────────────────────────────────────────
+    # Set to True only on the official neuralcontrol.online deployment.
+    # When False (default), billing is fully disabled — zero quotas enforced.
+    IS_CLOUD_MODE: bool = False
+
+    # ── Razorpay (only used when IS_CLOUD_MODE=True) ──────────────────────────
+    RAZORPAY_KEY_ID:      str | None = None   # rzp_test_...  or  rzp_live_...
+    RAZORPAY_KEY_SECRET:  str | None = None
+    RAZORPAY_WEBHOOK_SECRET: str | None = None
+    # Plan IDs from Razorpay Dashboard → Products → Plans
+    RAZORPAY_PRO_PLAN_ID:      str | None = None   # plan_...
+    RAZORPAY_BUSINESS_PLAN_ID: str | None = None   # plan_...
     
 
     
