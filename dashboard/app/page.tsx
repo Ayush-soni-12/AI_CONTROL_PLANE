@@ -7,6 +7,7 @@ import { HowItWorks } from "@/components/home/HowItWorks";
 import { ArchitectureVisual } from "@/components/home/ArchitectureVisual";
 import { CTASection } from "@/components/home/CTASection";
 import { HomeNavigation } from "@/components/home/HomeNavigation";
+import { PricingSection } from "@/components/home/PricingSection";
 
 // This is now a SERVER COMPONENT (no "use client")
 // Can be cached and statically generated
@@ -34,7 +35,10 @@ export default function HomePage() {
           {/* 5. Architecture — Animated flow diagram */}
           <ArchitectureVisual />
 
-          {/* 6. CTA — Final call to action */}
+          {/* 6. Pricing — Plans overview */}
+          <PricingSection />
+
+          {/* 7. CTA — Final call to action */}
           <CTASection />
         </div>
       </main>
