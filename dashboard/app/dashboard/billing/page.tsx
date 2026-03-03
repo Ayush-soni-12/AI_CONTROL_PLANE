@@ -25,15 +25,20 @@ function UsageBar({
   label,
   icon: Icon,
 }: {
-  used: number;
-  quota: number | null;
+  used?: number | null;
+  quota?: number | null;
   label: string;
   icon: React.ElementType;
 }) {
+  const safeUsed = used ?? 0;
   const isUnlimited = quota === null;
-  const exactPct = isUnlimited ? 0 : Math.min((used / quota!) * 100, 100);
+  const safeQuota = quota ?? 0;
+
+  const exactPct = isUnlimited
+    ? 0
+    : Math.min((safeUsed / (safeQuota || 1)) * 100, 100);
   // Give it a minimum of 1% if there's *any* usage, so it's not invisible at 0.03%
-  const pct = used > 0 && exactPct < 1 ? 1 : exactPct;
+  const pct = safeUsed > 0 && exactPct < 1 ? 1 : exactPct;
   const isWarning = !isUnlimited && exactPct >= 80;
   const isDanger = !isUnlimited && exactPct >= 100;
 
@@ -49,8 +54,8 @@ function UsageBar({
           </span>
         </div>
         <span className="text-sm font-mono text-gray-400 sm:text-right">
-          {used.toLocaleString()} /{" "}
-          {isUnlimited ? "∞" : quota!.toLocaleString()}
+          {safeUsed.toLocaleString()} /{" "}
+          {isUnlimited ? "∞" : safeQuota.toLocaleString()}
         </span>
       </div>
       <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
@@ -145,7 +150,6 @@ function PlanCard({ billing, userName, userEmail }: PlanCardProps) {
 
   const planKey = billing?.plan ?? "free";
   const planDisplay = PLAN_DISPLAY[planKey] ?? PLAN_DISPLAY.free;
-    planKey !== "free" && billing?.subscription_status === "cancelled";
 
   return (
     <div className="lg:col-span-1 p-6 rounded-2xl bg-gray-900/60 border border-gray-800/60 flex flex-col gap-4">
