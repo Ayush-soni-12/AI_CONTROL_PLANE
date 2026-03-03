@@ -53,7 +53,20 @@ class User(Base):
     name = Column(String,nullable=False)
     password = Column(String,nullable=False)
     created_at = Column(TIMESTAMP(timezone=True),nullable=False,server_default=text('now()'))
-    
+
+    # ── Billing (Cloud mode only — all nullable so self-hosters are unaffected) ──
+    razorpay_customer_id = Column(String, nullable=True, unique=True, index=True)
+    subscription_id      = Column(String, nullable=True)   # last Razorpay order_id
+    # 'active' | 'expired' | 'cancelled'
+    subscription_status  = Column(String, nullable=True)
+    # 'free' | 'pro' | 'business'
+    plan_tier            = Column(String, nullable=True, server_default=text("'free'"))
+    # Total signals ingested in the current billing period
+    signals_used_month   = Column(Integer, nullable=False, server_default=text('0'))
+    billing_period_start = Column(TIMESTAMP(timezone=True), nullable=True)
+    # When the current paid plan expires (null = free / never expires)
+    plan_expires_at      = Column(TIMESTAMP(timezone=True), nullable=True)
+
     # Relationship to API keys
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
 
