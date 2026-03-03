@@ -7,6 +7,7 @@ from app.dependencies import verify_api_key
 from app.functions.decisionFunction import make_decision
 from app.ai_engine.ai_engine import make_ai_decision
 from app.router.token import get_current_user
+from app.quota import check_quota, _increment_signal_counter
 from collections import defaultdict
 from app.queue.email_publisher import publish_email
 from app.redis.cache import cache_get, cache_set, invalidate_user_cache
@@ -28,7 +29,8 @@ router = APIRouter(
 @router.post("/signals", status_code=202)
 async def receive_signal(
     signals: Schema.SignalSend,
-    current_user: models.User = Depends(verify_api_key)
+    current_user: models.User = Depends(check_quota),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Receive performance signals from services.
@@ -56,6 +58,8 @@ async def receive_signal(
     # Raises 503 only if RabbitMQ itself is unreachable (very rare)
     try:
         await publish_signal(signal_data)
+        # Increment billing counter
+        await _increment_signal_counter(current_user.id, 1, db)
     except Exception as exc:
         print(f"❌ Failed to publish signal to RabbitMQ: {exc}")
         raise HTTPException(
@@ -84,7 +88,8 @@ class BatchSignalRequest(BaseModel):
 @router.post("/signals/batch", status_code=202)
 async def receive_signal_batch(
     payload: BatchSignalRequest,
-    current_user: models.User = Depends(verify_api_key)
+    current_user: models.User = Depends(check_quota),
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
     Receive a batch of signals from the SDK.
@@ -115,6 +120,10 @@ async def receive_signal_batch(
         except Exception as e:
             print(f"❌ Failed to publish signal in batch: {e}")
             errors += 1
+            
+    # Increment billing counter for successfully queued signals
+    if processed > 0:
+        await _increment_signal_counter(current_user.id, processed, db)
             
     if errors > 0 and processed == 0:
         raise HTTPException(
