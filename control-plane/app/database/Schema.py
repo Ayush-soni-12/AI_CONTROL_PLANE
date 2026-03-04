@@ -54,6 +54,13 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+class ProfileUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+
+class PasswordUpdateRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=64)
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
