@@ -79,6 +79,8 @@ services:
       
       # Gemini API key for AI features
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      IS_CLOUD_MODE: ${IS_CLOUD_MODE:-false}
     #
     # Volume mounting for development
     # Maps local ./control-plane to /app in container
