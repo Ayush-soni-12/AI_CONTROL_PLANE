@@ -355,7 +355,7 @@ async def make_decision(
                         "avg_latency": avg_latency,
                         "error_rate": error_rate,
                         "requests_per_minute": total_rpm,
-                        "customer_requests_per_minute": customer_rpm,
+                        "customer_requests_per_minute": 0,
                     },
                     "ai_decision": ai_decision,
                 }
