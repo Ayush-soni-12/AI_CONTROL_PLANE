@@ -137,6 +137,15 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface ProfileUpdateRequest {
+  name: string;
+}
+
+export interface PasswordUpdateRequest {
+  current_password: string;
+  new_password: string;
+}
+
 export interface AuthResponse {
   access_token: string;
   token_type: string;
