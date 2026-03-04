@@ -6,7 +6,7 @@ from app.database.database import engine, Base
 from app.database.database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from app.router import signals, auth, history, sse, ai_insights, analytics, overrides, IncidentTracker, billing
+from app.router import signals, auth, history, sse, ai_insights, analytics, overrides, IncidentTracker, billing, services
 from app.redis.cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -204,3 +204,6 @@ app.include_router(IncidentTracker.router)
 
 # Billing router (IS_CLOUD_MODE-gated inside the router itself)
 app.include_router(billing.router)
+
+# Services management router (list + delete)
+app.include_router(services.router)
