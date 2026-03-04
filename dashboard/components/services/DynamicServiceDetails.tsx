@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   Clock,
   ShieldOff,
+  Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,9 @@ import { useState } from "react";
 import { EndpointDetailView } from "./EndpointDetailView";
 import { LatencyChart } from "@/components/cards/LatencyChart";
 import { ErrorRateChart } from "@/components/cards/ErrorRateChart";
+
+const CONTROL_PLANE_URL =
+  process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || "http://localhost:8000";
 
 interface DynamicServiceDetailsProps {
   serviceName: string;
@@ -45,6 +49,27 @@ export function DynamicServiceDetails({
   const router = useRouter();
   const { data, status, error } = useServices();
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      const res = await fetch(
+        `${CONTROL_PLANE_URL}/api/services/${encodeURIComponent(serviceName)}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        },
+      );
+      if (!res.ok) throw new Error("Failed to delete service");
+      router.push("/dashboard");
+    } catch {
+      alert("Failed to delete service. Please try again.");
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
 
   // Fetch service-specific signals for graphs
   const {
@@ -150,6 +175,64 @@ export function DynamicServiceDetails({
 
   return (
     <>
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            className="bg-gray-900 border border-red-500/40 rounded-2xl p-6 max-w-md w-full shadow-2xl shadow-red-500/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-lg bg-red-500/10">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-100">
+                Delete Service
+              </h3>
+            </div>
+            <p className="text-gray-400 text-sm mb-2">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-white">{serviceName}</span>?
+            </p>
+            <p className="text-gray-500 text-xs mb-6">
+              This will permanently remove all signals, analytics, AI insights,
+              incidents, and overrides for this service.{" "}
+              <span className="text-red-400 font-medium">
+                This cannot be undone.
+              </span>
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-700 text-gray-300 hover:bg-gray-800 transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed text-white transition-colors text-sm font-medium flex items-center justify-center gap-2"
+              >
+                {deleting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete Service
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-0 mb-8">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
           <div className="p-3 sm:p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
@@ -164,19 +247,28 @@ export function DynamicServiceDetails({
             </p>
           </div>
         </div>
-        <Badge
-          variant={
-            service.status === "healthy"
-              ? "success"
-              : service.status === "degraded"
-                ? "warning"
-                : "error"
-          }
-          className="flex items-center gap-2 px-4 py-2 text-lg"
-        >
-          <StatusIcon className="w-5 h-5" />
-          {service.status}
-        </Badge>
+        <div className="flex items-center gap-3">
+          <Badge
+            variant={
+              service.status === "healthy"
+                ? "success"
+                : service.status === "degraded"
+                  ? "warning"
+                  : "error"
+            }
+            className="flex items-center gap-2 px-4 py-2 text-lg"
+          >
+            <StatusIcon className="w-5 h-5" />
+            {service.status}
+          </Badge>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="p-2.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 text-red-400 hover:text-red-300 transition-all duration-200"
+            title="Delete this service"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Service Metrics */}
@@ -204,7 +296,7 @@ export function DynamicServiceDetails({
           </CardHeader>
           <CardContent>
             <p
-                className={`text-2xl font-bold ${service.status === "down" ? "text-red-400" : service.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
+              className={`text-2xl font-bold ${service.status === "down" ? "text-red-400" : service.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
             >
               {formatLatency(service.avg_latency)}
             </p>
@@ -220,7 +312,7 @@ export function DynamicServiceDetails({
           </CardHeader>
           <CardContent>
             <p
-                className={`text-2xl font-bold ${service.status === "down" ? "text-red-400" : service.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
+              className={`text-2xl font-bold ${service.status === "down" ? "text-red-400" : service.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
             >
               {(service.error_rate * 100).toFixed(1)}%
             </p>
@@ -309,7 +401,7 @@ export function DynamicServiceDetails({
                         </p>
                       </div>
                       <p
-                       className={`text-lg sm:text-2xl font-bold truncate ${endpoint.status === "down" ? "text-red-400" : endpoint.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
+                        className={`text-lg sm:text-2xl font-bold truncate ${endpoint.status === "down" ? "text-red-400" : endpoint.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
                       >
                         {formatLatency(endpoint.avg_latency)}
                       </p>
@@ -324,7 +416,7 @@ export function DynamicServiceDetails({
                         </p>
                       </div>
                       <p
-                       className={`text-lg sm:text-2xl font-bold truncate ${endpoint.status === "down" ? "text-red-400" : endpoint.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
+                        className={`text-lg sm:text-2xl font-bold truncate ${endpoint.status === "down" ? "text-red-400" : endpoint.status === "degraded" ? "text-yellow-400" : "text-green-400"}`}
                       >
                         {(endpoint.error_rate * 100).toFixed(1)}%
                       </p>

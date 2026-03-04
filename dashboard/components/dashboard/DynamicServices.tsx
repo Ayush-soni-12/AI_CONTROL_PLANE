@@ -5,6 +5,7 @@ import { ServiceCard } from "@/components/cards/ServiceCard";
 import { Activity } from "lucide-react";
 import { Service } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useState } from "react";
 
 interface DynamicServicesProps {
   apiUrl?: string;
@@ -18,6 +19,15 @@ export function DynamicServices({
   apiUrl = "/api/sse/services",
 }: DynamicServicesProps) {
   const { data, status, error } = useServices(apiUrl);
+
+  // Track optimistically-deleted services so they disappear immediately
+  const [deletedServices, setDeletedServices] = useState<Set<string>>(
+    new Set(),
+  );
+
+  function handleServiceDeleted(serviceName: string) {
+    setDeletedServices((prev) => new Set([...prev, serviceName]));
+  }
 
   // Show loading skeleton while connecting
   if (status === "connecting" || !data) {
@@ -39,7 +49,9 @@ export function DynamicServices({
     );
   }
 
-  const services = data.services;
+  const services = data.services.filter(
+    (s: Service) => !deletedServices.has(s.name),
+  );
 
   if (services.length === 0) {
     return (
@@ -65,7 +77,11 @@ export function DynamicServices({
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {services.map((service: Service) => (
-        <ServiceCard key={service.name} service={service} />
+        <ServiceCard
+          key={service.name}
+          service={service}
+          onDelete={handleServiceDeleted}
+        />
       ))}
     </div>
   );
