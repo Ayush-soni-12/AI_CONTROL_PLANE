@@ -15,14 +15,14 @@ Queue deferral moves non-time-sensitive requests to an asynchronous queue for la
 
 ## When to Use Queue Deferral
 
-### ✅ Perfect For:
+###  Perfect For:
 
 - **Background Jobs** - Report generation, data exports
 - **Batch Processing** - Bulk operations, mass emails
 - **Non-Critical Operations** - Analytics, logging, notifications
 - **Resource-Intensive Tasks** - Video processing, image optimization
 
-### ❌ Not Suitable For:
+###  Not Suitable For:
 
 - **Real-Time Operations** - Payment processing, login
 - **User-Blocking Actions** - Form submissions expecting immediate response
@@ -31,7 +31,7 @@ Queue deferral moves non-time-sensitive requests to an asynchronous queue for la
 ### Example Scenarios:
 
 ```javascript
-// Scenario 1: Report generation ✅
+// Scenario 1: Report generation 
 app.post(
   "/api/reports/generate",
   controlPlane.middleware("/api/reports/generate"),
@@ -40,7 +40,7 @@ app.post(
   },
 );
 
-// Scenario 2: Data export ✅
+// Scenario 2: Data export 
 app.post(
   "/api/export/users",
   controlPlane.middleware("/api/export/users"),
@@ -49,7 +49,7 @@ app.post(
   },
 );
 
-// Scenario 3: Payment processing ❌
+// Scenario 3: Payment processing 
 app.post(
   "/api/payment",
   // Do NOT defer payments - must process immediately
@@ -335,7 +335,7 @@ console.log("Job complete:", result);
 
 ## Best Practices
 
-### ✅ DO
+###  DO
 
 1. **Use HTTP 202 Accepted**
 
@@ -369,7 +369,7 @@ console.log("Job complete:", result);
    await sendJobCompleteNotification(userId, jobId, result);
    ```
 
-### ❌ DON'T
+###  DON'T
 
 1. **Don't Queue Critical Operations**
 
@@ -419,11 +419,11 @@ console.log("Job complete:", result);
 
 Queue deferral with AI Control Plane:
 
-- ✅ Automatic queue management
-- ✅ Priority-based ordering
-- ✅ Job status tracking
-- ✅ Real-time monitoring via SSE
-- ✅ HTTP 202 standards-compliant
-- ✅ Easy SDK integration
+- Automatic queue management
+- Priority-based ordering
+- Job status tracking
+- Real-time monitoring via SSE
+- HTTP 202 standards-compliant
+- Easy SDK integration
 
 **Next:** Learn about [AI Decisions](./AI_DECISIONS.md) to understand how the AI engine works.

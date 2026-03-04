@@ -10,7 +10,7 @@ A circuit breaker monitors calls to external services or endpoints and "opens" (
 
 ## When to Use Circuit Breaker
 
-### ✅ Perfect For:
+###  Perfect For:
 
 - **External API Dependencies** - Third-party services that may be unreliable
 - **Microservice Communication** - Internal services that might fail
@@ -20,7 +20,7 @@ A circuit breaker monitors calls to external services or endpoints and "opens" (
 ### Example Scenarios:
 
 ```javascript
-// Scenario 1: External payment processor ✅
+// Scenario 1: External payment processor 
 app.post(
   "/api/payment",
   controlPlane.middleware("/api/payment"),
@@ -38,7 +38,7 @@ app.post(
   },
 );
 
-// Scenario 2: External data enrichment ✅
+// Scenario 2: External data enrichment 
 app.get(
   "/api/user/:id/enriched",
   controlPlane.middleware("/api/user/:id/enriched"),
@@ -58,7 +58,7 @@ app.get(
   },
 );
 
-// Scenario 3: Internal critical operation ❌
+// Scenario 3: Internal critical operation 
 app.post(
   "/api/create-account",
   // DON'T use circuit breaker - critical operation must complete
@@ -317,7 +317,7 @@ app.get("/api/data", controlPlane.middleware("/api/data"), async (req, res) => {
 
 ## Best Practices
 
-### ✅ DO
+###  DO
 
 1. **Return Fast Failures**
 
@@ -362,7 +362,7 @@ app.get("/api/data", controlPlane.middleware("/api/data"), async (req, res) => {
    }
    ```
 
-### ❌ DON'T
+###  DON'T
 
 1. **Don't Use for Critical Paths**
 
@@ -568,12 +568,12 @@ app.get("/debug", controlPlane.middleware("/debug"), (req, res) => {
 
 Circuit breaker with AI Control Plane:
 
-- ✅ Automatic failure detection (> 5% error rate)
-- ✅ Fast-fail when circuit is open
-- ✅ Automatic recovery testing
-- ✅ Per-endpoint isolation
-- ✅ Prevents cascade failures
-- ✅ Real-time monitoring via SSE
-- ✅ Easy SDK integration
+-  Automatic failure detection (> 5% error rate)
+-  Fast-fail when circuit is open
+-  Automatic recovery testing
+-  Per-endpoint isolation
+-  Prevents cascade failures
+-  Real-time monitoring via SSE
+-  Easy SDK integration
 
 **Next:** Learn about [AI Decisions](./AI_DECISIONS.md) to understand how the AI engine works.

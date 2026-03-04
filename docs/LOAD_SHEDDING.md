@@ -10,7 +10,7 @@ Load shedding is the practice of intentionally rejecting some requests when your
 
 ## When to Use Load Shedding
 
-### ✅ Perfect For:
+###  Perfect For:
 
 - **Traffic Spikes** - Sudden increases in request volume
 - **Resource Exhaustion** - CPU, memory, or database limits reached
@@ -250,7 +250,7 @@ app.get(
 
 ## Best Practices
 
-### ✅ DO
+###  DO
 
 1. **Provide Clear Error Messages**
 
@@ -380,10 +380,10 @@ app.get("/debug", controlPlane.middleware("/debug"), (req, res) => {
 
 Load shedding with AI Control Plane:
 
-- ✅ Automatic activation based on system health
-- ✅ Graceful degradation options
-- ✅ Real-time monitoring via SSE
-- ✅ Easy SDK integration
-- ✅ Circuit breaker integration
+- Automatic activation based on system health
+- Graceful degradation options
+- Real-time monitoring via SSE
+- Easy SDK integration
+- Circuit breaker integration
 
 **Next:** Learn about [Queue Deferral](./QUEUE_DEFERRAL.md) for async request processing.

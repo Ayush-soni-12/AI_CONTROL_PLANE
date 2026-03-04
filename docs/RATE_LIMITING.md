@@ -13,7 +13,7 @@ Rate limiting controls how many requests a user or service can make within a tim
 
 ## When to Use Rate Limiting
 
-### ✅ Perfect For:
+###  Perfect For:
 
 - **Public APIs** - Prevent abuse from external users
 - **Resource-Intensive Endpoints** - Protect database-heavy operations
@@ -248,7 +248,7 @@ const sdkB = new ControlPlaneSDK({
 
 ## Best Practices
 
-### ✅ DO
+###  DO
 
 1. **Always Include Retry Information**
 
@@ -279,7 +279,7 @@ const sdkB = new ControlPlaneSDK({
    });
    ```
 
-### ❌ DON'T
+###  DON'T
 
 1. **Don't Ignore Rate Limits**
 
@@ -394,11 +394,11 @@ app.get("/api/test", controlPlane.middleware("/api/test"), (req, res) => {
 
 Rate limiting with AI Control Plane:
 
-- ✅ Automatic, AI-driven limits
-- ✅ Per-tenant isolation
-- ✅ Real-time adjustments
-- ✅ Standards-compliant (HTTP 429, Retry-After)
-- ✅ Easy SDK integration
-- ✅ Live monitoring via SSE
+- Automatic, AI-driven limits
+- Per-tenant isolation
+- Real-time adjustments
+- Standards-compliant (HTTP 429, Retry-After)
+- Easy SDK integration
+- Live monitoring via SSE
 
 **Next:** Learn about [Load Shedding](./LOAD_SHEDDING.md) for handling traffic spikes.

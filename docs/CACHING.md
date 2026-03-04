@@ -10,14 +10,14 @@ Dynamic caching stores frequently accessed data in fast memory (Redis) instead o
 
 ## When to Use Caching
 
-### ✅ Perfect For:
+###  Perfect For:
 
 - **Database-Heavy Endpoints** - Complex queries, joins, aggregations
 - **Slow External APIs** - Third-party services with high latency
 - **Read-Heavy Operations** - Product catalogs, user profiles, configuration
 - **Static or Semi-Static Data** - Data that doesn't change frequently
 
-### ❌ Not Suitable For:
+###  Not Suitable For:
 
 - **Real-Time Data** - Stock prices, live scores, sensor readings
 - **User-Specific Sensitive Data** - Unless properly keyed per user
@@ -27,7 +27,7 @@ Dynamic caching stores frequently accessed data in fast memory (Redis) instead o
 ### Example Scenarios:
 
 ```javascript
-// Scenario 1: Product catalog ✅
+// Scenario 1: Product catalog 
 app.get(
   "/api/products",
   controlPlane.middleware("/api/products"),
@@ -36,7 +36,7 @@ app.get(
   },
 );
 
-// Scenario 2: User profile ✅
+// Scenario 2: User profile 
 app.get(
   "/api/users/:id",
   controlPlane.middleware("/api/users/:id"),
@@ -45,7 +45,7 @@ app.get(
   },
 );
 
-// Scenario 3: Live stock price ❌
+// Scenario 3: Live stock price 
 app.get(
   "/api/stock/:symbol",
   // DON'T cache - data changes constantly
@@ -480,7 +480,7 @@ app.put("/api/products/:id", async (req, res) => {
 
 ## Best Practices
 
-### ✅ DO
+###  DO
 
 1. **Use Redis in Production**
 
@@ -518,7 +518,7 @@ app.put("/api/products/:id", async (req, res) => {
    }
    ```
 
-### ❌ DON'T
+###  DON'T
 
 1. **Don't Use Memory Cache in Production**
 
@@ -648,12 +648,12 @@ sudo systemctl restart redis-server
 
 Dynamic caching with AI Control Plane:
 
-- ✅ AI-driven caching decisions based on latency
-- ✅ Production-ready with Redis
-- ✅ Automatic TTL and expiration
-- ✅ Shared across multiple servers
-- ✅ Graceful fallback if cache unavailable
-- ✅ Cache invalidation strategies
-- ✅ Real-time monitoring via SSE
+-  AI-driven caching decisions based on latency
+-  Production-ready with Redis
+-  Automatic TTL and expiration
+-  Shared across multiple servers
+-  Graceful fallback if cache unavailable
+-  Cache invalidation strategies
+-  Real-time monitoring via SSE
 
 **Next:** Learn about [Circuit Breaker](./CIRCUIT_BREAKER.md) for handling failures.

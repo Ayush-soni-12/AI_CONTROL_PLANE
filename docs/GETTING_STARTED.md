@@ -204,12 +204,12 @@ curl http://localhost:3001/api/products
 
 Your service is now protected by AI-powered traffic management with:
 
-- ✅ **Automatic Caching** - AI decides when to cache based on latency
-- ✅ **Rate Limiting** - Protects against abuse and traffic spikes
-- ✅ **Load Shedding** - Graceful degradation under high load
-- ✅ **Queue Deferral** - Async processing for non-critical requests
-- ✅ **Circuit Breaking** - Prevents cascade failures
-- ✅ **Real-time Monitoring** - Live dashboards with SSE updates
+-  **Automatic Caching** - AI decides when to cache based on latency
+-  **Rate Limiting** - Protects against abuse and traffic spikes
+-  **Load Shedding** - Graceful degradation under high load
+-  **Queue Deferral** - Async processing for non-critical requests
+-  **Circuit Breaking** - Prevents cascade failures
+-  **Real-time Monitoring** - Live dashboards with SSE updates
 
 ---
 

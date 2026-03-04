@@ -473,11 +473,11 @@ Contact admin to reset thresholds (will use defaults until relearned).
 
 The AI Control Plane:
 
-- ✅ Analyzes real-time metrics from Redis
-- ✅ Uses Gemini AI for intelligent decisions
-- ✅ Continuously tunes thresholds
-- ✅ Delivers updates via SSE (no polling)
-- ✅ Provides detailed insights and reasoning
-- ✅ Adapts to your service's unique patterns
+-  Analyzes real-time metrics from Redis
+-  Uses Gemini AI for intelligent decisions
+-  Continuously tunes thresholds
+-  Delivers updates via SSE (no polling)
+-  Provides detailed insights and reasoning
+-  Adapts to your service's unique patterns
 
 **The AI works best when you trust it and provide accurate metrics!**
