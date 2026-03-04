@@ -252,3 +252,48 @@ async def delete_api_key(
     await db.commit()
     
     return {"message": "API key deleted successfully"}
+
+
+@router.patch("/update-profile", response_model=Schema.UserResponse)
+async def update_profile(
+    profile_data: Schema.ProfileUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Update the current user's profile information (name only for now)
+    """
+    current_user = await get_current_user(request, db)
+    
+    current_user.name = profile_data.name
+    
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return current_user
+
+
+@router.patch("/update-password")
+async def update_password(
+    password_data: Schema.PasswordUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Update the current user's password
+    """
+    current_user = await get_current_user(request, db)
+    
+    # Verify current password
+    if not verify_password(password_data.current_password, current_user.password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password"
+        )
+    
+    # Hash and update new password
+    current_user.password = get_password_hash(password_data.new_password)
+    
+    await db.commit()
+    
+    return {"message": "Password updated successfully"}
