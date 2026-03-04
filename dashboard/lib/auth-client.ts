@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios';
-import type { SignupRequest, LoginRequest, AuthResponse, User, AuthError, ApiKeyData, ApiKeyGenerateResponse } from './types';
+import type { SignupRequest, LoginRequest, AuthResponse, User, AuthError, ApiKeyData, ApiKeyGenerateResponse, PasswordUpdateRequest } from './types';
 
 
 const CONTROL_PLANE_URL = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000';
@@ -180,4 +180,43 @@ export const getCurrentUser = async (): Promise<User> => {
     throw new Error('Not authenticated');
   }
   return user;
+};
+
+
+/**
+ * Update current user's profile
+ * 
+ * @param data - Profile update data (name)
+ * @returns Promise with updated User
+ */
+export const updateProfile = async (data: { name: string }): Promise<User> => {
+  try {
+    const response = await authClient.patch<User>('/update-profile', data);
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError<AuthError>;
+      throw new Error(axiosError.response?.data?.detail || 'Profile update failed');
+    }
+    throw new Error('An unexpected error occurred during profile update');
+  }
+};
+
+/**
+ * Update current user's password
+ * 
+ * @param data - Password update data (current_password, new_password)
+ * @returns Promise with success message
+ */
+export const updatePassword = async (data: PasswordUpdateRequest): Promise<{ message: string }> => {
+  try {
+    const response = await authClient.patch<{ message: string }>('/update-password', data);
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError<AuthError>;
+      throw new Error(axiosError.response?.data?.detail || 'Password update failed');
+    }
+    throw new Error('An unexpected error occurred during password update');
+  }
 };
