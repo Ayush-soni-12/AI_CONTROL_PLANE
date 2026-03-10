@@ -136,103 +136,40 @@ async def get_percentiles(
     db: AsyncSession = Depends(get_async_db)
 ) -> PercentilesResponse:
     """
-    Get p50/p95/p99 latency percentiles PER ENDPOINT with 2-TIER FALLBACK.
+    Get p50/p95/p99 latency percentiles PER ENDPOINT with caching and 2-TIER FALLBACK.
     
-    Fallback Strategy (in order):
-    1. AggregateSnapshot - Redis snapshots with percentiles (fast, updated every 30min)
-    2. Raw Signals - Calculate from raw data using proper percentile function
+    Strategy (in order):
+    0. Redis Cache - Check for previously calculated results (5 min TTL)
+    1. Raw Signals - Calculate from raw data using proper percentile function (real-time)
+    2. AggregateSnapshot - Fallback to Redis snapshots if no raw signals (older data)
     
-    Returns separate percentiles for each endpoint, not mixed!
-    
+    Returns separate percentiles for each endpoint.
     Filtered by authenticated user.
-    
-    Args:
-        days: Number of days to analyze (default: 7)
-        service_name: Optional service name to filter by
     """
     try:
+        from app.redis.cache import cache_get, cache_set
+        
         # Get authenticated user
         current_user = await get_current_user(request, db)
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         
+        # ------------------------------------------------------------------
+        # CACHE CHECK
+        # ------------------------------------------------------------------
+        svc_key = service_name if service_name else "all"
+        cache_key = f"analytics:percentiles:{current_user.id}:{days}:{svc_key}"
+        
+        cached_data = await cache_get(cache_key)
+        if cached_data:
+            print(f"✅ Using cached percentiles for {cache_key}")
+            return PercentilesResponse(**cached_data)
+
+        data = []
+        source = "raw_signals"
+
         # ==================================================================
-        # TIER 1: Try Redis snapshots (fast, has percentiles)
+        # TIER 1: Calculate from raw signals (real-time, proper percentiles)
         # ==================================================================
-        snapshot_query = select(
-            AggregateSnapshot.snapshot_at,
-            AggregateSnapshot.service_name,
-            AggregateSnapshot.endpoint,
-            AggregateSnapshot.p50,
-            AggregateSnapshot.p95,
-            AggregateSnapshot.p99,
-            AggregateSnapshot.window
-        ).where(
-            and_(
-                AggregateSnapshot.user_id == current_user.id,
-                AggregateSnapshot.snapshot_at >= cutoff_date,
-                AggregateSnapshot.window == '24h'  # Use 1h window for hourly granularity
-            )
-        )
-        
-        if service_name:
-            snapshot_query = snapshot_query.where(AggregateSnapshot.service_name == service_name)
-        
-        snapshot_query = snapshot_query.order_by(
-            AggregateSnapshot.snapshot_at,
-            AggregateSnapshot.service_name,
-            AggregateSnapshot.endpoint
-        )
-        
-        result = await db.execute(snapshot_query)
-        snapshot_rows = result.all()
-        
-        if snapshot_rows and len(snapshot_rows) > 0:
-            from collections import defaultdict
-            
-            # Group by (hour_bucket, service_name) -> List of endpoints
-            time_service_endpoints = defaultdict(lambda: defaultdict(lambda: {
-                'p50': 0, 'p95': 0, 'p99': 0
-            }))
-            
-            for row in snapshot_rows:
-                # Round to nearest hour for grouping
-                hour_bucket = row.snapshot_at.replace(minute=0, second=0, microsecond=0)
-                key = (hour_bucket, row.service_name)
-                
-                # Store per-endpoint data (not mixed!)
-                time_service_endpoints[key][row.endpoint] = {
-                    'p50': row.p50 or 0,
-                    'p95': row.p95 or 0,
-                    'p99': row.p99 or 0
-                }
-            
-            # Convert to response format
-            data = []
-            for (hour_bucket, svc_name), endpoints_data in sorted(time_service_endpoints.items()):
-                endpoint_list = [
-                    EndpointPercentile(
-                        endpoint=endpoint,
-                        p50=float(metrics['p50']),
-                        p95=float(metrics['p95']),
-                        p99=float(metrics['p99'])
-                    )
-                    for endpoint, metrics in sorted(endpoints_data.items())
-                ]
-                
-                data.append(PercentileDataPoint(
-                    timestamp=hour_bucket.isoformat(),
-                    service_name=svc_name,
-                    endpoints=endpoint_list
-                ))
-            
-            print(f"✅ Using Redis snapshots for percentiles ({len(data)} data points)")
-            return PercentilesResponse(data=data, source='snapshots')
-        
-        # ==================================================================
-        # TIER 2: Calculate from raw signals (proper percentile calculation)
-        # ==================================================================
-        print(f"⚠️  No snapshots found, calculating from raw signals...")
-        
         base_query = select(
             Signal.timestamp,
             Signal.service_name,
@@ -253,44 +190,112 @@ async def get_percentiles(
         result = await db.execute(base_query)
         signals = result.all()
         
-        if not signals or len(signals) == 0:
-            return PercentilesResponse(data=[], source='raw_signals')
-        
-        # Group signals by (hour, service, endpoint)
-        from collections import defaultdict
-        hourly_endpoint_latencies = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-        
-        for signal in signals:
-            hour_bucket = signal.timestamp.replace(minute=0, second=0, microsecond=0)
-            hourly_endpoint_latencies[hour_bucket][signal.service_name][signal.endpoint].append(signal.latency_ms)
-        
-        # Calculate percentiles for each endpoint using proper percentile function
-        data = []
-        for hour_bucket in sorted(hourly_endpoint_latencies.keys()):
-            for svc_name in sorted(hourly_endpoint_latencies[hour_bucket].keys()):
-                endpoint_list = []
-                
-                for endpoint, latencies in sorted(hourly_endpoint_latencies[hour_bucket][svc_name].items()):
-                    if len(latencies) > 0:
-                        sorted_latencies = sorted(latencies)
-                        
-                        # Use proper percentile calculation (from realtime_aggregates.py)
-                        endpoint_list.append(EndpointPercentile(
-                            endpoint=endpoint,
-                            p50=float(_percentile(sorted_latencies, 50)),
-                            p95=float(_percentile(sorted_latencies, 95)),
-                            p99=float(_percentile(sorted_latencies, 99))
+        if signals and len(signals) > 0:
+            from collections import defaultdict
+            hourly_endpoint_latencies = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+            
+            for signal in signals:
+                hour_bucket = signal.timestamp.replace(minute=0, second=0, microsecond=0)
+                hourly_endpoint_latencies[hour_bucket][signal.service_name][signal.endpoint].append(signal.latency_ms)
+            
+            for hour_bucket in sorted(hourly_endpoint_latencies.keys()):
+                for svc_name in sorted(hourly_endpoint_latencies[hour_bucket].keys()):
+                    endpoint_list = []
+                    
+                    for endpoint, latencies in sorted(hourly_endpoint_latencies[hour_bucket][svc_name].items()):
+                        if len(latencies) > 0:
+                            sorted_latencies = sorted(latencies)
+                            endpoint_list.append(EndpointPercentile(
+                                endpoint=endpoint,
+                                p50=float(_percentile(sorted_latencies, 50)),
+                                p95=float(_percentile(sorted_latencies, 95)),
+                                p99=float(_percentile(sorted_latencies, 99))
+                            ))
+                    
+                    if endpoint_list:
+                        data.append(PercentileDataPoint(
+                            timestamp=hour_bucket.isoformat(),
+                            service_name=svc_name,
+                            endpoints=endpoint_list
                         ))
+            print(f"✅ Calculated percentiles from raw signals ({len(data)} data points)")
+        else:
+            # ==================================================================
+            # TIER 2: Fallback to snapshots (fast, has percentiles, 30m delayed)
+            # ==================================================================
+            print(f"⚠️ No raw signals found, falling back to snapshots...")
+            source = "snapshots"
+            
+            snapshot_query = select(
+                AggregateSnapshot.snapshot_at,
+                AggregateSnapshot.service_name,
+                AggregateSnapshot.endpoint,
+                AggregateSnapshot.p50,
+                AggregateSnapshot.p95,
+                AggregateSnapshot.p99,
+                AggregateSnapshot.window
+            ).where(
+                and_(
+                    AggregateSnapshot.user_id == current_user.id,
+                    AggregateSnapshot.snapshot_at >= cutoff_date,
+                    AggregateSnapshot.window == '24h'  # Use 1h window for hourly granularity
+                )
+            )
+            
+            if service_name:
+                snapshot_query = snapshot_query.where(AggregateSnapshot.service_name == service_name)
+            
+            snapshot_query = snapshot_query.order_by(
+                AggregateSnapshot.snapshot_at,
+                AggregateSnapshot.service_name,
+                AggregateSnapshot.endpoint
+            )
+            
+            result = await db.execute(snapshot_query)
+            snapshot_rows = result.all()
+            
+            if snapshot_rows and len(snapshot_rows) > 0:
+                from collections import defaultdict
+                time_service_endpoints = defaultdict(lambda: defaultdict(lambda: {
+                    'p50': 0, 'p95': 0, 'p99': 0
+                }))
                 
-                if endpoint_list:
+                for row in snapshot_rows:
+                    hour_bucket = row.snapshot_at.replace(minute=0, second=0, microsecond=0)
+                    key = (hour_bucket, row.service_name)
+                    time_service_endpoints[key][row.endpoint] = {
+                        'p50': row.p50 or 0,
+                        'p95': row.p95 or 0,
+                        'p99': row.p99 or 0
+                    }
+                
+                for (hour_bucket, svc_name), endpoints_data in sorted(time_service_endpoints.items()):
+                    endpoint_list = [
+                        EndpointPercentile(
+                            endpoint=endpoint,
+                            p50=float(metrics['p50']),
+                            p95=float(metrics['p95']),
+                            p99=float(metrics['p99'])
+                        )
+                        for endpoint, metrics in sorted(endpoints_data.items())
+                    ]
+                    
                     data.append(PercentileDataPoint(
                         timestamp=hour_bucket.isoformat(),
                         service_name=svc_name,
                         endpoints=endpoint_list
                     ))
+                print(f"✅ Using Redis snapshots for percentiles ({len(data)} data points)")
+            else:
+                source = "raw_signals"
+
+        response_obj = PercentilesResponse(data=data, source=source)
         
-        print(f"✅ Calculated percentiles from raw signals ({len(data)} data points)")
-        return PercentilesResponse(data=data, source='raw_signals')
+        # Cache the result for 5 minutes (300 seconds) to avoid recalculating every time
+        cache_dict = response_obj.model_dump() if hasattr(response_obj, 'model_dump') else response_obj.dict()
+        await cache_set(cache_key, cache_dict, ttl=300)
+        
+        return response_obj
         
     except Exception as e:
         print(f"Error fetching percentiles: {e}")
