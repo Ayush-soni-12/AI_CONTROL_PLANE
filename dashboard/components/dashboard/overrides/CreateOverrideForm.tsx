@@ -20,6 +20,7 @@ export function CreateOverrideForm({ onClose }: { onClose: () => void }) {
     queue_deferral_rpm: null,
     load_shedding_rpm: null,
     rate_limit_customer_rpm: null,
+    adaptive_timeout_latency_ms: null,
   });
 
   const set = (key: keyof CreateOverridePayload, value: unknown) =>
@@ -35,7 +36,8 @@ export function CreateOverrideForm({ onClose }: { onClose: () => void }) {
     form.circuit_breaker_error_rate !== null ||
     form.queue_deferral_rpm !== null ||
     form.load_shedding_rpm !== null ||
-    form.rate_limit_customer_rpm !== null;
+    form.rate_limit_customer_rpm !== null ||
+    form.adaptive_timeout_latency_ms !== null;
 
   return (
     <div className="relative rounded-2xl bg-gray-900/95 border border-purple-500/30 p-6 shadow-2xl shadow-purple-500/10">
@@ -184,6 +186,17 @@ export function CreateOverrideForm({ onClose }: { onClose: () => void }) {
               min={1}
               max={1000}
               step={1}
+            />
+            <ThresholdInput
+              label="Adaptive Timeout Spike Threshold"
+              description="Override the AI baseline. Setting this sets the P99 latency at which Adaptive Timeouts activate"
+              unit="ms"
+              aiDefault="2000ms"
+              value={form.adaptive_timeout_latency_ms ?? null}
+              onChange={(v) => set("adaptive_timeout_latency_ms", v)}
+              min={500}
+              max={30000}
+              step={100}
             />
           </div>
         </div>

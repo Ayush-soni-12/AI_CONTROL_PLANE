@@ -114,6 +114,12 @@ export function OverrideCard({ override }: { override: Override }) {
               unit=" rpm"
               description="per customer"
             />
+            <ThresholdRow
+              label="Adaptive Timeout"
+              value={override.adaptive_timeout_latency_ms}
+              unit="ms"
+              description="threshold"
+            />
           </div>
         ) : (
           <p className="text-xs text-gray-600 italic">
