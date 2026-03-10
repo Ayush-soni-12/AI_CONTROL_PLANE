@@ -17,6 +17,13 @@ export const docsList = [
     icon: "⚡",
   },
   {
+    slug: "ADAPTIVE_TIMEOUT",
+    title: "Adaptive Timeout",
+    description: "Protect endpoints & connections",
+    category: "features",
+    icon: "⏱️",
+  },
+  {
     slug: "CONFIGURATION",
     title: "Configuration",
     description: "Environment variables and settings",

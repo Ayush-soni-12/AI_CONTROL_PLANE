@@ -29,6 +29,13 @@ const docsList = [
     emoji: "⚡",
   },
   {
+    slug: "ADAPTIVE_TIMEOUT",
+    title: "Adaptive Timeout",
+    description: "Protect endpoints & connections",
+    category: "Features",
+    emoji: "⏱️",
+  },
+  {
     slug: "CONFIGURATION",
     title: "Configuration",
     description: "Environment variables & settings",
