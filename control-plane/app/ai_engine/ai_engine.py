@@ -310,9 +310,43 @@ def decide_node(state: DecisionState) -> DecisionState:
         'queue_deferral': False,
         'load_shedding': False,
         'send_alert': 'alert' in actions,
+        # Adaptive Timeout: always compute and return the recommended timeout
+        # The SDK should use this value as its request timeout.
+        # We use the fixed threshold from DEFAULTS.
+        'adaptive_timeout': _compute_adaptive_timeout(state),
     }
     state['reasoning'] = reasoning
     return state
+
+
+def _compute_adaptive_timeout(state: DecisionState) -> dict:
+    """
+    Compute the recommended adaptive timeout the Edge SDK should enforce.
+
+    Logic:
+      1. Use the fixed threshold from DEFAULTS.
+      2. An 'active' flag tells the SDK whether the current latency is already
+         exceeding the threshold (i.e., connections should fail fast).
+    """
+    p99 = state.get('p99_latency', 0)
+    latency_trend = state.get('latency_trend', 'stable')
+
+    recommended_ms = DEFAULTS.get('adaptive_timeout_latency_ms', 2000)
+
+    # Adaptive timeout is active when:
+    # (a) p99 latency already exceeds the recommended limit, OR
+    # (b) latency is rising fast and we are already at 70% of the limit
+    is_active = (
+        p99 > recommended_ms
+        or (latency_trend == 'rising' and p99 >= recommended_ms * 0.7)
+    )
+
+    return {
+        'active': is_active,
+        'recommended_timeout_ms': recommended_ms,
+        'threshold_ms': recommended_ms,
+        'baseline_p99_ms': round(p99, 1),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -390,6 +424,7 @@ def make_ai_decision(
         "queue_deferral": result['decision'].get('queue_deferral', False),
         "load_shedding": result['decision'].get('load_shedding', False),
         "send_alert": result['decision'].get('send_alert', False),
+        "adaptive_timeout": result['decision'].get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000, 'baseline_p99_ms': 0}),
         "reasoning": result['reasoning'],
         "analysis": result['analysis'],
         "ai_decision": result['reasoning'].split(':')[0],
@@ -669,6 +704,28 @@ async def get_ai_tuned_decision(
     elif 'enable_cache' in actions or error_rate >= cb_threshold * 0.5 or latency_trend == 'rising' or error_trend == 'rising':
         status = 'degraded'
 
+    # ── ADAPTIVE TIMEOUT ─────────────────────────────────────────────────────
+    # Use the stable AI-tuned threshold from the database (or the manual override).
+    # This prevents the timeout from expanding during an incident if live p99 spikes.
+    at_threshold = thresholds.get('adaptive_timeout_latency_ms', 2000)
+    recommended_timeout_ms = at_threshold
+
+    adaptive_timeout_active = (
+        p99_latency > at_threshold
+        or (latency_trend == 'rising' and p99_latency >= at_threshold * 0.7)
+    )
+    adaptive_timeout = {
+        'active': adaptive_timeout_active,
+        'recommended_timeout_ms': recommended_timeout_ms,
+        'threshold_ms': at_threshold,
+        'baseline_p99_ms': round(p99_latency, 1),
+    }
+    if adaptive_timeout_active:
+        reasoning += (
+            f" | ⏱️ Adaptive Timeout ACTIVE: p99 {p99_latency:.0f}ms exceeds "
+            f"threshold {at_threshold}ms. SDK timeout reduced to {recommended_timeout_ms}ms."
+        )
+
     return {
         'cache_enabled': 'enable_cache' in actions,
         'circuit_breaker': 'circuit_breaker' in actions,
@@ -676,6 +733,7 @@ async def get_ai_tuned_decision(
         'queue_deferral': False,
         'load_shedding': False,
         'send_alert': 'alert' in actions,
+        'adaptive_timeout': adaptive_timeout,
         'reasoning': reasoning,
         'analysis': reasoning,
         'ai_decision': reasoning.split(':')[0] if ':' in reasoning else 'Healthy',
