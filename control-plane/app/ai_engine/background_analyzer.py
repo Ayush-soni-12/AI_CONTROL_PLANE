@@ -186,6 +186,7 @@ async def analyze_all_services():
                                 'queue_deferral_rpm': recommendation.queue_deferral_rpm,
                                 'load_shedding_rpm': recommendation.load_shedding_rpm,
                                 'rate_limit_customer_rpm': recommendation.rate_limit_customer_rpm,
+                                'adaptive_timeout_latency_ms': recommendation.adaptive_timeout_latency_ms,
                             },
                             recommendation.reasoning,
                             _confidence_to_float(recommendation.confidence),
