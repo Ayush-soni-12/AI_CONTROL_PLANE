@@ -118,6 +118,8 @@ async def _log_decision_outcome(
                 'queue_deferral': decision.get('queue_deferral', False),
                 'load_shedding': decision.get('load_shedding', False),
                 'rate_limit_customer': decision.get('rate_limit_customer', False),
+                'adaptive_timeout_active': decision.get('adaptive_timeout', {}).get('active', False),
+                'adaptive_timeout_ms': decision.get('adaptive_timeout', {}).get('recommended_timeout_ms', 2000),
             },
             'metrics_at_decision': {
                 'avg_latency': metrics_snapshot.get('avg_latency', 0),
@@ -271,6 +273,7 @@ async def make_decision(
                 'queue_deferral_rpm': override.queue_deferral_rpm,
                 'load_shedding_rpm': override.load_shedding_rpm,
                 'rate_limit_customer_rpm': override.rate_limit_customer_rpm,
+                'adaptive_timeout_latency_ms': override.adaptive_timeout_latency_ms,
             }
 
         if db and user_id:
@@ -343,6 +346,13 @@ async def make_decision(
             'rate_limit_rule_rpm': customer_rpm_limit, # The rule is passed to the SDK!
             'reason': ai_decision['reasoning'],
             'send_alert': ai_decision.get('send_alert', False),
+            # NEW: Adaptive Timeout — the SDK should use this recommended timeout
+            'adaptive_timeout': ai_decision.get('adaptive_timeout', {
+                'active': False,
+                'recommended_timeout_ms': 2000,
+                'threshold_ms': 2000,
+                'baseline_p99_ms': 0,
+            }),
             # Trend context for dashboard display
             'trends': {
                 'latency': latency_trend,
