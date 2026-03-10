@@ -203,6 +203,7 @@ export interface Override {
   queue_deferral_rpm: number | null;
   load_shedding_rpm: number | null;
   rate_limit_customer_rpm: number | null;
+  adaptive_timeout_latency_ms: number | null;
   created_at: string;
   expires_at: string;
   is_active: boolean;
@@ -219,4 +220,16 @@ export interface CreateOverridePayload {
   queue_deferral_rpm?: number | null;
   load_shedding_rpm?: number | null;
   rate_limit_customer_rpm?: number | null;
+  adaptive_timeout_latency_ms?: number | null;
+}
+export interface AdaptiveTimeoutStatus {
+  service_name: string;
+  endpoint: string;
+  active: boolean;
+  recommended_timeout_ms: number;
+  threshold_ms: number;
+  baseline_p99_ms: number;
+  current_p99_ms: number;
+  latency_trend: "rising" | "falling" | "stable";
+  last_updated: string;
 }

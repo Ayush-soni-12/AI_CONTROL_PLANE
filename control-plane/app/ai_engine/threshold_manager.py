@@ -33,7 +33,11 @@ DEFAULTS = {
     'circuit_breaker_error_rate': 0.3,
     'queue_deferral_rpm': 80,
     'load_shedding_rpm': 150,
-    'rate_limit_customer_rpm': 15
+    'rate_limit_customer_rpm': 15,
+    # Adaptive Timeout: recommended timeout the SDK should use for this endpoint.
+    # AI tunes this based on historical p99 latency.
+    # Default is 2000ms (2s) which is safe for most fast APIs.
+    'adaptive_timeout_latency_ms': 2000,
 }
 
 
@@ -138,6 +142,7 @@ async def get_all_thresholds(
             'queue_deferral_rpm': threshold.queue_deferral_rpm,
             'load_shedding_rpm': threshold.load_shedding_rpm,
             'rate_limit_customer_rpm': threshold.rate_limit_customer_rpm,
+            'adaptive_timeout_latency_ms': threshold.adaptive_timeout_latency_ms,
             'confidence': threshold.confidence,
             'reasoning': threshold.reasoning,
             'last_updated': last_updated.isoformat(),
@@ -198,6 +203,7 @@ def _apply_override(thresholds: dict, override: models.ConfigOverride) -> dict:
         'queue_deferral_rpm': override.queue_deferral_rpm,
         'load_shedding_rpm': override.load_shedding_rpm,
         'rate_limit_customer_rpm': override.rate_limit_customer_rpm,
+        'adaptive_timeout_latency_ms': override.adaptive_timeout_latency_ms,
     }
     for key, val in mapping.items():
         if val is not None:
@@ -262,6 +268,7 @@ async def update_thresholds(
         existing.queue_deferral_rpm = thresholds.get('queue_deferral_rpm', existing.queue_deferral_rpm)
         existing.load_shedding_rpm = thresholds.get('load_shedding_rpm', existing.load_shedding_rpm)
         existing.rate_limit_customer_rpm = thresholds.get('rate_limit_customer_rpm', existing.rate_limit_customer_rpm)
+        existing.adaptive_timeout_latency_ms = thresholds.get('adaptive_timeout_latency_ms', existing.adaptive_timeout_latency_ms)
         existing.confidence = confidence
         existing.reasoning = reasoning
         existing.last_updated = datetime.now(timezone.utc)
@@ -277,6 +284,7 @@ async def update_thresholds(
             queue_deferral_rpm=thresholds.get('queue_deferral_rpm', DEFAULTS['queue_deferral_rpm']),
             load_shedding_rpm=thresholds.get('load_shedding_rpm', DEFAULTS['load_shedding_rpm']),
             rate_limit_customer_rpm=thresholds.get('rate_limit_customer_rpm', DEFAULTS['rate_limit_customer_rpm']),
+            adaptive_timeout_latency_ms=thresholds.get('adaptive_timeout_latency_ms', DEFAULTS['adaptive_timeout_latency_ms']),
             confidence=confidence,
             reasoning=reasoning,
             last_updated=datetime.now(timezone.utc)

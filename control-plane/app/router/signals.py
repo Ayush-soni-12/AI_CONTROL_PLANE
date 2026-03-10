@@ -185,20 +185,28 @@ async def get_config(
     # Send alert if needed — publish to RabbitMQ email queue for reliable delivery
     # Wrapped in try/except: a queue hiccup must never block the config response
     if decision.get("send_alert"):
-        try:
-            await publish_email(
-                to_email=current_user.email,
-                subject=f"🚨 Alert: {service_name}",
-                context={
-                    "service_name": service_name,
-                    "endpoint": endpoint,
-                    "avg_latency": decision["metrics"]["avg_latency"],
-                    "error_rate": decision["metrics"]["error_rate"] * 100,
-                    "ai_decision": decision["ai_decision"],
-                },
-            )
-        except Exception as exc:
-            print(f"⚠️  [signals] Failed to queue alert email: {exc} — continuing")
+        alert_cache_key = f"alert_sent:{current_user.id}:{service_name}:{endpoint}"
+        recently_sent = await cache_get(alert_cache_key)
+        
+        if not recently_sent:
+            try:
+                await publish_email(
+                    to_email=current_user.email,
+                    subject=f"🚨 Alert: {service_name}",
+                    context={
+                        "service_name": service_name,
+                        "endpoint": endpoint,
+                        "avg_latency": decision["metrics"]["avg_latency"],
+                        "error_rate": decision["metrics"]["error_rate"] * 100,
+                        "ai_decision": decision["ai_decision"],
+                    },
+                )
+                # Set cache to prevent identical alerts for 1 hour (3600 seconds)
+                await cache_set(alert_cache_key, True, ttl=3600)
+            except Exception as exc:
+                print(f"⚠️  [signals] Failed to queue alert email: {exc} — continuing")
+        else:
+            print(f"ℹ️  [signals] Alert for {service_name}{endpoint} skipped (cooldown active)")
     
     
     # ===== TIER 1: PER-CUSTOMER RATE LIMITING =====
@@ -219,7 +227,8 @@ async def get_config(
             'rate_limit_rule_rpm': decision.get('rate_limit_rule_rpm'),
             'retry_after': retry_after,
             'status_code': 429,  # SDK should return 429
-            'reason': f"Per-customer rate limit: {decision['reason']}"
+            'reason': f"Per-customer rate limit: {decision['reason']}",
+            'adaptive_timeout': decision.get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000}),
         }
     
     # ===== TIER 2: GLOBAL CAPACITY MANAGEMENT =====
@@ -240,7 +249,8 @@ async def get_config(
             'retry_after': retry_after,
             'status_code': 503,  # SDK should return 503
             'reason': decision['reason'],
-            'priority_required': 'high'  # Hint for client
+            'priority_required': 'high',  # Hint for client
+            'adaptive_timeout': decision.get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000}),
         }
     
     # Queue Deferral: Queue the request (202)
@@ -255,7 +265,8 @@ async def get_config(
             'rate_limit_rule_rpm': decision.get('rate_limit_rule_rpm'),
             'status_code': 202,  # SDK should return 202
             'reason': decision['reason'],
-            'estimated_delay': 10  # Seconds (SDK can queue for later)
+            'estimated_delay': 10,  # Seconds (SDK can queue for later)
+            'adaptive_timeout': decision.get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000}),
         }
     
 
@@ -271,8 +282,20 @@ async def get_config(
         'queue_deferral': False,  # Not queued
         'load_shedding': False,  # Not shed
         'status_code': 200,  # Normal request
-        'reason': decision['reason']
+        'reason': decision['reason'],
+        # NEW: Adaptive Timeout — always returned so SDK can dynamically set its timeout
+        # - active: True means latency is dangerously high, enforce the tighter timeout NOW
+        # - recommended_timeout_ms: optimal timeout based on your historical p99 latency
+        # - threshold_ms: the trigger threshold this user has configured
+        # - baseline_p99_ms: the healthy p99 latency used to calculate the timeout
+        'adaptive_timeout': decision.get('adaptive_timeout', {
+            'active': False,
+            'recommended_timeout_ms': 2000,
+            'threshold_ms': 2000,
+            'baseline_p99_ms': 0,
+        }),
     }
+
 
 
 

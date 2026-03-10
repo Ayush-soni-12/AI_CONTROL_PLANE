@@ -40,6 +40,12 @@ class ThresholdRecommendation(BaseModel):
         description="Max requests per minute per customer IP - prevents any single user from overwhelming the system"
     )
     
+    adaptive_timeout_latency_ms: int = Field(
+        ge=100,
+        le=30000,
+        description="Latency in milliseconds — when p99 response time exceeds this, the adaptive timeout system activates and uses this value as the recommended timeout for outgoing calls. Set this to the highest 'normal' p99 you would accept; spikes beyond it trigger protection."
+    )
+    
     reasoning: str = Field(
         min_length=50,
         max_length=1000,

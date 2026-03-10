@@ -17,6 +17,7 @@ Microservices fail under unpredictable traffic spikes. Traditional static rate l
 - 🤖 **AI-Powered Decisions** — Analyzes the last N performance signals and adjusts thresholds dynamically using Gemini-guided decision logic
 - 📊 **Real-Time Monitoring** — SSE-based live dashboard with p50/p95/p99 latency tracking
 - 🔄 **Dynamic Caching** — AI enables caching when p95 latency exceeds adaptive thresholds
+- ⏱️ **Adaptive Timeout** — Fails fast on latency spikes to prevent connection pool exhaustion
 - 🚦 **Rate Limiting** — AI-tuned per-tenant rate limits, enforced via HTTP 429 with Retry-After
 - ⚖️ **Load Shedding** — Graceful degradation under traffic spikes; sheds low-priority requests first
 - 📋 **Queue Deferral** — Async processing for non-critical operations via RabbitMQ
@@ -254,6 +255,17 @@ The current deployment runs 2 FastAPI replicas behind Nginx with Docker Compose 
 
 ---
 
+### ⏱️ Adaptive Timeout
+
+- Eliminates hardcoded timeouts that cause resource leaks or premature failures
+- AI calculates a stable optimal threshold based on trailing p99 latency to prevent timeouts expanding during incidents
+- Enforces strict limits during latency spikes to fail fast and protect DB/Redis connection pools
+- Works at 3 levels: Global Express Routes (`withEndpointTimeout`), granular external APIs (`adaptiveFetch`), and specific DB queries (`withDbTimeout`)
+
+📖 [Learn More](./ADAPTIVE_TIMEOUT.md)
+
+---
+
 ### ⚡ Circuit Breaker
 
 - Opens when error rate > 5% to prevent overwhelming a degraded service
@@ -334,6 +346,7 @@ docker-compose up --build
 - [Rate Limiting](./RATE_LIMITING.md)
 - [Circuit Breaker](./CIRCUIT_BREAKER.md)
 - [Caching Strategy](./CACHING.md)
+- [Adaptive Timeout](./ADAPTIVE_TIMEOUT.md)
 - [Load Shedding](./LOAD_SHEDDING.md)
 - [Queue Deferral](./QUEUE_DEFERRAL.md)
 - [Deployment Guide](./DEPLOYMENT.md)

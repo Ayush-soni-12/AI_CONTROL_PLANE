@@ -145,6 +145,7 @@ Use this history to tune the settings:
 - Put requests in line when busier than: {current_thresholds.get('queue_deferral_rpm', 80)} requests/min
 - Drop extra requests when busier than: {current_thresholds.get('load_shedding_rpm', 150)} requests/min
 - Limit one user to max: {current_thresholds.get('rate_limit_customer_rpm', 15)} requests/min
+- Adaptive timeout kicks in when slowest requests take longer than: {current_thresholds.get('adaptive_timeout_latency_ms', 2000)}ms
 
 ## How to calculate the new settings (follow these rules exactly)
 
@@ -180,6 +181,17 @@ Max requests per minute from one single user/IP address.
 - Otherwise: (total requests/min ÷ estimated number of users) × 3–5
 - Never below 5
 
+### adaptive_timeout_latency_ms (integer, 100–30000)
+When the slowest requests (p99) exceed this threshold, the adaptive timeout system activates.
+This sets the stable maximum timeout limit for all outgoing SDK calls.
+This is the "alarm line" — the highest p99 you consider still acceptable during a healthy period.
+- Base: use the current healthy p99 × 1.5 (gives a 50% buffer above today's worst)
+- If latency trend is RISING: use p99 × 1.2 (tighten — act sooner)
+- If latency trend is FALLING: use p99 × 2.0 (relax — conditions are improving)
+- Minimum: 500ms (never trigger on healthy fast services)
+- Maximum: 10000ms (if p99 is already above 10s, cap at 10000)
+- Round to nearest 100ms
+
 ## Confidence Level
 Based on how much data we have:
 - Under 50 requests → "low"
@@ -193,8 +205,9 @@ Current: {metrics.get('count', 0)} requests → confidence should be "{"low" if 
 3. queue_deferral_rpm: integer 10–1000
 4. load_shedding_rpm: integer (MUST be greater than queue_deferral_rpm)
 5. rate_limit_customer_rpm: integer 5–500
-6. reasoning: 50–1000 characters, plain everyday English (NO tech jargon)
-7. confidence: "low" | "medium" | "high"
+6. adaptive_timeout_latency_ms: integer 100–30000 (the p99 alarm line and maximum stable timeout)
+7. reasoning: 50–1000 characters, plain everyday English (NO tech jargon)
+8. confidence: "low" | "medium" | "high"
 
 ## Writing the reasoning field — CRITICAL
 

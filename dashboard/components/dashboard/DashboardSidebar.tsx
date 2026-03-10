@@ -19,6 +19,7 @@ import {
   Shield,
   AlertTriangle,
   CreditCard,
+  Timer,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useLogout } from "@/hooks/useSignals";
@@ -60,6 +61,11 @@ export function DashboardSidebar() {
     { icon: Brain, label: "AI Insights", href: "/dashboard/ai-insights" },
     { icon: AlertTriangle, label: "Incidents", href: "/dashboard/incidents" },
     { icon: Shield, label: "Overrides", href: "/dashboard/overrides" },
+    {
+      icon: Timer,
+      label: "Adaptive Timeout",
+      href: "/dashboard/adaptive-timeout",
+    },
     { icon: BookOpen, label: "Docs", href: "/dashboard/docs" },
     { icon: Key, label: "API Keys", href: "/dashboard/api-keys" },
     { icon: User, label: "Profile", href: "/dashboard/profile" },
