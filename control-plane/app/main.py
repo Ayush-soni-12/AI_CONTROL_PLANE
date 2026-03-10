@@ -6,7 +6,7 @@ from app.database.database import engine, Base
 from app.database.database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from app.router import signals, auth, history, sse, ai_insights, analytics, overrides, IncidentTracker, billing, services
+from app.router import signals, auth, history, sse, ai_insights, analytics, overrides, IncidentTracker, billing, services, adaptive_timeout
 from app.redis.cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -183,6 +183,8 @@ async def shutdown():
 
 
 app.include_router(signals.router)
+
+
 app.include_router(auth.router)
 
 # Import and include history router
@@ -207,3 +209,6 @@ app.include_router(billing.router)
 
 # Services management router (list + delete)
 app.include_router(services.router)
+
+# Adaptive Timeout status router
+app.include_router(adaptive_timeout.router)
