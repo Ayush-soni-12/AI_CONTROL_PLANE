@@ -183,6 +183,10 @@ class OverrideCreate(BaseModel):
         default=None, ge=1, le=1000,
         description="Rate-limit single customer above this RPM. AI default: 15"
     )
+    adaptive_timeout_latency_ms: Optional[int] = Field(
+        default=None, ge=500, le=30000,
+        description="Override the AI-calculated baseline threshold for Adaptive Timeouts (latency > this = spike). AI default: 2000"
+    )
 
 
 class OverrideResponse(BaseModel):
@@ -195,6 +199,7 @@ class OverrideResponse(BaseModel):
     queue_deferral_rpm: Optional[int]
     load_shedding_rpm: Optional[int]
     rate_limit_customer_rpm: Optional[int]
+    adaptive_timeout_latency_ms: Optional[int]
     created_at: datetime
     expires_at: datetime
     is_active: bool

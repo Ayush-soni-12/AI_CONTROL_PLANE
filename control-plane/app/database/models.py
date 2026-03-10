@@ -251,6 +251,9 @@ class AIThreshold(Base):
     load_shedding_rpm = Column(Integer, nullable=False, server_default=text('150'))
     rate_limit_customer_rpm = Column(Integer, nullable=False, server_default=text('15'))
     
+    # NEW: Advanced Resiliency Features
+    adaptive_timeout_latency_ms = Column(Integer, nullable=False, server_default=text('2000'))
+    
     # AI metadata
     confidence = Column(Float, nullable=True)
     reasoning = Column(String, nullable=True)
@@ -309,6 +312,7 @@ class ConfigOverride(Base):
     • queue_deferral_rpm        – defer to queue when RPM > this
     • load_shedding_rpm         – shed load when RPM > this
     • rate_limit_customer_rpm   – rate-limit a single customer above this RPM
+    • adaptive_timeout_latency_ms - adaptive timeout triggers when avg_latency > this (ms)
     """
     __tablename__ = "config_overrides"
 
@@ -323,6 +327,9 @@ class ConfigOverride(Base):
     queue_deferral_rpm = Column(Integer, nullable=True)         # requests per minute
     load_shedding_rpm = Column(Integer, nullable=True)          # requests per minute
     rate_limit_customer_rpm = Column(Integer, nullable=True)    # requests per minute per customer
+    
+    # NEW: Advanced Resiliency Features
+    adaptive_timeout_latency_ms = Column(Integer, nullable=True)
 
     # Why the override was created (for audit / dashboard display)
     reason = Column(String, nullable=False)
