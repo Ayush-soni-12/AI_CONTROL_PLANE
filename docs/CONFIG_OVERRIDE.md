@@ -38,11 +38,12 @@ Content-Type: application/json
   "duration_minutes": 30,
   "reason": "Sale event — lower cache latency threshold",
 
-  "cache_latency_ms": 100,           ← your value (AI default ~500ms)
-  "circuit_breaker_error_rate": null, ← AI still decides
-  "queue_deferral_rpm": null,         ← AI still decides
-  "load_shedding_rpm": null,          ← AI still decides
-  "rate_limit_customer_rpm": null     ← AI still decides
+  "adaptive_timeout_latency_ms": null, ← AI still decides
+  "cache_latency_ms": 100,             ← your value (AI default ~500ms)
+  "circuit_breaker_error_rate": null,   ← AI still decides
+  "queue_deferral_rpm": null,           ← AI still decides
+  "load_shedding_rpm": null,            ← AI still decides
+  "rate_limit_customer_rpm": null       ← AI still decides
 }
 ```
 
@@ -111,13 +112,14 @@ You can also cancel early from the dashboard (or `DELETE /api/overrides/{id}`).
 
 Each field is a **numeric value** or `null`:
 
-| Field                        | What it controls                                        | Example value | AI default |
-| ---------------------------- | ------------------------------------------------------- | ------------- | ---------- |
-| `cache_latency_ms`           | Enable caching when avg latency exceeds this (ms)       | `100`         | ~500ms     |
-| `circuit_breaker_error_rate` | Open circuit breaker when error rate exceeds this (0–1) | `0.05`        | ~0.3       |
-| `queue_deferral_rpm`         | Defer requests to queue when global RPM exceeds this    | `40`          | ~80 rpm    |
-| `load_shedding_rpm`          | Shed load when global RPM exceeds this                  | `120`         | ~150 rpm   |
-| `rate_limit_customer_rpm`    | Rate-limit a single customer above this RPM             | `500`         | ~15 rpm    |
+| Field                         | What it controls                                        | Example value | AI default |
+| ----------------------------- | ------------------------------------------------------- | ------------- | ---------- |
+| `adaptive_timeout_latency_ms` | Kill requests slower than this (ms) — adaptive timeout  | `2000`        | ~700ms     |
+| `cache_latency_ms`            | Enable caching when avg latency exceeds this (ms)       | `100`         | ~500ms     |
+| `circuit_breaker_error_rate`  | Open circuit breaker when error rate exceeds this (0–1) | `0.05`        | ~0.3       |
+| `queue_deferral_rpm`          | Defer requests to queue when global RPM exceeds this    | `40`          | ~80 rpm    |
+| `load_shedding_rpm`           | Shed load when global RPM exceeds this                  | `120`         | ~150 rpm   |
+| `rate_limit_customer_rpm`     | Rate-limit a single customer above this RPM             | `500`         | ~15 rpm    |
 
 **Setting a lower value** = more aggressive / earlier trigger.  
 **Setting a higher value** = more relaxed / later trigger.  
@@ -139,6 +141,7 @@ Content-Type: application/json
   "endpoint": "/api/path",
   "duration_minutes": 30,               (1 – 480)
   "reason": "Why you're doing this",
+  "adaptive_timeout_latency_ms": 2000 | null,
   "cache_latency_ms": 100 | null,
   "circuit_breaker_error_rate": 0.05 | null,
   "queue_deferral_rpm": 40 | null,

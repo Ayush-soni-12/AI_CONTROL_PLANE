@@ -103,6 +103,12 @@ npm start
 npm install neuralcontrol
 ```
 
+The SDK provides two main integration methods for Express routes:
+
+### `middleware()` — Feature Flags Only
+
+Attaches all 6 AI feature flags to `req.controlPlane`. You handle each flag in your route.
+
 ```javascript
 import express from "express";
 import ControlPlaneSDK from "neuralcontrol";
@@ -112,30 +118,70 @@ const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY,
   tenantId: process.env.TENANT_ID,
   serviceName: "my-service",
-  controlPlaneUrl: "https://api.neuralcontrol.online",
+  controlPlaneUrl: process.env.CONTROL_PLANE_URL,
 });
 
-app.get("/products", controlPlane.middleware("/products"), async (req, res) => {
-  if (req.controlPlane.isRateLimitedCustomer)
-    return res
-      .status(429)
-      .json({ error: "Rate limited", retryAfter: req.controlPlane.retryAfter });
-  if (req.controlPlane.isLoadShedding)
-    return res.status(503).json({ error: "Service overloaded" });
-  if (req.controlPlane.shouldCache && cache.products)
-    return res.json({ cached: true, data: cache.products });
+app.get(
+  "/products",
+  controlPlane.middleware("/products", { priority: "high" }),
+  async (req, res) => {
+    const {
+      shouldSkip,
+      isRateLimitedCustomer,
+      isLoadShedding,
+      isQueueDeferral,
+      shouldCache,
+      retryAfter,
+    } = req.controlPlane;
 
-  const products = await getProductsFromDB();
-  if (req.controlPlane.shouldCache) cache.products = products;
-  res.json({ cached: false, data: products });
-});
+    if (shouldSkip)
+      return res.status(503).json({ error: "Service unavailable" });
+    if (isRateLimitedCustomer)
+      return res.status(429).json({ error: "Rate limited", retryAfter });
+    if (isLoadShedding)
+      return res.status(503).json({ error: "System overloaded" });
+    if (shouldCache && cache.products)
+      return res.json({ cached: true, data: cache.products });
 
+    const products = await getProductsFromDB();
+    if (shouldCache) cache.products = products;
+    res.json({ cached: false, data: products });
+  },
+);
+```
+
+### `withEndpointTimeout()` — Feature Flags + Auto-Timeout
+
+Same as `middleware()`, **plus** kills the handler if it takes longer than the AI-set timeout (returns `504 Gateway Timeout`).
+
+```javascript
+app.get(
+  "/products",
+  controlPlane.withEndpointTimeout(
+    "/products",
+    async (req, res) => {
+      // Same req.controlPlane flags available
+      if (req.controlPlane.shouldSkip)
+        return res.status(503).json({ error: "Unavailable" });
+
+      // If this DB call is slow → SDK returns 504 automatically
+      const products = await db.getProducts();
+      res.json(products);
+    },
+    { priority: "high" },
+  ),
+);
+```
+
+Pre-warm at startup:
+
+```javascript
 app.listen(3001, async () => {
-  await controlPlane.initialize(["/products"]);
+  await controlPlane.initialize(["/products", "/checkout", "/search"]);
 });
 ```
 
-> 📖 Full guide → [GETTING_STARTED.md](./GETTING_STARTED.md)
+> 📖 Full guide → [GETTING_STARTED.md](./GETTING_STARTED.md) | Priority levels → `'critical'` > `'high'` > `'medium'` > `'low'`
 
 ---
 

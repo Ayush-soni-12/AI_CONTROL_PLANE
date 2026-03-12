@@ -31,14 +31,25 @@ The SDK provides three distinct layers of protection, natively supporting both E
 
 Wrap an entire Express route to enforce a global timeout. If the route takes longer than the AI's calculation, a `504 Gateway Timeout` is returned immediately.
 
+> **Note:** `withEndpointTimeout()` gives you the same `req.controlPlane` flags as `middleware()` (shouldCache, shouldSkip, isRateLimitedCustomer, isLoadShedding, isQueueDeferral), **plus** automatic timeout enforcement. Use `middleware()` only when you don't need the timeout race — for example, on routes that are already fast and just need the feature flags.
+
 ```javascript
 app.get(
   "/products",
-  controlPlane.withEndpointTimeout("/products", async (req, res) => {
-    // If anything inside here takes too long, the endpoint fails fast.
-    const products = await getProducts();
-    res.json(products);
-  }),
+  controlPlane.withEndpointTimeout(
+    "/products",
+    async (req, res) => {
+      // req.controlPlane.shouldSkip, shouldCache, etc. are all available here
+      if (req.controlPlane.shouldSkip) {
+        return res.status(503).json({ error: "Service unavailable" });
+      }
+
+      // If anything inside here takes too long, the endpoint fails fast (504).
+      const products = await getProducts();
+      res.json(products);
+    },
+    { priority: "high" },
+  ), // priority is optional, default: 'medium'
 );
 ```
 

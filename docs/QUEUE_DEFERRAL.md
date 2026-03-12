@@ -15,14 +15,14 @@ Queue deferral moves non-time-sensitive requests to an asynchronous queue for la
 
 ## When to Use Queue Deferral
 
-###  Perfect For:
+### Perfect For:
 
 - **Background Jobs** - Report generation, data exports
 - **Batch Processing** - Bulk operations, mass emails
 - **Non-Critical Operations** - Analytics, logging, notifications
 - **Resource-Intensive Tasks** - Video processing, image optimization
 
-###  Not Suitable For:
+### Not Suitable For:
 
 - **Real-Time Operations** - Payment processing, login
 - **User-Blocking Actions** - Form submissions expecting immediate response
@@ -31,7 +31,7 @@ Queue deferral moves non-time-sensitive requests to an asynchronous queue for la
 ### Example Scenarios:
 
 ```javascript
-// Scenario 1: Report generation 
+// Scenario 1: Report generation
 app.post(
   "/api/reports/generate",
   controlPlane.middleware("/api/reports/generate"),
@@ -40,7 +40,7 @@ app.post(
   },
 );
 
-// Scenario 2: Data export 
+// Scenario 2: Data export
 app.post(
   "/api/export/users",
   controlPlane.middleware("/api/export/users"),
@@ -49,7 +49,7 @@ app.post(
   },
 );
 
-// Scenario 3: Payment processing 
+// Scenario 3: Payment processing
 app.post(
   "/api/payment",
   // Do NOT defer payments - must process immediately
@@ -110,19 +110,17 @@ const controlPlane = new ControlPlaneSDK({
 
 app.post(
   "/api/generate-report",
-  controlPlane.middleware("/api/generate-report"),
+  controlPlane.middleware("/api/generate-report", { priority: "low" }),
   async (req, res) => {
     // Check if request should be queued
     if (req.controlPlane.isQueueDeferral) {
-      // User creates and manages job ID
-      const jobId = generateJobId();
-      await createJob(jobId, req.body);
+      const job = await reportQueue.add("generate", req.body);
 
       return res.status(202).json({
         message: "Report generation queued",
-        jobId: jobId,
+        jobId: job.id,
         estimatedWait: req.controlPlane.estimatedDelay,
-        statusUrl: `/api/jobs/${jobId}/status`,
+        statusUrl: `/api/jobs/${job.id}/status`,
       });
     }
 
@@ -135,6 +133,177 @@ app.post(
 app.listen(3001, async () => {
   console.log("Server running on http://localhost:3001");
   await controlPlane.initialize(["/api/generate-report"]);
+});
+```
+
+---
+
+## Setting Up a Job Queue with BullMQ
+
+The SDK tells you **when** to defer (`isQueueDeferral: true`), but **you** need to provide the actual queue. The most common choice for Node.js is [BullMQ](https://docs.bullmq.io/) backed by Redis.
+
+### Step 1: Install BullMQ
+
+```bash
+npm install bullmq
+```
+
+### Step 2: Create a Queue
+
+```javascript
+// queue.js — Import this wherever you need to add jobs
+import { Queue } from "bullmq";
+
+const redisConnection = {
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+};
+
+// One queue per job type
+export const reportQueue = new Queue("reports", {
+  connection: redisConnection,
+});
+export const emailQueue = new Queue("emails", { connection: redisConnection });
+```
+
+### Step 3: Create a Worker
+
+Workers run in a separate process (or the same process) and process queued jobs.
+
+```javascript
+// worker.js — Run this file separately: node worker.js
+import { Worker } from "bullmq";
+
+const redisConnection = {
+  host: process.env.REDIS_HOST || "localhost",
+  port: parseInt(process.env.REDIS_PORT || "6379"),
+};
+
+// Report worker
+const reportWorker = new Worker(
+  "reports",
+  async (job) => {
+    console.log(`Processing report job ${job.id}...`);
+
+    // Do the expensive work here
+    const report = await generateReport(job.data);
+
+    // Optionally notify the user when done
+    if (job.data.userEmail) {
+      await sendEmail(job.data.userEmail, "Your report is ready!");
+    }
+
+    return report;
+  },
+  { connection: redisConnection },
+);
+
+reportWorker.on("completed", (job) => {
+  console.log(`Job ${job.id} completed!`);
+});
+
+reportWorker.on("failed", (job, err) => {
+  console.error(`Job ${job.id} failed:`, err.message);
+});
+```
+
+### Step 4: Add a Job Status Endpoint
+
+```javascript
+import { Queue } from "bullmq";
+const reportQueue = new Queue("reports", { connection: redisConnection });
+
+app.get("/api/jobs/:jobId/status", async (req, res) => {
+  const job = await reportQueue.getJob(req.params.jobId);
+
+  if (!job) {
+    return res.status(404).json({ error: "Job not found" });
+  }
+
+  const state = await job.getState();
+
+  res.json({
+    jobId: job.id,
+    status: state, // 'waiting', 'active', 'completed', 'failed'
+    progress: job.progress, // 0-100 if you call job.updateProgress()
+    result: state === "completed" ? job.returnvalue : null,
+    error: state === "failed" ? job.failedReason : null,
+  });
+});
+```
+
+### Full Working Example
+
+```javascript
+import express from "express";
+import ControlPlaneSDK from "neuralcontrol";
+import { Queue, Worker } from "bullmq";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const app = express();
+const redis = { host: "localhost", port: 6379 };
+const controlPlane = new ControlPlaneSDK({
+  apiKey: process.env.CONTROL_PLANE_API_KEY,
+  tenantId: process.env.TENANT_ID,
+  serviceName: "report-service",
+  controlPlaneUrl: process.env.CONTROL_PLANE_URL,
+});
+
+// Create queue
+const reportQueue = new Queue("reports", { connection: redis });
+
+// Create worker (in production, run this in a separate file)
+new Worker(
+  "reports",
+  async (job) => {
+    // Simulate heavy work
+    const report = await generateExpensiveReport(job.data);
+    return report;
+  },
+  { connection: redis },
+);
+
+// Route with queue deferral
+app.post(
+  "/api/reports",
+  controlPlane.middleware("/api/reports", { priority: "low" }),
+  async (req, res) => {
+    if (req.controlPlane.isQueueDeferral) {
+      const job = await reportQueue.add("generate", {
+        ...req.body,
+        userEmail: req.user?.email,
+      });
+      return res.status(202).json({
+        status: "queued",
+        jobId: job.id,
+        estimatedDelay: req.controlPlane.estimatedDelay,
+        statusUrl: `/api/jobs/${job.id}/status`,
+      });
+    }
+
+    // Process immediately if system is not overloaded
+    const report = await generateExpensiveReport(req.body);
+    res.json(report);
+  },
+);
+
+// Job status endpoint
+app.get("/api/jobs/:jobId/status", async (req, res) => {
+  const job = await reportQueue.getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Job not found" });
+  const state = await job.getState();
+  res.json({
+    jobId: job.id,
+    status: state,
+    result: state === "completed" ? job.returnvalue : null,
+  });
+});
+
+app.listen(3001, async () => {
+  await controlPlane.initialize(["/api/reports"]);
+  console.log("Report service running on http://localhost:3001");
 });
 ```
 
@@ -335,7 +504,7 @@ console.log("Job complete:", result);
 
 ## Best Practices
 
-###  DO
+### DO
 
 1. **Use HTTP 202 Accepted**
 
@@ -369,7 +538,7 @@ console.log("Job complete:", result);
    await sendJobCompleteNotification(userId, jobId, result);
    ```
 
-###  DON'T
+### DON'T
 
 1. **Don't Queue Critical Operations**
 

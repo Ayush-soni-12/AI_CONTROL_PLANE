@@ -10,7 +10,7 @@ Load shedding is the practice of intentionally rejecting some requests when your
 
 ## When to Use Load Shedding
 
-###  Perfect For:
+### Perfect For:
 
 - **Traffic Spikes** - Sudden increases in request volume
 - **Resource Exhaustion** - CPU, memory, or database limits reached
@@ -20,30 +20,30 @@ Load shedding is the practice of intentionally rejecting some requests when your
 ### Example Scenarios:
 
 ```javascript
-// Scenario 1: Flash sale traffic spike
-app.post(
-  "/api/purchase",
-  controlPlane.middleware("/api/purchase"),
-  async (req, res) => {
-    // Shed load to protect payment processor
-  },
-);
-
-// Scenario 2: Database under pressure
+// Scenario 1: Low-priority analytics — shed first during overload
 app.get(
   "/api/analytics",
-  controlPlane.middleware("/api/analytics"),
+  controlPlane.middleware("/api/analytics", { priority: "low" }),
   async (req, res) => {
     // Shed load when DB connections exhausted
   },
 );
 
-// Scenario 3: External API rate limited
+// Scenario 2: Medium-priority search — shed after low-priority
 app.get(
-  "/api/external-data",
-  controlPlane.middleware("/api/external-data"),
+  "/api/search",
+  controlPlane.middleware("/api/search", { priority: "medium" }),
   async (req, res) => {
     // Shed load to avoid hitting external rate limits
+  },
+);
+
+// Scenario 3: Critical checkout — never shed
+app.post(
+  "/api/checkout",
+  controlPlane.middleware("/api/checkout", { priority: "critical" }),
+  async (req, res) => {
+    // isLoadShedding will almost never be true for critical priority
   },
 );
 ```
@@ -78,6 +78,34 @@ The AI Control Plane uses multiple signals to determine when to shed load:
 
 ---
 
+## The `priority` Parameter
+
+The key to load shedding is the **priority** you assign to each endpoint. The AI sheds endpoints in order from lowest to highest priority:
+
+| Priority             | Meaning                        | Shed Order          | Example                       |
+| -------------------- | ------------------------------ | ------------------- | ----------------------------- |
+| `'critical'`         | Never shed unless catastrophic | Last (almost never) | `/checkout`, `/login`         |
+| `'high'`             | Shed only under extreme load   | 3rd                 | `/products`, `/api/users`     |
+| `'medium'` (default) | Normal shedding                | 2nd                 | `/search`, `/recommendations` |
+| `'low'`              | Shed first to free resources   | 1st                 | `/analytics`, `/send-email`   |
+
+You pass priority via the `options` object:
+
+```javascript
+// Low priority — shed first
+controlPlane.middleware("/api/analytics", { priority: "low" });
+
+// Critical — never shed
+controlPlane.middleware("/api/checkout", { priority: "critical" });
+
+// Works with withEndpointTimeout too:
+controlPlane.withEndpointTimeout("/api/products", handler, {
+  priority: "high",
+});
+```
+
+---
+
 ## SDK Integration
 
 ### Basic Setup
@@ -97,24 +125,38 @@ const controlPlane = new ControlPlaneSDK({
   controlPlaneUrl: "https://api.neuralcontrol.online",
 });
 
-app.get("/api/data", controlPlane.middleware("/api/data"), async (req, res) => {
-  // Check if load shedding is active
-  if (req.controlPlane.isLoadShedding) {
-    return res.status(503).json({
-      error: "Service temporarily unavailable",
-      message: "High load detected. Please try again shortly.",
-      retryAfter: req.controlPlane.retryAfter,
-    });
-  }
+// Low-priority endpoint — shed first during overload
+app.get(
+  "/api/recommendations",
+  controlPlane.middleware("/api/recommendations", { priority: "low" }),
+  async (req, res) => {
+    if (req.controlPlane.isLoadShedding) {
+      return res.status(503).json({
+        error: "Service temporarily unavailable",
+        message: "High load detected. Please try again shortly.",
+        retryAfter: req.controlPlane.retryAfter,
+      });
+    }
 
-  // Process request normally
-  const data = await fetchData();
-  res.json(data);
-});
+    const data = await getRecommendations();
+    res.json(data);
+  },
+);
+
+// Critical endpoint — almost never shed
+app.post(
+  "/api/checkout",
+  controlPlane.middleware("/api/checkout", { priority: "critical" }),
+  async (req, res) => {
+    // isLoadShedding will almost never be true for critical priority
+    const result = await processCheckout(req.body);
+    res.json(result);
+  },
+);
 
 app.listen(3001, async () => {
   console.log("Server running on http://localhost:3001");
-  await controlPlane.initialize(["/api/data"]);
+  await controlPlane.initialize(["/api/recommendations", "/api/checkout"]);
 });
 ```
 
@@ -250,7 +292,7 @@ app.get(
 
 ## Best Practices
 
-###  DO
+### DO
 
 1. **Provide Clear Error Messages**
 
@@ -293,24 +335,27 @@ app.get(
    }
    ```
 
-2. **Don't Shed Critical Operations**
+2. **Don't Leave Critical Endpoints Unprotected**
 
    ```javascript
-   // BAD: Never shed payment processing
-   app.post('/api/payment',
-     controlPlane.middleware('/api/payment'),
+   // BAD: low priority on a critical payment endpoint
+   app.post(
+     "/api/payment",
+     controlPlane.middleware("/api/payment", { priority: "low" }),
      async (req, res) => {
-       if (req.controlPlane.isLoadShedding) {
-         return res.status(503).json(...); // DON'T DO THIS
-       }
-     }
+       // This will get shed during load spikes — BAD!
+     },
    );
 
-   // GOOD: Exclude critical endpoints
-   app.post('/api/payment', async (req, res) => {
-     // Don't use middleware for critical operations
-     await processPayment(req.body);
-   });
+   // GOOD: Mark critical endpoints as 'critical' priority
+   app.post(
+     "/api/payment",
+     controlPlane.middleware("/api/payment", { priority: "critical" }),
+     async (req, res) => {
+       // isLoadShedding will almost never be true for critical priority
+       await processPayment(req.body);
+     },
+   );
    ```
 
 ---

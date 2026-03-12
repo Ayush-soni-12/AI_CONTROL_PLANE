@@ -126,15 +126,25 @@ const controlPlane = new ControlPlaneSDK({
 
 ---
 
-## Step 7: Add Middleware to Your Routes
+## Step 7: Integrate the SDK into Your Routes
 
-### Node.js / Express
+The SDK provides **4 integration methods**, each suited for a different use case. Here's a quick comparison:
+
+| Method                                            | What it does                                       | Best for                          |
+| ------------------------------------------------- | -------------------------------------------------- | --------------------------------- |
+| `middleware(endpoint, options)`                   | Attaches all 6 feature flags to `req.controlPlane` | Routes where YOU handle each flag |
+| `withEndpointTimeout(endpoint, handler, options)` | Same flags + auto-kills slow handlers with a 504   | Routes with slow DB calls or APIs |
+| `adaptiveFetch(configEndpoint, url, options)`     | Drop-in for `fetch()` with AI timeout              | Individual external API calls     |
+| `withDbTimeout(configEndpoint, fn, priority)`     | Wraps a DB query with AI timeout                   | Individual database queries       |
+
+### Method 1: `middleware()` — Full Feature Flags
+
+Use this when you want to check **every feature flag yourself** and handle each one with custom logic.
 
 ```javascript
-// Simple endpoint with automatic traffic management
 app.get(
   "/api/products",
-  controlPlane.middleware("/api/products"),
+  controlPlane.middleware("/api/products", { priority: "medium" }),
   async (req, res) => {
     const {
       shouldCache,
@@ -146,46 +156,129 @@ app.get(
       estimatedDelay,
     } = req.controlPlane;
 
-    if (isRateLimitedCustomer) {
-      return res.status(429).json({ error: "Rate limit exceeded", retryAfter });
+    // 1. Circuit Breaker
+    if (shouldSkip) {
+      return res.status(503).json({ error: "Service unavailable", retryAfter });
     }
+    // 2. Rate Limiting
+    if (isRateLimitedCustomer) {
+      res.set("Retry-After", retryAfter);
+      return res.status(429).json({ error: "Too many requests", retryAfter });
+    }
+    // 3. Load Shedding
     if (isLoadShedding) {
       return res
         .status(503)
-        .json({ error: "Service temporarily unavailable", retryAfter });
+        .json({ error: "System under high load", retryAfter });
     }
+    // 4. Queue Deferral
     if (isQueueDeferral) {
-      const jobId = `job-${Date.now()}`;
-      await queueJob(jobId, req.body);
-      return res.status(202).json({
-        message: "Request queued",
-        jobId,
-        estimatedWait: estimatedDelay,
-      });
+      await queue.add("fetch-products", req.body);
+      return res
+        .status(202)
+        .json({ message: "Request queued", estimatedDelay });
     }
-    if (shouldCache && cache.products) {
-      return res.json({ source: "cache", data: cache.products });
+    // 5. Dynamic Caching
+    if (shouldCache) {
+      const cached = await redis.get("cache:products");
+      if (cached) return res.json({ cached: true, data: JSON.parse(cached) });
     }
 
-    const products = await getProductsFromDB();
-    if (shouldCache) cache.products = products;
-    res.json({ source: "database", data: products });
+    const products = await db.getProducts();
+    if (shouldCache)
+      await redis.setex("cache:products", 300, JSON.stringify(products));
+    res.json({ cached: false, data: products });
   },
 );
-
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, async () => {
-  console.log(`🚀 Service running on port ${PORT}`);
-  // Initialize Control Plane SDK with known endpoints
-  await controlPlane.initialize(["/api/products"]);
-});
 ```
+
+> **Note:** `middleware()` does NOT enforce adaptive timeouts automatically.
+> It only provides the flags — your handler can still hang forever if the DB is slow.
+> Use `withEndpointTimeout()` if you need automatic timeout enforcement.
+
+### Method 2: `withEndpointTimeout()` — Auto-Timeout + Feature Flags
+
+This does everything `middleware()` does **plus** automatically kills the handler if it takes longer than the AI-set timeout. If the handler exceeds the limit, the SDK returns a `504 Gateway Timeout` response.
+
+```javascript
+app.get(
+  "/api/products",
+  controlPlane.withEndpointTimeout(
+    "/api/products",
+    async (req, res) => {
+      // ✅ req.controlPlane is available here (same flags as middleware)
+      if (req.controlPlane.shouldSkip) {
+        return res.status(503).json({ error: "Service unavailable" });
+      }
+
+      // If this DB call takes longer than the AI threshold → 504 returned automatically
+      const products = await db.getProducts();
+      res.json(products);
+    },
+    { priority: "high" },
+  ),
+);
+```
+
+### Method 3: `adaptiveFetch()` — For External API Calls
+
+Drop-in replacement for `fetch()`. AI enforces the timeout + auto-tracks latency signals.
+
+```javascript
+try {
+  const result = await controlPlane.adaptiveFetch(
+    "/payments/gateway", // config key (for timeout lookup)
+    "https://payment-api.com/charge", // actual URL
+    { method: "POST", body: JSON.stringify(data) },
+  );
+  const data = await result.json();
+} catch (err) {
+  // Payment API timed out → handle gracefully
+  console.error("Payment gateway slow, deferring...");
+}
+```
+
+### Method 4: `withDbTimeout()` — For Database Queries
+
+Wraps any Promise-returning DB call with the AI-tuned timeout.
+
+```javascript
+const users = await controlPlane.withDbTimeout(
+  "/db/users", // config key
+  () => prisma.user.findMany(), // any Promise-returning function
+  "high", // priority (optional, default: 'medium')
+);
+```
+
+### The `priority` Parameter
+
+All middleware/timeout methods accept a **priority** level. This tells the AI which endpoints to protect FIRST during system overload:
+
+| Priority             | Meaning                      | Example Endpoints           |
+| -------------------- | ---------------------------- | --------------------------- |
+| `'critical'`         | Never shed — always process  | `/checkout`, `/login`       |
+| `'high'`             | Shed only under extreme load | `/products`, `/search`      |
+| `'medium'` (default) | Normal shedding priority     | `/api/recommendations`      |
+| `'low'`              | Shed first during overload   | `/analytics`, `/send-email` |
 
 ---
 
-## Step 8: Test Your Integration
+## Step 8: Pre-warm and Start 🚀
 
-### Node.js
+```javascript
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, async () => {
+  console.log(`🚀 Service running on port ${PORT}`);
+  // Pre-warm the config cache for all endpoints
+  await controlPlane.initialize([
+    "/api/products",
+    "/api/users",
+    "/payments/gateway",
+  ]);
+});
+```
+
+### Test Your Integration
 
 ```bash
 curl http://localhost:3001/api/products
@@ -204,12 +297,12 @@ curl http://localhost:3001/api/products
 
 Your service is now protected by AI-powered traffic management with:
 
--  **Automatic Caching** - AI decides when to cache based on latency
--  **Rate Limiting** - Protects against abuse and traffic spikes
--  **Load Shedding** - Graceful degradation under high load
--  **Queue Deferral** - Async processing for non-critical requests
--  **Circuit Breaking** - Prevents cascade failures
--  **Real-time Monitoring** - Live dashboards with SSE updates
+- **Automatic Caching** - AI decides when to cache based on latency
+- **Rate Limiting** - Protects against abuse and traffic spikes
+- **Load Shedding** - Graceful degradation under high load
+- **Queue Deferral** - Async processing for non-critical requests
+- **Circuit Breaking** - Prevents cascade failures
+- **Real-time Monitoring** - Live dashboards with SSE updates
 
 ---
 
