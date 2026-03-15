@@ -118,22 +118,25 @@ Pre-built workflows the AI can follow:
 
 ---
 
-## Prerequisites
+## Installation
 
-Before connecting any editor, make sure:
+The easiest way to get the MCP server is via PyPI:
 
-1. **Control Plane is running** — `http://localhost:8000` (or your deployment URL)
-2. **MCP server dependencies are installed:**
-   ```bash
-   cd mcp-server
-   python3 -m venv .venv
-   .venv/bin/pip install fastmcp httpx python-dotenv
-   ```
-3. **Environment variables are set** — create `mcp-server/.env`:
-   ```bash
-   CONTROL_PLANE_URL=http://localhost:8000
-   NEURALCONTROL_API_KEY=your_api_key_here
-   ```
+```bash
+pip install neuralcontrol-mcp
+```
+
+## Configuration
+
+The MCP server needs two environment variables to talk to your Control Plane. Use the **Live URL** for the standard managed experience.
+
+| Variable | Description | Default / Example |
+|----------|-------------|---------|
+| `CONTROL_PLANE_URL` | URL of your control-plane backend | `https://api.neuralcontrol.online` (Live) |
+| `NEURALCONTROL_API_KEY` | Your NeuralControl API key | *(required)* |
+
+> [!TIP]
+> Use `https://api.neuralcontrol.online` for the live system. Use `http://localhost:8000` only if you are running the control-plane backend locally via Docker.
 
 ---
 
@@ -141,16 +144,15 @@ Before connecting any editor, make sure:
 
 ### Cursor
 
-Cursor natively supports MCP. Add a `.cursor/mcp.json` file to your **project root**:
+Add to your `.cursor/mcp.json` (or via Settings → MCP):
 
 ```json
 {
   "mcpServers": {
-    "ai-control-plane": {
-      "command": "/absolute/path/to/ai-control-plane/mcp-server/.venv/bin/python",
-      "args": ["/absolute/path/to/ai-control-plane/mcp-server/server.py"],
+    "neuralcontrol": {
+      "command": "neuralcontrol-mcp",
       "env": {
-        "CONTROL_PLANE_URL": "http://localhost:8000",
+        "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
         "NEURALCONTROL_API_KEY": "your_key_here"
       }
     }
@@ -164,34 +166,16 @@ Cursor natively supports MCP. Add a `.cursor/mcp.json` file to your **project ro
 
 ### VS Code (GitHub Copilot)
 
-VS Code supports MCP servers through GitHub Copilot's Agent mode. Add a `.vscode/mcp.json` file to your **project root**:
-
-```json
-{
-  "servers": {
-    "ai-control-plane": {
-      "command": "/absolute/path/to/ai-control-plane/mcp-server/.venv/bin/python",
-      "args": ["/absolute/path/to/ai-control-plane/mcp-server/server.py"],
-      "env": {
-        "CONTROL_PLANE_URL": "http://localhost:8000",
-        "NEURALCONTROL_API_KEY": "your_key_here"
-      }
-    }
-  }
-}
-```
-
-Or add it globally in **User Settings** (`settings.json`):
+VS Code supports MCP servers through GitHub Copilot's Agent mode. Add to your global **User Settings** (`settings.json`):
 
 ```json
 {
   "mcp": {
     "servers": {
-      "ai-control-plane": {
-        "command": "/absolute/path/to/mcp-server/.venv/bin/python",
-        "args": ["/absolute/path/to/mcp-server/server.py"],
+      "neuralcontrol": {
+        "command": "neuralcontrol-mcp",
         "env": {
-          "CONTROL_PLANE_URL": "http://localhost:8000",
+          "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
           "NEURALCONTROL_API_KEY": "your_key_here"
         }
       }
@@ -211,11 +195,10 @@ Windsurf supports MCP via its configuration file. Open **Windsurf Settings → M
 ```json
 {
   "mcpServers": {
-    "ai-control-plane": {
-      "command": "/absolute/path/to/ai-control-plane/mcp-server/.venv/bin/python",
-      "args": ["/absolute/path/to/ai-control-plane/mcp-server/server.py"],
+    "neuralcontrol": {
+      "command": "neuralcontrol-mcp",
       "env": {
-        "CONTROL_PLANE_URL": "http://localhost:8000",
+        "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
         "NEURALCONTROL_API_KEY": "your_key_here"
       }
     }
@@ -229,20 +212,15 @@ Windsurf supports MCP via its configuration file. Open **Windsurf Settings → M
 
 ### Claude Desktop
 
-Add to your Claude Desktop config file:
-
-**macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-**Linux:** `~/.config/Claude/claude_desktop_config.json`
+Add to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "ai-control-plane": {
-      "command": "/absolute/path/to/ai-control-plane/mcp-server/.venv/bin/python",
-      "args": ["/absolute/path/to/ai-control-plane/mcp-server/server.py"],
+    "neuralcontrol": {
+      "command": "neuralcontrol-mcp",
       "env": {
-        "CONTROL_PLANE_URL": "http://localhost:8000",
+        "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
         "NEURALCONTROL_API_KEY": "your_key_here"
       }
     }
@@ -256,27 +234,21 @@ Add to your Claude Desktop config file:
 
 ### Antigravity (Gemini-based)
 
-Antigravity supports MCP servers. Add the server in your workspace configuration or agent settings as a stdio-based MCP server:
+Antigravity supports MCP servers. Add it as a stdio-based MCP server:
 
-- **Command:** `/absolute/path/to/mcp-server/.venv/bin/python`
-- **Args:** `["/absolute/path/to/mcp-server/server.py"]`
+- **Command:** `neuralcontrol-mcp`
 - **Transport:** `stdio`
-
-The environment variables (`CONTROL_PLANE_URL`, `NEURALCONTROL_API_KEY`) should be set in your `.env` file inside the `mcp-server/` directory, or passed via the MCP configuration.
+- **Env Vars:** Set `CONTROL_PLANE_URL` and `NEURALCONTROL_API_KEY` in the configuration.
 
 ---
 
 ### Any Other MCP-Compatible Client
 
-Our server uses **stdio transport** (the most widely supported). For any MCP client:
-
-1. **Command:** Point to the Python binary inside the virtual environment
-2. **Args:** Path to `server.py`
-3. **Transport:** `stdio`
+Our server uses **stdio transport** (the most widely supported). For any MCP client, simply use the `neuralcontrol-mcp` command.
 
 ```bash
 # Test manually — the server starts and waits for JSON-RPC over stdin/stdout:
-/path/to/mcp-server/.venv/bin/python /path/to/mcp-server/server.py
+neuralcontrol-mcp
 ```
 
 ---
@@ -285,18 +257,17 @@ Our server uses **stdio transport** (the most widely supported). For any MCP cli
 
 ### Server Not Starting
 
+Test the server manually:
+
 ```bash
-# Test the server manually:
-cd mcp-server
-.venv/bin/python server.py
-# You should see the FastMCP banner
+neuralcontrol-mcp
 ```
 
-If it fails, check:
+If it fails, ensure it's installed and in your PATH:
 
-1. Virtual environment exists: `ls mcp-server/.venv/bin/python`
-2. Dependencies installed: `.venv/bin/pip list | grep fastmcp`
-3. Python version ≥ 3.10: `.venv/bin/python --version`
+```bash
+pip list | grep neuralcontrol-mcp
+```
 
 ### Tools Not Working (Connection Refused)
 
@@ -304,7 +275,7 @@ The MCP server needs to reach the Control Plane API:
 
 ```bash
 # Test the backend is reachable:
-curl http://localhost:8000/
+curl http://localhost:8000/r
 ```
 
 If not running, start the control plane first:

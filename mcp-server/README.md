@@ -18,13 +18,16 @@ Add this to your AI editor's MCP config (e.g. `~/.cursor/mcp.json` or `claude_de
     "neuralcontrol": {
       "command": "neuralcontrol-mcp",
       "env": {
-        "CONTROL_PLANE_URL": "https://your-api.yourdomain.com",
+        "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
         "NEURALCONTROL_API_KEY": "acp_your_key_here"
       }
     }
   }
 }
 ```
+
+> [!NOTE]
+> Use `https://api.neuralcontrol.online` (Live) or `http://localhost:8000` (Local).
 
 Or copy `.env.example` to `.env` and fill in your values, then run directly:
 
