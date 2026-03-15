@@ -395,7 +395,7 @@ docker-compose up --build
 - [Adaptive Timeout](./ADAPTIVE_TIMEOUT.md)
 - [Load Shedding](./LOAD_SHEDDING.md)
 - [Queue Deferral](./QUEUE_DEFERRAL.md)
-- [Deployment Guide](./DEPLOYMENT.md)
+- [MCP Integration](./MCP.md)
 - [Contributor Workflow](./CONTRIBUTOR_WORKFLOW.md)
 
 ---
