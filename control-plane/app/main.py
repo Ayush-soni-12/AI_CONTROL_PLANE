@@ -115,6 +115,8 @@ async def startup():
         replace_existing=True
     )
     
+    print(f"fix the github action ")
+
     # AI Background Analysis: Run every 5 minutes
     # scheduler.add_job(
     #     analyze_all_services,
