@@ -172,6 +172,7 @@ def decide_node(state: DecisionState) -> DecisionState:
             'rate_limit_customer': True,
             'queue_deferral': False,
             'load_shedding': False,
+            'request_coalescing': True, # Coalesce even during rate limiting to protect backend
             'send_alert': False,
         }
         return state
@@ -191,6 +192,7 @@ def decide_node(state: DecisionState) -> DecisionState:
             'rate_limit_customer': False,
             'queue_deferral': False,
             'load_shedding': True,
+            'request_coalescing': True,
             'send_alert': False,
         }
         return state
@@ -206,6 +208,7 @@ def decide_node(state: DecisionState) -> DecisionState:
             'rate_limit_customer': False,
             'queue_deferral': False,
             'load_shedding': True,
+            'request_coalescing': True,
             'send_alert': False,
         }
         return state
@@ -221,6 +224,7 @@ def decide_node(state: DecisionState) -> DecisionState:
             'rate_limit_customer': False,
             'queue_deferral': True,
             'load_shedding': False,
+            'request_coalescing': True,
             'send_alert': False,
         }
         return state
@@ -303,12 +307,24 @@ def decide_node(state: DecisionState) -> DecisionState:
             f"Traffic {total_rpm:.1f} req/min{trend_note}"
         )
 
+    # ── REQUEST COALESCING LOGIC ─────────────────────────────────────────────
+    # Should coalesce if:
+    # 1. Latency is rising fast (proactive protection)
+    # 2. Latency is already near threshold (approaching cache state)
+    # 3. Cache is enabled (essential to prevent stampede)
+    should_coalesce = (
+        'enable_cache' in actions
+        or latency_trend == 'rising'
+        or state['avg_latency'] >= 350
+    )
+
     state['decision'] = {
         'cache_enabled': 'enable_cache' in actions,
         'circuit_breaker': 'circuit_breaker' in actions,
         'rate_limit_customer': False,
         'queue_deferral': False,
         'load_shedding': False,
+        'request_coalescing': should_coalesce,
         'send_alert': 'alert' in actions,
         # Adaptive Timeout: always compute and return the recommended timeout
         # The SDK should use this value as its request timeout.
@@ -423,6 +439,7 @@ def make_ai_decision(
         "rate_limit_customer": result['decision'].get('rate_limit_customer', False),
         "queue_deferral": result['decision'].get('queue_deferral', False),
         "load_shedding": result['decision'].get('load_shedding', False),
+        "request_coalescing": result['decision'].get('request_coalescing', False),
         "send_alert": result['decision'].get('send_alert', False),
         "adaptive_timeout": result['decision'].get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000, 'baseline_p99_ms': 0}),
         "reasoning": result['reasoning'],
@@ -518,6 +535,7 @@ async def get_ai_tuned_decision(
             'rate_limit_customer': False,
             'queue_deferral': False,
             'load_shedding': False,
+            'request_coalescing': latency_trend == 'rising' or avg_latency > cache_threshold * 0.7,
             'send_alert': False,
             'reasoning': (
                 f"{prefix} Healthy: Latency {avg_latency:.0f}ms, "
@@ -537,6 +555,7 @@ async def get_ai_tuned_decision(
             'rate_limit_customer': True,
             'queue_deferral': False,
             'load_shedding': False,
+            'request_coalescing': True, # Keep coalescing on for active abusers
             'send_alert': False,
             'reasoning': (
                 f"{prefix} Per-Customer Rate Limit: {customer_requests_per_minute:.1f} req/min "
@@ -558,6 +577,7 @@ async def get_ai_tuned_decision(
                 'rate_limit_customer': False,
                 'queue_deferral': False,
                 'load_shedding': True,
+                'request_coalescing': True,
                 'send_alert': False,
                 'reasoning': (
                     f"{prefix} Load Shedding: Traffic {requests_per_minute:.1f} rpm "
@@ -576,6 +596,7 @@ async def get_ai_tuned_decision(
                 'rate_limit_customer': False,
                 'queue_deferral': False,
                 'load_shedding': True,
+                'request_coalescing': True,
                 'send_alert': False,
                 'reasoning': (
                     f"{prefix} Load Shedding: Traffic {requests_per_minute:.1f} rpm "
@@ -593,6 +614,7 @@ async def get_ai_tuned_decision(
                 'rate_limit_customer': False,
                 'queue_deferral': True,
                 'load_shedding': False,
+                'request_coalescing': True,
                 'send_alert': False,
                 'reasoning': (
                     f"{prefix} Queue Deferral: Traffic {requests_per_minute:.1f} rpm "
@@ -612,6 +634,7 @@ async def get_ai_tuned_decision(
                 'rate_limit_customer': False,
                 'queue_deferral': True,
                 'load_shedding': False,
+                'request_coalescing': True,
                 'send_alert': False,
                 'reasoning': (
                     f"{prefix} Proactive Queue: Traffic at {requests_per_minute:.1f} rpm "
@@ -733,6 +756,7 @@ async def get_ai_tuned_decision(
         'queue_deferral': False,
         'load_shedding': False,
         'send_alert': 'alert' in actions,
+        'request_coalescing': 'enable_cache' in actions or latency_trend == 'rising' or avg_latency > cache_threshold * 0.7,
         'adaptive_timeout': adaptive_timeout,
         'reasoning': reasoning,
         'analysis': reasoning,

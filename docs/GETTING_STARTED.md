@@ -136,6 +136,7 @@ The SDK provides **4 integration methods**, each suited for a different use case
 | `withEndpointTimeout(endpoint, handler, options)` | Same flags + auto-kills slow handlers with a 504   | Routes with slow DB calls or APIs |
 | `adaptiveFetch(configEndpoint, url, options)`     | Drop-in for `fetch()` with AI timeout              | Individual external API calls     |
 | `withDbTimeout(configEndpoint, fn, priority)`     | Wraps a DB query with AI timeout                   | Individual database queries       |
+| `req.controlPlane.coalesce(key, fn)`              | Collapses simultaneous requests into one execution | Preventing identical DB/API calls |
 
 ### Method 1: `middleware()` — Full Feature Flags
 
@@ -242,12 +243,37 @@ try {
 
 Wraps any Promise-returning DB call with the AI-tuned timeout.
 
-```javascript
+```javascriptl
 const users = await controlPlane.withDbTimeout(
   "/db/users", // config key
   () => prisma.user.findMany(), // any Promise-returning function
   "high", // priority (optional, default: 'medium')
 );
+```
+
+> [!WARNING]
+> **Endpoint Key Separation**
+> Always use a **different string** for the endpoint key in `withDbTimeout` and `adaptiveFetch` than the one you use for the main route's `middleware()`. 
+> 
+> ❌ **BAD:** `app.get('/users', middleware('/users'), ... withDbTimeout('/users', ...))`
+> This mixes the database inner-latency metrics with the outer HTTP latency metrics, destroying the AI's accuracy.
+> 
+> ✅ **GOOD:** `app.get('/users', middleware('/users'), ... withDbTimeout('/db/get-users', ...))`
+> Cleanly isolates internal metrics from external API metrics.
+
+### Method 5: `req.controlPlane.coalesce()` — Request Coalescing
+
+Prevents "Cache Stampedes" by collapsing simultaneous identical requests into a single execution. The SDK strictly enforces data isolation, so you must explicitly wrap database queries or external fetches using a unique string key.
+
+```javascript
+app.get('/expensive-report', controlPlane.middleware('/report'), async (req, res) => {
+  // If 50 users request this at the exact same millisecond, 
+  // the inner function only runs ONCE!
+  const reportData = await req.controlPlane.coalesce('daily-report-generation', async () => {
+    return await generateExpensiveReport();
+  });
+  res.json(reportData);
+});
 ```
 
 ### The `priority` Parameter
@@ -302,6 +328,8 @@ Your service is now protected by AI-powered traffic management with:
 - **Load Shedding** - Graceful degradation under high load
 - **Queue Deferral** - Async processing for non-critical requests
 - **Circuit Breaking** - Prevents cascade failures
+- **Adaptive Timeout** - Dynamically enforces strict latency boundaries
+- **Request Coalescing** - Automatically collapses simultaneous identical requests
 - **Real-time Monitoring** - Live dashboards with SSE updates
 
 ---
@@ -339,6 +367,11 @@ SERVICE_NAME=product-service
 - 📖 [Understand AI Decisions](./AI_DECISIONS.md)
 - 📖 [Full Configuration Guide](./CONFIGURATION.md)
 - 📖 [SDK Quick Reference](./SDK_QUICK_REFERENCE.md)
+- 📖 [Learn about Circuit Breaker](./CIRCUIT_BREAKER.md)
+- 📖 [Learn about Caching Strategy](./CACHING.md)
+- 📖 [Learn about Adaptive Timeout](./ADAPTIVE_TIMEOUT.md)
+- 📖 [Learn about Request Coalescing](./REQUEST_COALESCING.md)
+- 📖 [Learn about MCP Integration](./MCP.md)
 
 ---
 

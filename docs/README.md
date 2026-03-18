@@ -22,6 +22,7 @@ Microservices fail under unpredictable traffic spikes. Traditional static rate l
 - ⚖️ **Load Shedding** — Graceful degradation under traffic spikes; sheds low-priority requests first
 - 📋 **Queue Deferral** — Async processing for non-critical operations via RabbitMQ
 - ⚡ **Circuit Breaker** — Opens at >5% error rate; auto-recovers when metrics normalize
+- 🤝 **Request Coalescing** — Collapses multiple simultaneous requests for the same resource into a single backend call
 - 👥 **Multi-Tenant** — Isolated metrics, thresholds, and decisions per tenant
 - 📦 **SDK** — Drop-in Express middleware (`npm install neuralcontrol`)
 - 🐳 **Docker Ready** — Full stack with one command
@@ -165,6 +166,7 @@ app.get(
         return res.status(503).json({ error: "Unavailable" });
 
       // If this DB call is slow → SDK returns 504 automatically
+      // Note: Always use a DIFFERENT key for internal DB queries than the outer route!
       const products = await db.getProducts();
       res.json(products);
     },
@@ -322,6 +324,17 @@ The current deployment runs 2 FastAPI replicas behind Nginx with Docker Compose 
 
 ---
 
+### 🤝 Request Coalescing
+
+- Automatically collapses identical simultaneous requests (thundering herd prevention)
+- Built into standard `middleware` and `withEndpointTimeout` HTTP route wrappers
+- Manually wrap DB queries and external fetches using `req.controlPlane.coalesce('unique-key', ...)` for strict data isolation
+- AI triggers it during rising latency to protect backend before a crash occurs
+
+📖 [Learn More](./REQUEST_COALESCING.md)
+
+---
+
 ### 🤖 AI Decision Engine
 
 - Reads rolling Redis aggregates (p50/p95/p99 latency, error rate, request rate)
@@ -395,6 +408,7 @@ docker-compose up --build
 - [Adaptive Timeout](./ADAPTIVE_TIMEOUT.md)
 - [Load Shedding](./LOAD_SHEDDING.md)
 - [Queue Deferral](./QUEUE_DEFERRAL.md)
+- [Request Coalescing](./REQUEST_COALESCING.md)
 - [MCP Integration](./MCP.md)
 - [Contributor Workflow](./CONTRIBUTOR_WORKFLOW.md)
 

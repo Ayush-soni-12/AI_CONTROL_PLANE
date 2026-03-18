@@ -64,6 +64,15 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+    # If called manually bypassing Depends(), extract token from header
+    # Depends is an object in FastAPI, so we safely check if token is our expected string or a Depends instance
+    if token is None or not isinstance(token, str):
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ")[1]
+        else:
+            token = None
+
     # 🍪 First try cookie
     cookie_token = request.cookies.get("access_token")
 
@@ -73,15 +82,37 @@ async def get_current_user(
     if not final_token:
         raise credentials_exception
 
-    user_id = verify_token(final_token, credentials_exception)
-    
-    # Fetch user from database (async pattern)
-    # Eagerly load api_keys to prevent lazy-load issues in auth endpoints
-    stmt = select(models.User).options(
-        selectinload(models.User.api_keys)
-    ).filter(models.User.id == int(user_id))
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    # Try to verify as JWT first
+    try:
+        user_id = verify_token(final_token, credentials_exception)
+        
+        # Fetch user from database
+        stmt = select(models.User).options(
+            selectinload(models.User.api_keys)
+        ).filter(models.User.id == int(user_id))
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+        
+    except HTTPException:
+        # If JWT validation fails, check if it's a valid API key
+        stmt = select(models.ApiKey).options(
+            selectinload(models.ApiKey.user)
+        ).filter(
+            models.ApiKey.key == final_token,
+            models.ApiKey.is_active == True
+        )
+        result = await db.execute(stmt)
+        db_api_key = result.scalar_one_or_none()
+        
+        if not db_api_key:
+            raise credentials_exception
+            
+        # FIX: Explicitly fetch the user with api_keys eagerly loaded to prevent MissingGreenlet errors
+        stmt = select(models.User).options(
+            selectinload(models.User.api_keys)
+        ).filter(models.User.id == db_api_key.user_id)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
     
     if not user:
         raise credentials_exception

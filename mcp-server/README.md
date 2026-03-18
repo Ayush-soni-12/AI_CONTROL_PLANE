@@ -1,6 +1,6 @@
 # neuralcontrol-mcp
 
-> MCP Server for the [AI Control Plane](https://github.com/Ayush-soni-12/AI_CONTROL_PLANE) — gives AI editors (Cursor, Claude, Windsurf) live access to your endpoint configs, real-time metrics, and SDK documentation.
+> MCP Server for the [AI Control Plane](https://github.com/Ayush-soni-12/AI_CONTROL_PLANE) — gives AI editors (Cursor, Claude, Windsurf) live access to your endpoint configs, real-time metrics, Request Coalescing examples, and SDK documentation.
 
 ## Installation
 

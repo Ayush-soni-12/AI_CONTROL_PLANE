@@ -140,6 +140,12 @@ def queue_deferral_docs() -> str:
     return _read_doc("QUEUE_DEFERRAL.md")
 
 
+@mcp.resource("docs://request-coalescing")
+def request_coalescing_docs() -> str:
+    """Request Coalescing: collapsing identical simultaneous requests via SDK."""
+    return _read_doc("REQUEST_COALESCING.md")
+
+
 @mcp.resource("docs://ai-decisions")
 def ai_decisions_docs() -> str:
     """How the AI engine makes decisions: thresholds, signal analysis, and reasoning."""
@@ -417,6 +423,7 @@ async def get_feature_documentation(feature: str) -> dict[str, Any]:
         "circuit_breaker": "CIRCUIT_BREAKER.md",
         "queue_deferral": "QUEUE_DEFERRAL.md",
         "adaptive_timeout": "ADAPTIVE_TIMEOUT.md",
+        "request_coalescing": "REQUEST_COALESCING.md",
         "ai_decisions": "AI_DECISIONS.md"
     }
     
@@ -554,6 +561,7 @@ def explain_feature(
         "load-shedding": "docs://load-shedding",
         "queue-deferral": "docs://queue-deferral",
         "adaptive-timeout": "docs://adaptive-timeout",
+        "request-coalescing": "docs://request-coalescing",
     }
     resource = resource_map.get(feature, "docs://overview")
     return f"""

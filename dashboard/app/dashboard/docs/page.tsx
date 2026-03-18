@@ -85,6 +85,20 @@ const docsList = [
     emoji: "📋",
   },
   {
+    slug: "REQUEST_COALESCING",
+    title: "Request Coalescing",
+    description: "Collapse simultaneous identical requests",
+    category: "Features",
+    emoji: "🤝",
+  },
+  {
+    slug: "MCP",
+    title: "Model Context Protocol",
+    description: "Integration config for Anthropic MCP",
+    category: "Features",
+    emoji: "🔌",
+  },
+  {
     slug: "CONTRIBUTOR_WORKFLOW",
     title: "Contributing",
     description: "How to contribute to this project",
