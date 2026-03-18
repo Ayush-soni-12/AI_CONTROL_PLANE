@@ -228,6 +228,7 @@ async def get_config(
             'retry_after': retry_after,
             'status_code': 429,  # SDK should return 429
             'reason': f"Per-customer rate limit: {decision['reason']}",
+            'request_coalescing': decision.get('request_coalescing', False),  # NEW
             'adaptive_timeout': decision.get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000}),
         }
     
@@ -250,6 +251,7 @@ async def get_config(
             'status_code': 503,  # SDK should return 503
             'reason': decision['reason'],
             'priority_required': 'high',  # Hint for client
+            'request_coalescing': decision.get('request_coalescing', False),  # NEW
             'adaptive_timeout': decision.get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000}),
         }
     
@@ -266,6 +268,7 @@ async def get_config(
             'status_code': 202,  # SDK should return 202
             'reason': decision['reason'],
             'estimated_delay': 10,  # Seconds (SDK can queue for later)
+            'request_coalescing': decision.get('request_coalescing', False),  # NEW
             'adaptive_timeout': decision.get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000}),
         }
     
@@ -283,6 +286,7 @@ async def get_config(
         'load_shedding': False,  # Not shed
         'status_code': 200,  # Normal request
         'reason': decision['reason'],
+        'request_coalescing': decision.get('request_coalescing', False),  # NEW
         # NEW: Adaptive Timeout — always returned so SDK can dynamically set its timeout
         # - active: True means latency is dangerously high, enforce the tighter timeout NOW
         # - recommended_timeout_ms: optimal timeout based on your historical p99 latency

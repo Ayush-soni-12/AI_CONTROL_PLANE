@@ -19,7 +19,7 @@ from sqlalchemy import select, delete, distinct
 from app.database import models
 from app.database.database import get_async_db
 from app.router.auth import get_current_user
-from app.redis.cache import cache_delete_pattern
+from app.redis.cache import cache_delete_pattern, cache_delete
 
 router = APIRouter(prefix="/api/services", tags=["Services"])
 
@@ -168,6 +168,13 @@ async def delete_service(
     # ── 9. Flush Redis real-time aggregate keys ──────────────────────────────
     redis_pattern = f"rt_agg:user:{uid}:service:{service_name}:*"
     await cache_delete_pattern(redis_pattern)
+
+    # ── 10. Flush 24h decision logs and alerts for this service ──────────────
+    await cache_delete_pattern(f"decision_log:{uid}:{service_name}:*")
+    await cache_delete_pattern(f"alert_sent:{uid}:{service_name}:*")
+    
+    # Revalidate the dashboard's service list cache
+    await cache_delete(f"user:{uid}:services")
 
     total_deleted = sum(deleted_counts.values())
 

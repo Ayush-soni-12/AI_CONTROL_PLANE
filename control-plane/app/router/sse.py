@@ -293,7 +293,10 @@ async def stream_services(
                     
                     trends = _compute_trends(metrics_1h, metrics_24h)
                     
-                    if metrics_1h and metrics_1h['count'] >= 1:
+                    endpoint_normalized = endpoint if endpoint.startswith('/') else '/' + endpoint
+                    
+                    if metrics_1h and metrics_1h['count'] >= 3:
+                        # Enough data — use real metrics and get AI decision
                         avg_latency = metrics_1h['avg_latency']
                         error_rate = metrics_1h['error_rate']
                         signal_count = metrics_1h['count']
@@ -302,27 +305,43 @@ async def stream_services(
                         p95 = metrics_1h.get('p95', 0)
                         p99 = metrics_1h.get('p99', 0)
                         rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
+
+                        ai_decision = await get_ai_tuned_decision(
+                            service_name, 
+                            endpoint_normalized, 
+                            avg_latency, 
+                            error_rate,
+                            requests_per_minute=requests_per_minute,
+                            user_id=current_user.id,
+                            db=db,
+                            p50_latency=p50,
+                            p95_latency=p95,
+                            p99_latency=p99,
+                            latency_trend=trends['latency_trend'],
+                            error_trend=trends['error_trend'],
+                            rpm_trend=trends['rpm_trend']
+                        )
                     else:
-                        # Fallback to database
-                        stmt = select(models.Signal).filter(
-                            models.Signal.user_id == current_user.id,
-                            models.Signal.service_name == service_name,
-                            models.Signal.endpoint == endpoint
-                        ).order_by(models.Signal.timestamp.desc())
-                        result = await db.execute(stmt)
-                        signals = result.scalars().all()
-                        
-                        if not signals:
-                            continue
-                            
-                        signal_count = len(signals)
-                        avg_latency = sum(s.latency_ms for s in signals) / signal_count
-                        error_count = sum(1 for s in signals if s.status == 'error')
-                        error_rate = error_count / signal_count
-                        requests_per_minute = 0
+                        # Not enough data — show real metrics but skip AI decision
+                        avg_latency = metrics_1h['avg_latency'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                        error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                        signal_count = metrics_1h['count'] if metrics_1h else 0
+                        requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
                         rate_limit_enabled = False
-                        p50 = p95 = p99 = 0
-                    
+                        p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
+                        p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
+                        p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
+                        
+                        ai_decision = {
+                            'cache_enabled': False,
+                            'circuit_breaker': False,
+                            'queue_deferral': False,
+                            'load_shedding': False,
+                            'request_coalescing': False,
+                            'reasoning': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
+                            'status': 'healthy'
+                        }
+
                     # Get most recent signal for tenant_id
                     stmt = select(models.Signal).filter(
                         models.Signal.user_id == current_user.id,
@@ -333,24 +352,6 @@ async def stream_services(
                     recent_signal = result.scalars().first()
                     
                     tenant_id = recent_signal.tenant_id if recent_signal else None
-                    
-                    # Get AI-tuned decision (uses thresholds from DB)
-                    endpoint_normalized = endpoint if endpoint.startswith('/') else '/' + endpoint
-                    ai_decision = await get_ai_tuned_decision(
-                        service_name, 
-                        endpoint_normalized, 
-                        avg_latency, 
-                        error_rate,
-                        requests_per_minute=requests_per_minute,
-                        user_id=current_user.id,
-                        db=db,
-                        p50_latency=p50,
-                        p95_latency=p95,
-                        p99_latency=p99,
-                        latency_trend=trends['latency_trend'],
-                        error_trend=trends['error_trend'],
-                        rpm_trend=trends['rpm_trend']
-                    )
                     
                     # Get effective threshold values (AI + override) for frontend
                     thresholds = await get_all_thresholds_with_override(
@@ -369,6 +370,7 @@ async def stream_services(
                         'rate_limit_enabled': rate_limit_enabled,
                         'queue_deferral': ai_decision.get('queue_deferral', False),
                         'load_shedding': ai_decision.get('load_shedding', False),
+                        'request_coalescing': ai_decision.get('request_coalescing', False),
                         'reasoning': ai_decision['reasoning'],
                         'status': ai_decision.get('status', 'healthy'),
                         'thresholds': {
@@ -540,7 +542,8 @@ async def stream_endpoint_detail(
                 
                 trends = _compute_trends(metrics_1h, metrics_24h)
                 
-                if metrics_1h and metrics_1h['count'] >= 1:
+                if metrics_1h and metrics_1h['count'] >= 3:
+                    # Enough data — use real metrics and get AI decision
                     total_signals = metrics_1h['count']
                     avg_latency = metrics_1h['avg_latency']
                     error_rate = metrics_1h['error_rate']
@@ -549,34 +552,49 @@ async def stream_endpoint_detail(
                     p95 = metrics_1h.get('p95', 0)
                     p99 = metrics_1h.get('p99', 0)
                     rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
+
+                    ai_decision = await get_ai_tuned_decision(
+                        service_name, 
+                        endpoint_path, 
+                        avg_latency, 
+                        error_rate,
+                        requests_per_minute=requests_per_minute,
+                        user_id=current_user.id,
+                        db=db,
+                        p50_latency=p50,
+                        p95_latency=p95,
+                        p99_latency=p99,
+                        latency_trend=trends['latency_trend'],
+                        error_trend=trends['error_trend'],
+                        rpm_trend=trends['rpm_trend']
+                    )
                 else:
-                    # Fallback to database
-                    stmt = select(models.Signal).filter(
-                        models.Signal.user_id == current_user.id,
-                        models.Signal.service_name == service_name,
-                        models.Signal.endpoint == endpoint_path
-                    ).order_by(models.Signal.timestamp.desc())
-                    result = await db.execute(stmt)
-                    signals = result.scalars().all()
-                    
-                    if not signals:
-                        yield {
-                            "event": "error",
-                            "data": json.dumps({"error": "Endpoint not found or no signals recorded"})
-                        }
-                        await db.close()
-                        await asyncio.sleep(3)
-                        continue
-                    
-                    total_signals = len(signals)
-                    avg_latency = sum(s.latency_ms for s in signals) / total_signals
-                    error_count = sum(1 for s in signals if s.status == 'error')
-                    error_rate = error_count / total_signals
-                    requests_per_minute = 0
+                    # Not enough data — show real metrics but skip AI decision
+                    total_signals = metrics_1h['count'] if metrics_1h else 0
+                    avg_latency = metrics_1h['avg_latency'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                    error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                    requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
                     rate_limit_enabled = False
-                    p50 = p95 = p99 = 0
+                    p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
+                    p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
+                    p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
+                    
+                    ai_decision = {
+                        'cache_enabled': False,
+                        'circuit_breaker': False,
+                        'queue_deferral': False,
+                        'load_shedding': False,
+                        'request_coalescing': False,
+                        'reasoning': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
+                        'status': 'healthy'
+                    }
                 
-                # Get history for graph
+                # Get effective threshold values (AI + override) for frontend
+                thresholds = await get_all_thresholds_with_override(
+                    db, current_user.id, service_name, endpoint_path
+                )
+
+                # Fetch history for graph (last 20 signals from database)
                 stmt = select(models.Signal).filter(
                     models.Signal.user_id == current_user.id,
                     models.Signal.service_name == service_name,
@@ -592,28 +610,6 @@ async def stream_endpoint_detail(
                         "latency_ms": s.latency_ms,
                         "status": s.status
                     })
-                
-                # Get AI-tuned decision (uses thresholds from DB)
-                ai_decision = await get_ai_tuned_decision(
-                    service_name, 
-                    endpoint_path, 
-                    avg_latency, 
-                    error_rate,
-                    requests_per_minute=requests_per_minute,
-                    user_id=current_user.id,
-                    db=db,
-                    p50_latency=p50,
-                    p95_latency=p95,
-                    p99_latency=p99,
-                    latency_trend=trends['latency_trend'],
-                    error_trend=trends['error_trend'],
-                    rpm_trend=trends['rpm_trend']
-                )
-                
-                # Get effective threshold values (AI + override) for frontend
-                thresholds = await get_all_thresholds_with_override(
-                    db, current_user.id, service_name, endpoint_path
-                )
                 
                 cache_threshold = thresholds['cache_latency_ms']
                 cb_threshold = thresholds['circuit_breaker_error_rate']
@@ -632,6 +628,9 @@ async def stream_endpoint_detail(
                 
                 if ai_decision.get('circuit_breaker'):
                     suggestions.append("🔴 Circuit breaker is active due to high error rate. Service is in degraded mode.")
+
+                if ai_decision.get('request_coalescing'):
+                    suggestions.append("🤝 Request Coalescing is active to prevent thundering herds during latency spikes.")
                 
                 if not suggestions:
                     suggestions.append("✨ Endpoint is performing well! No immediate optimizations needed.")
@@ -649,6 +648,7 @@ async def stream_endpoint_detail(
                         "suggestions": suggestions,
                         "cache_enabled": ai_decision['cache_enabled'],
                         "circuit_breaker": ai_decision.get('circuit_breaker', False),
+                        "request_coalescing": ai_decision.get('request_coalescing', False),
                         "rate_limit_enabled": rate_limit_enabled,
                         "reasoning": ai_decision['reasoning'],
                         "status": ai_decision.get('status', 'healthy'),
