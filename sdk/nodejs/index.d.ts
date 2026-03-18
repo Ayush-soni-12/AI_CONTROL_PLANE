@@ -8,7 +8,7 @@
 export interface ControlPlaneConfig {
   /**
    * URL of the control plane service
-   * @default 'http://localhost:8000'
+   * @default 'https://api.neuralcontrol.online'
    */
   controlPlaneUrl?: string;
 

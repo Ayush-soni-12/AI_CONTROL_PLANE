@@ -5,13 +5,13 @@ Easy integration for autonomous runtime control in your microservices. The SDK a
 ## Installation
 
 ```bash
-npm install @ayushsoni12/ai-control-plane
+npm install neuralcontrol
 ```
 
 ## Links
 
 - **GitHub Repository**: [https://github.com/Ayush-soni-12/AI_CONTROL_PLANE](https://github.com/Ayush-soni-12/AI_CONTROL_PLANE)
-- **npm Package**: [https://www.npmjs.com/package/@ayushsoni12/ai-control-plane](https://www.npmjs.com/package/@ayushsoni12/ai-control-plane)
+- **npm Package**: [https://www.npmjs.com/package/neuralcontrol](https://www.npmjs.com/package/neuralcontrol)
 
 For more information, documentation, and examples, visit the GitHub repository.
 
@@ -24,7 +24,6 @@ The AI Control Plane SDK provides:
 3. **Intelligent Runtime Configuration**: Receives AI-driven decisions for caching, circuit breaking, and more
 4. **Tenant ID Generation**: Creates unique identifiers for multi-tenant applications
 5. **Express Middleware**: Easy integration with Express.js applications
-6. **Manual Tracking**: Flexible API for custom tracking scenarios
 
 The SDK sends performance metrics to the AI Control Plane, which analyzes patterns and returns intelligent configuration decisions to optimize your service automatically.
 
@@ -34,7 +33,7 @@ The SDK sends performance metrics to the AI Control Plane, which analyzes patter
 
 **⚠️ IMPORTANT**: API key authentication is now required for all SDK operations.
 
-1. **Sign up** at your Control Plane dashboard (e.g., `http://localhost:3000`)
+1. **Sign up** at your Control Plane dashboard (e.g., `https://neuralcontrol.online/dashboard/api-keys`)
 2. Navigate to **API Keys** page
 3. Click **"Generate New Key"**
 4. Copy your API key
@@ -54,35 +53,21 @@ This will output a random 32-character hexadecimal string like: `bfc3aed7948e46f
 ### 2. Initialize SDK with API Key
 
 ```javascript
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import ControlPlaneSDK from "neuralcontrol";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY, // ⚠️ REQUIRED
   tenantId: process.env.TENANT_ID, // ⚠️ REQUIRED - Generate using: openssl rand -hex 16
   serviceName: "my-service",
-  controlPlaneUrl: "http://localhost:8000",
+  controlPlaneUrl:
+    process.env.CONTROL_PLANE_URL || "https://api.neuralcontrol.online",
 });
-```
 
-**Best Practice**: Store your API key and tenant ID in environment variables:
-
-```bash
-# .env file
-CONTROL_PLANE_API_KEY=your-api-key-here
-CONTROL_PLANE_URL=http://localhost:8000
-TENANT_ID=bfc3aed7948e46fafacac26faf8b3159  # Generate with: openssl rand -hex 16
-```
-
-```javascript
-import dotenv from "dotenv";
-dotenv.config();
-
-const controlPlane = new ControlPlaneSDK({
-  apiKey: process.env.CONTROL_PLANE_API_KEY,
-  tenantId: process.env.TENANT_ID, // Generated using: openssl rand -hex 16
-  serviceName: "my-service",
-  controlPlaneUrl: process.env.CONTROL_PLANE_URL,
-});
+// Pre-warm config for known endpoints (Recommended for 0ms latency overlay)
+await controlPlane.initialize(["/products", "/products/:id?", "/login"]);
 ```
 
 ### 3. Use Middleware (Automatic Tracking)
@@ -91,7 +76,7 @@ const controlPlane = new ControlPlaneSDK({
 
 ```javascript
 import express from "express";
-import ControlPlaneSDK from "@ayushsoni12/ai-control-plane";
+import ControlPlaneSDK from "neuralcontrol";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -101,7 +86,8 @@ const controlPlane = new ControlPlaneSDK({
   apiKey: process.env.CONTROL_PLANE_API_KEY, // Required
   tenantId: process.env.TENANT_ID, // Required - Generate with: openssl rand -hex 16
   serviceName: "demo-service",
-  controlPlaneUrl: process.env.CONTROL_PLANE_URL || "http://localhost:8000",
+  controlPlaneUrl:
+    process.env.CONTROL_PLANE_URL || "https://api.neuralcontrol.online",
 });
 
 // Example: Product API with automatic tracking
@@ -129,8 +115,13 @@ app.get(
   },
 );
 
-app.listen(3001, () => {
-  console.log("Server running on http://localhost:3001");
+// Start server and initialize SDK
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, async () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+
+  // Initialize Control Plane SDK with known endpoints
+  await controlPlane.initialize(["/products", "/products/:id?"]);
 });
 ```
 
@@ -141,35 +132,6 @@ app.listen(3001, () => {
 - ✅ Sends metrics to Control Plane with API key authentication
 - ✅ Receives runtime configuration (caching, circuit breaker decisions)
 - ✅ Makes config available in `req.controlPlane`
-
-### 4. Manual Tracking (Without Middleware)
-
-````javascript
-app.post("/login", async (req, res) => {
-  const start = Date.now();
-
-  try {
-    // Get config from Control Plane
-    const config = await controlPlane.getConfig("/login");
-
-    // Your business logic
-    const result = await authenticate(req.body);
-
-    // Track successful request (API key sent automatically)
-    await controlPlane.track("/login", Date.now() - start, "success");
-
-    res.json(result);
-  } catch (error) {
-    // Track failed request
-    await controlPlane.track("/login", Date.now() - start, "error");
-    res.status(500).json({ error: "Login failed" });
-  }
-});
-
-
-
-
-
 
 ## API Authentication
 
@@ -201,15 +163,17 @@ SDK Request → Authorization: Bearer <api_key> → Control Plane
 The SDK handles authentication errors gracefully:
 
 **Missing API Key:**
+
 ```javascript
 // ⚠️ Warning logged to console
 const controlPlane = new ControlPlaneSDK({
-  serviceName: "my-service"
+  serviceName: "my-service",
 });
 // Console: [ControlPlane] ⚠️ No API key provided. Please initialize the SDK with an API key.
 ```
 
 **Invalid API Key:**
+
 - Requests will fail silently (SDK doesn't crash your service)
 - Errors logged to console
 - Signals won't be tracked
@@ -217,8 +181,9 @@ const controlPlane = new ControlPlaneSDK({
 **Best Practices:**
 
 1. **Use Environment Variables**
+
    ```javascript
-   apiKey: process.env.CONTROL_PLANE_API_KEY
+   apiKey: process.env.CONTROL_PLANE_API_KEY;
    ```
 
 2. **Never Commit API Keys**
@@ -235,55 +200,73 @@ const controlPlane = new ControlPlaneSDK({
 
 ## API Reference
 
-### `track(endpoint, latencyMs, status)`
+### `middleware(endpoint, options)`
 
-Send performance signal to control plane.
-
-**Parameters:**
-
-- `endpoint` (string) - API endpoint (e.g., '/products')
-- `latencyMs` (number) - Request latency in milliseconds
-- `status` (string) - 'success' or 'error'
+Express middleware for automatic tracking. You can now pass a priority level (`critical`, `high`, `medium`, `low`) for load shedding rules.
 
 **Example:**
 
 ```javascript
-await controlPlane.track("/api/users", 245, "success");
-````
-
-### `getConfig(endpoint)`
-
-Get runtime configuration from control plane.
-
-**Returns:**
-
-```javascript
-{
-  cache_enabled: true/false,
-  circuit_breaker: true/false,
-  reason: "explanation"
-}
+app.get(
+  "/products",
+  controlPlane.middleware("/products", { priority: "high" }),
+  (req, res) => {
+    // Config available in req.controlPlane
+    // Check req.controlPlane.isRateLimitedCustomer, req.controlPlane.isLoadShedding etc.
+  },
+);
 ```
 
+### `withEndpointTimeout(endpoint, handler, options)`
+
+Wraps an Express route handler with an AI-calculated adaptive timeout. Drops requests if they exceed the calculated baseline.
+
 **Example:**
 
 ```javascript
-const config = await controlPlane.getConfig("/products");
-if (config.cache_enabled) {
-  // Use cache
-}
+app.get(
+  "/slow-api",
+  controlPlane.withEndpointTimeout("/slow-api", async (req, res) => {
+    // Handler code here - will be terminated early if an AI timeout triggers
+  }),
+);
 ```
 
-### `middleware(endpoint)`
+### `adaptiveFetch(configEndpoint, url, options)`
 
-Express middleware for automatic tracking.
+Drop-in replacement for `fetch()` that enforces the AI-calculated adaptive timeout automatically and tracks latency automatically.
 
 **Example:**
 
 ```javascript
-app.get("/products", controlPlane.middleware("/products"), (req, res) => {
-  // Config available in req.controlPlane
-});
+const res = await controlPlane.adaptiveFetch(
+  "/external-api",
+  "https://api.example.com/data",
+);
+```
+
+### `withDbTimeout(configEndpoint, dbQueryFn, priority)`
+
+Wraps any database query with the AI-calculated adaptive timeout. Works with Prisma, Sequelize, raw pg, etc.
+
+**Example:**
+
+```javascript
+const users = await controlPlane.withDbTimeout("/db/users", () =>
+  prisma.user.findMany(),
+);
+```
+
+### `req.controlPlane.coalesce(key, fn)`
+
+Prevents "Cache Stampedes" by collapsing simultaneous identical requests into a single execution. The SDK strictly enforces data isolation, so you must explicitly wrap database queries or external fetches using a unique string key.
+
+**Example:**
+
+```javascript
+const result = await req.controlPlane.coalesce("unique-db-key", () =>
+  controlPlane.withDbTimeout("/db/query", () => db.expensiveQuery())
+);
 ```
 
 ## Use Cases
@@ -336,10 +319,49 @@ This SDK currently provides:
 - ✅ **Performance Tracking** - Latency and success/error rate monitoring
 - ✅ **Runtime Configuration** - AI-driven decisions from Control Plane
 - ✅ **Express Middleware** - Automatic tracking with zero code changes
-- ✅ **Manual Tracking API** - Flexible tracking for custom scenarios
+- ✅ **Adaptive Timeouts** - Dynamically abort requests when latency spikes using AI thresholds
+- ✅ **Request Coalescing** - Auto-collapses identical simultaneous requests to protect backend capacity
+- ✅ **Traffic Management** - Support for Load Shedding, Rate Limiting, and Queue Deferral natively
 - ✅ **Tenant ID Generation** - Multi-tenant application support
-- ✅ **Configuration Caching** - Reduces Control Plane load
+- ✅ **Configuration Caching** - Reduces Control Plane load locally
 - ✅ **Graceful Error Handling** - Fails silently without crashing your service
+
+## AI-Powered Debugging (MCP)
+
+Get live insights, explain performance issues, and automate SDK integration directly in your AI code editor (Cursor, Claude Desktop, Windsurf) using our **MCP Server**.
+
+### 1. Install Global Tool
+```bash
+pip install neuralcontrol-mcp
+```
+
+### 2. Configure Your Editor
+Add this to your editor's MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "neuralcontrol": {
+      "command": "neuralcontrol-mcp",
+      "env": {
+        "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
+        "NEURALCONTROL_API_KEY": "your_key_here"
+      }
+    }
+  }
+}
+```
+
+> [!TIP]
+> Use `https://api.neuralcontrol.online` for the managed service.
+
+### 3. Ask Your AI
+Once connected, you can ask things like:
+- *"Analyze why `/products` is slow and suggest a fix"*
+- *"Set up all 6 protection flags for my new route"*
+- *"Are there any active latency spikes?"*
+
+---
 
 ## Requirements
 
