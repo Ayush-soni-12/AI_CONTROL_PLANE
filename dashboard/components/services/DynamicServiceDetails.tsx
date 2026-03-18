@@ -15,6 +15,7 @@ import {
   Clock,
   ShieldOff,
   Trash2,
+  Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -543,6 +544,26 @@ export function DynamicServiceDetails({
                         </div>
                       </div>
                     )}
+
+                    {/* Request Coalescing Status */}
+                    <div className="p-3 sm:p-4 rounded-lg bg-linear-to-br from-indigo-500/10 to-indigo-500/5 border border-indigo-500/20">
+                      <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+                        <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400 shrink-0" />
+                        <p className="text-[10px] sm:text-xs font-medium text-gray-400 truncate">
+                          Request Coalescing
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            endpoint.request_coalescing ? "success" : "secondary"
+                          }
+                          className="text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0 sm:py-0.5"
+                        >
+                          {endpoint.request_coalescing ? "Active" : "Inactive"}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
                   {/* AI Reasoning Section */}
                   <div className="mt-4 p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">

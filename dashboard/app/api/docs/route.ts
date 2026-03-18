@@ -73,6 +73,20 @@ export const docsList = [
     icon: "📋",
   },
   {
+    slug: "REQUEST_COALESCING",
+    title: "Request Coalescing",
+    description: "Collapse simultaneous identical requests",
+    category: "features",
+    icon: "🤝",
+  },
+  {
+    slug: "MCP",
+    title: "Model Context Protocol",
+    description: "Integration via Anthropic MCP",
+    category: "features",
+    icon: "🔌",
+  },
+  {
     slug: "CONTRIBUTOR_WORKFLOW",
     title: "Contributing",
     description: "How to contribute to this project",

@@ -47,6 +47,7 @@ export interface Endpoint {
   rate_limit_enabled?: boolean;
   queue_deferral?: boolean;
   load_shedding?: boolean;
+  request_coalescing?: boolean;
   tenant_id?: string;
   reasoning: string;
   thresholds?: ThresholdData;
@@ -67,6 +68,7 @@ export interface EndpointDetail {
   cache_enabled: boolean;
   circuit_breaker: boolean;
   rate_limit_enabled?: boolean;
+  request_coalescing?: boolean;
   reasoning: string;
   thresholds?: ThresholdData;
 }

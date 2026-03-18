@@ -13,6 +13,7 @@ import {
   Shield,
   Database,
   Info,
+  Users,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { LatencyChart } from "../cards/LatencyChart";
@@ -105,6 +106,13 @@ export function EndpointDetailView({
           >
             <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5" />
             Circuit Breaker {detail.circuit_breaker ? "Open" : "Closed"}
+          </Badge>
+          <Badge
+            variant={detail.request_coalescing ? "success" : "secondary"}
+            className="px-2 sm:px-3 py-1 text-xs sm:text-sm"
+          >
+            <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5" />
+            Coalescing {detail.request_coalescing ? "Active" : "Inactive"}
           </Badge>
         </div>
       </div>
