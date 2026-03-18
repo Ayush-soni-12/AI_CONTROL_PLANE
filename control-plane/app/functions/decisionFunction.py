@@ -118,6 +118,7 @@ async def _log_decision_outcome(
                 'queue_deferral': decision.get('queue_deferral', False),
                 'load_shedding': decision.get('load_shedding', False),
                 'rate_limit_customer': decision.get('rate_limit_customer', False),
+                'request_coalescing': decision.get('request_coalescing', False),
                 'adaptive_timeout_active': decision.get('adaptive_timeout', {}).get('active', False),
                 'adaptive_timeout_ms': decision.get('adaptive_timeout', {}).get('recommended_timeout_ms', 2000),
             },
@@ -343,6 +344,7 @@ async def make_decision(
             'circuit_breaker': ai_decision.get('circuit_breaker', False),
             'queue_deferral': ai_decision.get('queue_deferral', False),
             'load_shedding': ai_decision.get('load_shedding', False),
+            'request_coalescing': ai_decision.get('request_coalescing', False),
             'rate_limit_rule_rpm': customer_rpm_limit, # The rule is passed to the SDK!
             'reason': ai_decision['reasoning'],
             'send_alert': ai_decision.get('send_alert', False),
@@ -440,6 +442,7 @@ async def make_decision(
         'rate_limit_rule_rpm': customer_rpm_limit,
         'queue_deferral': False,
         'load_shedding': False,
+        'request_coalescing': False,
         'reason': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
         'send_alert': False,
         'trends': {'latency': 'stable', 'errors': 'stable', 'rpm': 'stable'},
