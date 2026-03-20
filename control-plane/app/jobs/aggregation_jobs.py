@@ -206,11 +206,20 @@ async def cleanup_old_data():
     - Raw signals: 7 days
     - Hourly aggregates: 90 days
     - Daily aggregates: Keep forever
+    - Traces (Spans): 48 hours
     """
     db: AsyncSession = AsyncSessionLocal()
     
     try:
         now = datetime.now(timezone.utc)
+        
+        # Delete spans older than 48 hours
+        spans_cutoff = now - timedelta(hours=48)
+        stmt_spans = delete(models.Span).where(
+            models.Span.start_time < spans_cutoff
+        )
+        result_spans = await db.execute(stmt_spans)
+        deleted_spans = result_spans.rowcount
         
         # Delete raw signals older than 7 days
         signals_cutoff = now - timedelta(days=7)
@@ -245,6 +254,7 @@ async def cleanup_old_data():
         await db.commit()
         
         print(f"🗑️  Cleanup complete:")
+        print(f"   - Deleted {deleted_spans} spans older than 48 hours")
         print(f"   - Deleted {deleted_signals} raw signals older than 7 days")
         print(f"   - Deleted {deleted_incidents} incidents and {deleted_events} events older than 7 days")
         print(f"   - Deleted {deleted_hourly} hourly aggregates older than 90 days")
