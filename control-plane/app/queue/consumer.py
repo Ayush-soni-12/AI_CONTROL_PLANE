@@ -71,6 +71,10 @@ async def _process_signal(signal_data: dict) -> None:
 
     if should_store:
         async with AsyncSessionLocal() as db:
+            # Pop trace_id since it belongs purely to the spans/incidents model hierarchy
+            # and we intentionally keep the dense signals table as lightweight as possible.
+            signal_data.pop("trace_id", None)
+            
             # The timestamp from JS might be a string (e.g. from recorded_at or timestamp)
             ts_str = signal_data.get("timestamp") or signal_data.get("recorded_at")
             if ts_str and isinstance(ts_str, str):
