@@ -251,16 +251,17 @@ Now calculate the best settings and write the reasoning in simple English."""
 async def analyze_service_patterns(
     service_name: str,
     metrics: dict,
-    recent_decisions: list = None,   # NEW: pass decision history
-    trends: dict = None,             # NEW: pass trend directions
+    recent_decisions: list = None,   # Decision history
+    trends: dict = None,             # Trend directions
+    span_stats: list = None,         # NEW: aggregated per-operation latency across recent traces
 ) -> Optional[PatternAnalysis]:
     """
     Use LLM to detect patterns and anomalies.
 
-    New in v2:
-    - Cross-references recent decisions with current metrics
-    - Trend directions passed for better pattern classification
-    - Anomaly detection considers whether issues are new or recurring
+    v3 upgrade:
+    - span_stats: pre-aggregated data like "DB: getUserOrders averaged 980ms across 47 requests"
+      This eliminates speculation. Gemini now knows WHICH operations are slow, not just that
+      something is slow.
     """
     try:
         llm = _get_llm()
@@ -271,6 +272,34 @@ async def analyze_service_patterns(
         latency_trend = trends.get('latency_trend', 'stable')
         error_trend = trends.get('error_trend', 'stable')
         rpm_trend = trends.get('rpm_trend', 'stable')
+
+        # Build span stats block (evidence-based: real operation latency data)
+        if span_stats:
+            slow_threshold_ms = 300  # Anything above this gets a red flag in the prompt
+            span_lines = []
+            for stat in span_stats[:10]:  # Cap at 10 operations for prompt size
+                op = stat.get("operation", "Unknown")
+                avg_ms = stat.get("avg_ms", 0)
+                max_ms = stat.get("max_ms", 0)
+                count = stat.get("count", 0)
+                flag = "🔴" if avg_ms > slow_threshold_ms else "✅"
+                span_lines.append(
+                    f"  {flag} \"{op}\" — averaged {avg_ms:.0f}ms | worst: {max_ms:.0f}ms | seen {count} times"
+                )
+            span_stats_str = "\n".join(span_lines)
+            span_stats_block = f"""
+## What operations are actually slow (from real request traces this hour):
+{span_stats_str}
+
+❗ This is REAL DATA from tracing — not an estimate. Use these operation names when writing patterns and recommendations.
+If a specific operation is consistently slow, name it directly and recommend investigating that specific operation.
+"""
+        else:
+            span_stats_block = """
+## Operation-level data:
+Tracing is not enabled for this service yet, so we only have aggregate timing data.
+Base your analysis on the summary metrics below instead.
+"""
 
         prompt = f"""You are analyzing an app or website's performance for a business owner or developer who is NOT a technical expert. Write everything like you are explaining it to a friend who has never worked in software.
 
@@ -294,7 +323,8 @@ upstream, downstream, dependency, anomaly, infrastructure, autoscaling, capacity
 - "anomaly" → "something unusual" or "unexpected behavior"
 - "degraded" → "running slower than usual" or "not performing well"
 
-## Service Data
+{span_stats_block}
+## Summary Metrics
 - Service: {service_name}
 - Last hour: {metrics.get('count', 0)} total requests
 - Requests per minute: {metrics.get('requests_per_minute', 0):.1f}
@@ -331,7 +361,7 @@ For each pattern:
 ✅ GOOD description: "The app is handling {metrics.get('requests_per_minute', 0):.0f} requests per minute and most complete quickly, but a small number of requests are taking much longer than average — about {metrics.get('p99', 0):.0f}ms compared to the typical {metrics.get('p50', 0):.0f}ms. This means some users are waiting longer than others."
 
 ❌ BAD recommendation: "Implement horizontal autoscaling and investigate downstream service SLAs"
-✅ GOOD recommendation: "Check if there's a database query or external service call that's slow for certain requests. You may want to add caching for the data those slow requests are fetching."
+✅ GOOD recommendation: "Check if there's a specific database query or external service call that's slow. {'The operation-level data above points to a likely culprit.' if span_stats else 'Consider enabling tracing to see which operation is slow.'}"
 
 ### Unusual things noticed (Max 3)
 Only report things that are genuinely unexpected or worth worrying about.
@@ -378,14 +408,16 @@ async def analyze_incident_root_cause(
     peak_error_rate: float,
     duration_secs: int,
     events: list,
+    spans: list = None,  # NEW: actual span data from the triggering request trace
 ) -> dict:
     """
-    Use Gemini to analyze an incident's event timeline and explain:
-    1. What most likely caused the problem
-    2. The sequence of events in plain English
-    3. What to check/fix to prevent it happening again
+    Use Gemini to analyze an incident's event timeline and explain what caused it.
 
-    Returns dict with: summary (str), confidence (str), steps (list)
+    v3 upgrade: When spans are provided (tracing enabled), inject the exact operation
+    timeline so Gemini can say "Your Stripe API call took 1310ms" instead of
+    "some request was slow".
+
+    Returns dict with: summary (str), confidence (str), what_happened, likely_cause, what_to_check
     """
     try:
         llm = _get_llm()
@@ -408,6 +440,22 @@ async def analyze_incident_root_cause(
         mins = (duration_secs or 0) // 60
         secs = (duration_secs or 0) % 60
         duration_str = f"{mins} minutes and {secs} seconds" if mins else f"{secs} seconds"
+
+        # Build span block if trace data is available
+        if spans:
+            span_lines = []
+            for s in spans:
+                op = s.get("operation", "Unknown")
+                dur = s.get("duration_ms") or 0
+                flag = "🔴 SLOW" if s.get("is_slow") else "✅"
+                span_lines.append(f"  {flag} {op}: {dur:.0f}ms")
+            span_block = "\n## What was happening inside the request that triggered this incident:\n" + "\n".join(span_lines) + """
+
+❗ This is REAL trace data — the actual operations that ran during the request that triggered the AI decision.
+The operations marked 🔴 SLOW are the most likely root causes. Name them directly in your analysis.
+For operations marked 🔴, tell the developer specifically to investigate that operation."""
+        else:
+            span_block = "\n## Operation-level data:\nDetailed tracing was not available for this incident. Base your analysis on the timeline events above."
 
         prompt = f"""You are analyzing a service incident and need to explain in plain, simple English what happened and why.
 
@@ -435,6 +483,7 @@ Write as if explaining to someone who is not a technical expert — a business o
 
 ## Timeline of events:
 {timeline_str}
+{span_block}
 
 ## Your task — Write a root cause analysis with these 3 sections:
 

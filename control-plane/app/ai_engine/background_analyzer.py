@@ -209,12 +209,53 @@ async def analyze_all_services():
                     elif recommendation:
                         print(f"⏭️  Low confidence for {service_name}{endpoint}, skipping update")
 
-                    # 7. Pattern detection + store insights (WITH trends + history)
+                    # 7. Span aggregation: find which operations are consistently slow
+                    # This gives Gemini real evidence instead of guessing from aggregate numbers.
+                    span_stats = []
+                    try:
+                        from sqlalchemy import text as sql_text
+                        span_query_result = await async_session.execute(
+                            sql_text("""
+                                SELECT
+                                    operation,
+                                    ROUND(AVG(duration_ms)::numeric, 1)  AS avg_ms,
+                                    ROUND(MAX(duration_ms)::numeric, 1)  AS max_ms,
+                                    COUNT(*)                              AS count
+                                FROM spans
+                                WHERE service_name = :service
+                                  AND created_at > NOW() - INTERVAL '1 hour'
+                                GROUP BY operation
+                                ORDER BY AVG(duration_ms) DESC
+                                LIMIT 10
+                            """),
+                            {"service": service_name},
+                        )
+                        span_stats = [
+                            {
+                                "operation": row.operation,
+                                "avg_ms": float(row.avg_ms or 0),
+                                "max_ms": float(row.max_ms or 0),
+                                "count": int(row.count or 0),
+                            }
+                            for row in span_query_result
+                        ]
+                        if span_stats:
+                            print(
+                                f"   🕧 Span stats for {service_name}: "
+                                f"{len(span_stats)} operations, slowest: "
+                                f"{span_stats[0]['operation']} ({span_stats[0]['avg_ms']:.0f}ms avg)"
+                            )
+                    except Exception as span_err:
+                        # Spans table may not exist yet (before migration) — degrade gracefully
+                        print(f"   ⚠️  Span aggregation skipped for {service_name}: {span_err}")
+
+                    # 8. Pattern detection + store insights (WITH trends, history, and span data)
                     patterns = await analyze_service_patterns(
                         service_name,
                         metrics_1h,
-                        recent_decisions=recent_decisions,   # NEW
-                        trends=trends,                        # NEW
+                        recent_decisions=recent_decisions,
+                        trends=trends,
+                        span_stats=span_stats or None,  # None if no span data yet
                     )
 
                     if patterns:
