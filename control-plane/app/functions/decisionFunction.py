@@ -175,6 +175,7 @@ async def make_decision(
     user_id: int = None,
     customer_identifier: str = None,
     priority: str = 'medium',
+    trace_id: str = None,  # Distributed tracing — links to the span batch for this request
 ):
     """
     Make AI decision using TWO-TIER APPROACH + TREND DETECTION.
@@ -207,6 +208,25 @@ async def make_decision(
             f"✏️  [Override] {service_name}{endpoint} — "
             f"threshold override active ({mins_left} min remaining): {override.reason}"
         )
+
+    # ── STEP 1.5: Link an active trace_id if none provided ───────────────────
+    if not trace_id and db:
+        try:
+            from sqlalchemy import select, text
+            from ..database.models import Span
+            recent_span_stmt = (
+                select(Span.trace_id)
+                .where(Span.service_name == service_name)
+                # optionally link by endpoint by looking at operation prefix matching, but for now just get the latest trace for the service
+                .order_by(Span.created_at.desc())
+                .limit(1)
+            )
+            span_res = await db.execute(recent_span_stmt)
+            latest_trace_id = span_res.scalar_one_or_none()
+            if latest_trace_id:
+                trace_id = latest_trace_id
+        except Exception as e:
+            print(f"⚠️  [TraceLink] Failed to fetch latest trace_id for {service_name}: {e}")
 
     # ── STEP 2: Get metrics (1h window = primary, 24h = trend baseline) ──────
     metrics_1h = None
@@ -416,6 +436,7 @@ async def make_decision(
                                 "error_rate": incident_error_rate,
                                 "rpm": incident_rpm,
                             },
+                            trace_id=trace_id,  # Pass through from the SDK config call
                         )
                 except Exception as e:
                     logger.warning(f"Incident tracking failed (non-critical): {e}")
