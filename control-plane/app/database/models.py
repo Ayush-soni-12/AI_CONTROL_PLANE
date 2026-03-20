@@ -395,6 +395,9 @@ class Incident(Base):
     peak_error_rate    = Column(Float, default=0.0)
     peak_rpm           = Column(Float, default=0.0)
 
+    # Trace link — join key between this incident and the spans that caused it
+    trace_id           = Column(String(32), nullable=True, index=True)
+
     # AI root cause analysis (filled by background job or on demand)
     root_cause_summary = Column(Text, nullable=True)
     ai_confidence      = Column(String(50), nullable=True)  # "low" | "medium" | "high"
@@ -447,6 +450,9 @@ class IncidentEvent(Base):
     title       = Column(String(500), nullable=False)   # short human-readable label
     description = Column(Text, nullable=True)           # longer plain-English explanation
 
+    # Trace link — the specific trace captured at this moment in the incident
+    trace_id    = Column(String(32), nullable=True, index=True)
+
     # Metric values at the time of this event (for sparkline/tooltip on timeline)
     latency_ms  = Column(Float, default=0.0)
     error_rate  = Column(Float, default=0.0)
@@ -458,5 +464,61 @@ class IncidentEvent(Base):
     occurred_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                          nullable=False, index=True)
 
+
     # Relationship back to incident
     incident = relationship("Incident", back_populates="events")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Distributed Tracing
+# ─────────────────────────────────────────────────────────────────────────────
+
+class Span(Base):
+    """
+    A single timed operation within a distributed trace.
+
+    One trace = one customer request. It may contain many spans:
+    - The root span (the full HTTP request duration)
+    - Child spans for DB queries, external API calls, etc.
+
+    Spans are created by the neuralcontrol SDK when tracing: true is set.
+    They are sent async after the request completes and stored here.
+
+    The trace_id on Incident and IncidentEvent links AI decisions back to
+    the specific traces that caused them.
+    """
+    __tablename__ = "spans"
+
+    id             = Column(Integer, primary_key=True)
+
+    # Trace identifiers (OpenTelemetry-compatible format)
+    trace_id       = Column(String(32), nullable=False, index=True)   # 32-char hex, shared by all spans in a request
+    span_id        = Column(String(16), nullable=False, unique=True)  # 16-char hex, unique per operation
+    parent_span_id = Column(String(16), nullable=True)                # null for root span
+
+    # What operation this span covers ("DB: getProducts", "Stripe: chargeCard", etc.)
+    operation      = Column(String(500), nullable=False)
+
+    # Which service and tenant this belongs to
+    service_name   = Column(String, nullable=False, index=True)
+    tenant_id      = Column(String, nullable=True, index=True)
+    user_id        = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+
+    # Timing
+    start_time     = Column(TIMESTAMP(timezone=True), nullable=False)
+    end_time       = Column(TIMESTAMP(timezone=True), nullable=True)
+    duration_ms    = Column(Float, nullable=True)
+
+    # Any extra k/v data the customer wants to attach (e.g. query text, status code)
+    attributes     = Column(JSON, nullable=True)
+
+    created_at     = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text('now()'))
+
+    __table_args__ = (
+        # Primary span lookup: all spans for a trace, ordered by time
+        Index('idx_spans_trace_start', 'trace_id', 'start_time'),
+        # Secondary: all traces for a service (used by background_analyzer aggregation query)
+        Index('idx_spans_service_created', 'service_name', 'created_at'),
+        # User-scoped lookup for dashboard queries
+        Index('idx_spans_user_created', 'user_id', 'created_at'),
+    )
