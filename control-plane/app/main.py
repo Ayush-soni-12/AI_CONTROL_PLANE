@@ -6,7 +6,7 @@ from app.database.database import engine, Base
 from app.database.database import get_db
 from sqlalchemy.orm import Session
 from typing import List
-from app.router import signals, auth, history, sse, ai_insights, analytics, overrides, IncidentTracker, billing, services, adaptive_timeout
+from app.router import signals, auth, history, sse, ai_insights, analytics, overrides, IncidentTracker, billing, services, adaptive_timeout, traces
 from app.redis.cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -115,12 +115,10 @@ async def startup():
         replace_existing=True
     )
     
-    print(f"fix the github action ")
-
     # AI Background Analysis: Run every 5 minutes
     # scheduler.add_job(
     #     analyze_all_services,
-    #     trigger=CronTrigger(minute='*/2'),
+    #     trigger=CronTrigger(minute='*/3'),
     #     id="ai_background_analysis",
     #     name="AI background service analysis",
     #     replace_existing=True
@@ -214,3 +212,6 @@ app.include_router(services.router)
 
 # Adaptive Timeout status router
 app.include_router(adaptive_timeout.router)
+
+# Distributed Tracing collector
+app.include_router(traces.router)
