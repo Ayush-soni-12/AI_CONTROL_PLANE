@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { IncidentEvent } from "@/hooks/useIncidents";
+import { TraceWaterfall } from "./TraceWaterfall";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const EVENT_STYLES: Record<string, Record<string, string>> = {
@@ -119,6 +120,7 @@ export function TimelineEvent({
   isLast: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showTrace, setShowTrace] = useState(false);
   const style = EVENT_STYLES[event.event_type] || EVENT_STYLES.latency_spike;
 
   return (
@@ -203,6 +205,19 @@ export function TimelineEvent({
             </div>
           )}
 
+          {/* View Trace button - only shown when trace data is available */}
+          {event.trace_id && (
+            <div className="mt-2 pt-2 border-t" style={{ borderColor: `${style.color}15` }}>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowTrace(true); }}
+                className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                🔍 View trace
+                <span className="text-gray-600 font-mono text-[10px]">{event.trace_id.substring(0, 8)}...</span>
+              </button>
+            </div>
+          )}
+
           {/* Expand chevron */}
           {event.description && (
             <div className="mt-2 text-right text-[11px] text-gray-500 font-medium tracking-wide">
@@ -211,6 +226,14 @@ export function TimelineEvent({
           )}
         </div>
       </div>
+
+      {/* Trace waterfall modal */}
+      {showTrace && event.trace_id && (
+        <TraceWaterfall
+          traceId={event.trace_id}
+          onClose={() => setShowTrace(false)}
+        />
+      )}
     </div>
   );
 }
