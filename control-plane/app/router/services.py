@@ -153,6 +153,15 @@ async def delete_service(
     )
     deleted_counts["signal_aggregates_daily"] = len(result.all())
 
+    # ── 7.5. Spans (Distributed Tracing) ─────────────────────────────────────
+    result = await db.execute(
+        delete(models.Span).where(
+            models.Span.user_id == uid,
+            models.Span.service_name == service_name,
+        ).returning(models.Span.span_id)
+    )
+    deleted_counts["spans"] = len(result.all())
+
     # ── 8. Raw Signals (last — biggest table) ────────────────────────────────
     result = await db.execute(
         delete(models.Signal).where(
