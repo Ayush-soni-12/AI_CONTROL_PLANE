@@ -83,6 +83,7 @@ async def process_decision_for_incident(
     decision: dict,
     metrics: dict,
     thresholds: dict = None,
+    trace_id: str = None,  # Distributed tracing — links this decision to the request trace
 ) -> Optional[Incident]:
     """
     Called by decisionFunction.py after every decision is made.
@@ -170,7 +171,7 @@ async def process_decision_for_incident(
 
     # ─── CASE 3: Problematic, no open incident → open one ───────────────────
     if is_problematic and not incident:
-        incident = await _open_incident(db, user_id, service_name, endpoint, metrics, fired_actions)
+        incident = await _open_incident(db, user_id, service_name, endpoint, metrics, fired_actions, trace_id=trace_id)
 
     # ─── CASE 4: Problematic with open incident → reset recovery counter ─────
     elif is_problematic and incident:
@@ -195,6 +196,7 @@ async def process_decision_for_incident(
                 error_rate=error_rate,
                 rpm=rpm,
                 event_metadata={"reasoning": reasoning, "action": action_key},
+                trace_id=trace_id,
             )
 
     # Log raw metric spikes (even without an action firing)
@@ -205,6 +207,7 @@ async def process_decision_for_incident(
             title=f"🐢 Response time spiked to {avg_latency:.0f}ms",
             description=f"The app took {avg_latency:.0f}ms on average to respond — significantly slower than normal.",
             latency_ms=avg_latency, error_rate=error_rate, rpm=rpm,
+            trace_id=trace_id,
         )
 
     if "errors" in metric_issues and "circuit_breaker" not in fired_actions:
@@ -214,6 +217,7 @@ async def process_decision_for_incident(
             title=f"❗ {error_rate*100:.1f}% of requests are failing",
             description=f"About {error_rate*100:.1f}% of requests failed — that means roughly 1 in {max(1, int(1/error_rate))} users saw an error.",
             latency_ms=avg_latency, error_rate=error_rate, rpm=rpm,
+            trace_id=trace_id,
         )
 
     # Escalate severity if circuit breaker fired
@@ -232,6 +236,7 @@ async def _open_incident(
     endpoint: str,
     metrics: dict,
     fired_actions: set,
+    trace_id: str = None,
 ) -> Incident:
     """Create a new incident and log the opening event."""
 
@@ -261,6 +266,7 @@ async def _open_incident(
         peak_error_rate=error_rate,
         peak_rpm=rpm,
         started_at=datetime.now(timezone.utc),
+        trace_id=trace_id,  # Link to the trace that opened this incident
     )
     db.add(incident)
     await db.flush()   # get ID before adding events
@@ -334,6 +340,7 @@ async def _log_event(
     error_rate: float = 0,
     rpm: float = 0,
     event_metadata: dict = None,
+    trace_id: str = None,  # Optional trace link for this specific event
 ) -> IncidentEvent:
     """Add a single event row to the incident timeline, avoiding spam."""
     now = datetime.now(timezone.utc)
@@ -363,6 +370,7 @@ async def _log_event(
         error_rate=error_rate,
         rpm=rpm,
         event_metadata=event_metadata,
+        trace_id=trace_id,  # Link this event to its specific trace
         occurred_at=datetime.now(timezone.utc),
     )
     db.add(event)
