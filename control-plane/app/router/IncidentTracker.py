@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 
 from app.database.database import get_async_db
 from app.router.token import get_current_user
-from app.database.models import Incident, IncidentEvent, STATUS_OPEN
+from app.database.models import Incident, IncidentEvent, Span, STATUS_OPEN
 from app.functions.IncidentTracker import (
     get_incidents,
     get_incident_with_events,
@@ -48,6 +48,7 @@ class IncidentEventOut(BaseModel):
     rpm: float
     event_metadata: Optional[dict] = None
     occurred_at: datetime
+    trace_id: Optional[str] = None  # Populated when SDK has tracing: true
 
     class Config:
         from_attributes = True
@@ -327,6 +328,39 @@ async def trigger_root_cause_analysis(
     ]
 
     try:
+        # Build event list for LLM context
+        event_dicts = [
+            {
+                "event_type": e.event_type,
+                "title": e.title,
+                "description": e.description,
+                "latency_ms": e.latency_ms,
+                "error_rate": e.error_rate,
+                "rpm": e.rpm,
+                "occurred_at": (e.occurred_at - timedelta(minutes=timezone_offset)).isoformat() if timezone_offset else e.occurred_at.isoformat(),
+            }
+            for e in events
+        ]
+
+        # Fetch spans for this incident's trace_id (enables trace-backed root cause analysis)
+        spans_data = []
+        if incident.trace_id:
+            spans_result = await db.execute(
+                select(Span)
+                .where(Span.trace_id == incident.trace_id)
+                .order_by(Span.start_time)
+            )
+            incident_spans = spans_result.scalars().all()
+            spans_data = [
+                {
+                    "operation": s.operation,
+                    "duration_ms": s.duration_ms,
+                    "is_slow": (s.duration_ms or 0) > 500,
+                    "attributes": s.attributes or {},
+                }
+                for s in incident_spans
+            ]
+
         analysis = await analyze_incident_root_cause(
             service_name=incident.service_name,
             endpoint=incident.endpoint,
@@ -335,6 +369,7 @@ async def trigger_root_cause_analysis(
             peak_error_rate=incident.peak_error_rate,
             duration_secs=incident.duration_secs,
             events=event_dicts,
+            spans=spans_data or None,  # None if tracing not enabled for this incident
         )
 
         if analysis:

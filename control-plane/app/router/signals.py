@@ -81,6 +81,7 @@ class SignalItem(BaseModel):
     customer_identifier: Optional[str] = None
     action_taken: Optional[str] = "none"
     recorded_at: Optional[str] = None
+    trace_id: Optional[str] = None  # Distributed tracing — set when SDK has tracing: true
 
 class BatchSignalRequest(BaseModel):
     signals: List[SignalItem]
@@ -143,6 +144,7 @@ async def get_config(
     tenant_id: str = None,
     priority: str = 'medium',  # Request priority
     customer_identifier: str = None,  # NEW: Customer IP from SDK (query param)
+    trace_id: str = None,              # Distributed tracing — SDK passes current trace_id here
     db: AsyncSession = Depends(get_async_db), 
     current_user: models.User = Depends(verify_api_key)
 ):
@@ -175,7 +177,8 @@ async def get_config(
         db,
         user_id=current_user.id,
         customer_identifier=customer_identifier,
-        priority=priority
+        priority=priority,
+        trace_id=trace_id,  # Thread through for incident-to-trace linking
     )
 
     print(f"Decision: {decision}")
