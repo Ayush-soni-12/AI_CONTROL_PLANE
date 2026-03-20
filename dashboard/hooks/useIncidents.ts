@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 const API_BASE_URL = process.env.NEXT_PUBLIC_CONTROL_PLANE_URL || 'http://localhost:8000';
 
 export interface IncidentEvent {
+  trace_id: boolean;
   id: number;
   event_type: string;
   title: string;
