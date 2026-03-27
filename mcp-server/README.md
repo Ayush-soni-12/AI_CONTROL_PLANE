@@ -53,6 +53,9 @@ Once connected, your AI editor can:
 | `create_threshold_override` | Immediately override a threshold (e.g. during an incident) |
 | `get_sdk_setup_instructions` | Get integration code for your service |
 | `get_feature_documentation` | Full docs for any protection feature |
+| `get_feature_flags` | Fetch all feature flags for a service |
+| `set_feature_flag` | Create/update a feature flag's rollout |
+| `get_trace` | Fetch full distributed trace waterfall |
 
 ## Environment Variables
 

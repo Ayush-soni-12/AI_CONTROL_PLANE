@@ -400,7 +400,14 @@ async def get_sdk_setup_instructions() -> dict[str, Any]:
         getting_started = _read_doc("GETTING_STARTED.md")
         return {
             "instructions": getting_started,
-            "tip": "Read the instructions to understand the required environment variables (CONTROL_PLANE_API_KEY, TENANT_ID, SERVICE_NAME) and how to apply the middleware."
+            "tip": (
+                "The guide above covers basic traffic protections. "
+                "IF the user also needs advanced features like 'feature_flags', 'tracing', "
+                "'request_coalescing', or 'adaptive_timeout', you MUST ALSO call the "
+                "`get_feature_documentation` tool for those specific features to learn the "
+                "correct SDK syntax (e.g. `isEnabled()`, `startSpan()`, `coalesce()`, or "
+                "`withEndpointTimeout()`) before writing the code."
+            )
         }
     except Exception as e:
         return {"error": str(e)}
@@ -414,7 +421,8 @@ async def get_feature_documentation(feature: str) -> dict[str, Any]:
     Args:
         feature: The specific feature to look up. Must be one of:
                  "rate_limiting", "caching", "load_shedding", "circuit_breaker", 
-                 "queue_deferral", "adaptive_timeout", "ai_decisions"
+                 "queue_deferral", "adaptive_timeout", "request_coalescing",
+                 "feature_flags", "tracing", "ai_decisions"
     """
     feature_file_map = {
         "rate_limiting": "RATE_LIMITING.md",
@@ -424,6 +432,8 @@ async def get_feature_documentation(feature: str) -> dict[str, Any]:
         "queue_deferral": "QUEUE_DEFERRAL.md",
         "adaptive_timeout": "ADAPTIVE_TIMEOUT.md",
         "request_coalescing": "REQUEST_COALESCING.md",
+        "feature_flags": "FEATURE_FLAGS.md",
+        "tracing": "TRACING.md",
         "ai_decisions": "AI_DECISIONS.md"
     }
     
@@ -439,6 +449,87 @@ async def get_feature_documentation(feature: str) -> dict[str, Any]:
         }
     except Exception as e:
         return {"error": str(e)}
+
+@mcp.tool()
+async def get_feature_flags(service_name: str) -> dict[str, Any]:
+    """
+    Fetch all feature flags for a specific service.
+    Returns the flag names, rollout percentages, and status (enabled/disabled).
+
+    Use this when the user asks:
+    - "What feature flags exist for /checkout?"
+    - "Is the new_payment_gateway flag enabled?"
+
+    Args:
+        service_name: The name of the service
+    """
+    async with _client() as client:
+        try:
+            r = await client.get(f"/api/flags/{service_name}")
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPStatusError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+@mcp.tool()
+async def set_feature_flag(
+    service_name: str,
+    name: str,
+    rollout_percent: int,
+) -> dict[str, Any]:
+    """
+    Create or update a feature flag's rollout percentage.
+    Status is automatically set to "enabled" if rollout_percent > 0, else "disabled".
+
+    Use this when the user asks:
+    - "Create a new feature flag called new_ui at 50% rollout"
+    - "Disable the experimental_feature flag"
+    - "Ramp up the new_payment_gateway to 100%"
+
+    Args:
+        service_name: The name of the service
+        name: The name of the feature flag to create/update
+        rollout_percent: The percentage of users who should see this feature (0-100)
+    """
+    payload = {
+        "service_name": service_name,
+        "name": name,
+        "rollout_percent": rollout_percent,
+    }
+    async with _client() as client:
+        try:
+            r = await client.post("/api/flags", json=payload)
+            r.raise_for_status()
+            return {"success": True, "flag": r.json()}
+        except httpx.HTTPStatusError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+        except Exception as e:
+            return {"error": str(e)}
+
+@mcp.tool()
+async def get_trace(trace_id: str) -> dict[str, Any]:
+    """
+    Fetch the full distributed trace waterfall for a specific trace_id.
+    Returns all spans across all services that share this trace_id, including latency and errors.
+
+    Use this when the user provides a trace_id (e.g. from an incident or a log) and asks:
+    - "Why was this specific request so slow?"
+    - "Show me the trace for trace_id 1234abcd"
+
+    Args:
+        trace_id: The unique 32-character hex trace ID
+    """
+    async with _client() as client:
+        try:
+            r = await client.get(f"/api/traces/{trace_id}")
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPStatusError as e:
+            return {"error": f"HTTP {e.response.status_code}: {e.response.text}"}
+        except Exception as e:
+            return {"error": str(e)}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PROMPTS — Templates the user clicks in their AI editor for complex tasks
@@ -462,6 +553,8 @@ const controlPlane = new ControlPlaneSDK({{
   controlPlaneUrl: process.env.CONTROL_PLANE_URL || 'http://localhost:8000',
   serviceName: '{service_name}',
   apiKey: process.env.CONTROL_PLANE_API_KEY,
+  featureFlags: true,
+  tracing: true
 }});
 module.exports = {{ controlPlane }};
 ```
@@ -487,31 +580,38 @@ const users = await controlPlane.withDbTimeout('/db/users', () => db.getUsers())
 const result = await controlPlane.adaptiveFetch('/payments/gateway', url, options);
 ```
 
-**C. Routes needing multiple protections** → use `middleware()` and check all flags:
+**C. Expensive concurrent operations** → wrap with `coalesce()` to prevent cache stampedes:
+```javascript
+const data = await req.controlPlane.coalesce('expensive-query', () => db.aggregate());
+```
+
+**D. Main route handlers** → wrap with `withEndpointTimeout()` to get auto-timeouts, tracing, flags, and shedding:
 ```javascript
 app.get('/products',
-  controlPlane.middleware('/products'),
-  async (req, res) => {{
+  controlPlane.withEndpointTimeout('/products', async (req, res) => {{
     const {{ shouldCache, shouldSkip, isRateLimitedCustomer, isLoadShedding, isQueueDeferral }} = req.controlPlane;
 
     if (shouldSkip) return res.status(503).json({{ error: 'Service unavailable' }});
-    if (isRateLimitedCustomer) return res.status(429).json({{ error: 'Too many requests', retryAfter: req.controlPlane.retryAfter }});
+    if (isRateLimitedCustomer) return res.status(429).json({{ error: 'Too many requests' }});
     if (isLoadShedding) return res.status(503).json({{ error: 'System overloaded' }});
     if (isQueueDeferral) {{
       await queue.add('task', req.body);
       return res.status(202).json({{ status: 'queued' }});
     }}
 
-    const cacheKey = `cache:{service_name}${{req.path}}`;
-    if (shouldCache) {{
-      const cached = await redis.get(cacheKey);
-      if (cached) return res.json({{ cached: true, data: JSON.parse(cached) }});
+    // Tracing
+    const span = req.controlPlane.startSpan('db:getProducts');
+    
+    // Feature Flags Check
+    if (controlPlane.isEnabled('new_products_ui', req.user?.id)) {{
+      // new UI logic...
     }}
 
     const data = await db.getData();
-    if (shouldCache) await redis.setex(cacheKey, 300, JSON.stringify(data));
-    res.json({{ cached: false, data }});
-  }}
+    span.end();
+    
+    res.json({{ data }});
+  }}, {{ priority: 'high', flagName: 'new_products_ui' }})
 );
 ```
 
