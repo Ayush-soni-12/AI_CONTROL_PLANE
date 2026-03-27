@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "control-plane/**" # Only trigger when backend changes
+      - "control-plane/**"
       - "docker-compose.prod.yml"
       - "nginx/**"
 
@@ -16,27 +16,54 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 🔍 Debug SSH Connection (IMPORTANT)
+      - name: Test SSH Connection
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 60s
+          script: |
+            echo "✅ Connected to EC2"
+            whoami
+            hostname
+            docker --version
+            docker compose version
+
+      # 🚀 Actual Deployment (Background Execution)
       - name: Deploy to EC2 via Docker Compose
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          command_timeout: 30m
+          command_timeout: 60m
+          timeout: 60s
+          script_stop: true
           script: |
             cd /home/ubuntu/AI_CONTROL_PLANE
 
-            # Pull latest code
+            echo "📥 Pulling latest code..."
             git pull origin main
 
-            # Rebuild and restart with zero-downtime rolling update
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --build \
-              --scale control-plane-1=1 \
-              --scale control-plane-2=1
+            echo "🚀 Starting deployment in background..."
 
-            # Remove old unused images to save disk space
-            docker image prune -f
+            nohup bash -c '
+              echo "📦 Pulling images..."
+              docker compose -f docker-compose.prod.yml pull &&
 
-            # Show running containers
-            docker compose -f docker-compose.prod.yml ps
+              echo "🔨 Building & starting containers..."
+              docker compose -f docker-compose.prod.yml up -d --build \
+                --scale control-plane-1=1 \
+                --scale control-plane-2=1 &&
+
+              echo "🧹 Cleaning unused images..."
+              docker image prune -f &&
+
+              echo "📊 Final container status:"
+              docker compose -f docker-compose.prod.yml ps
+            ' > deploy.log 2>&1 &
+
+            echo "✅ Deployment started successfully (running in background)"
+            echo "📄 Check logs: tail -f deploy.log"
