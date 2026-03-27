@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 🔍 Debug SSH Connection (IMPORTANT)
+      # 🔍 Step 1: Test SSH Connection
       - name: Test SSH Connection
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -27,12 +27,11 @@ jobs:
           script: |
             echo "✅ Connected to EC2"
             whoami
-            hostname
             docker --version
             docker compose version
 
-      # 🚀 Actual Deployment (Background Execution)
-      - name: Deploy to EC2 via Docker Compose
+      # 🚀 Step 2: Background Deployment
+      - name: Deploy in Background
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -50,20 +49,37 @@ jobs:
             echo "🚀 Starting deployment in background..."
 
             nohup bash -c '
-              echo "📦 Pulling images..."
               docker compose -f docker-compose.prod.yml pull &&
-
-              echo "🔨 Building & starting containers..."
               docker compose -f docker-compose.prod.yml up -d --build \
                 --scale control-plane-1=1 \
                 --scale control-plane-2=1 &&
-
-              echo "🧹 Cleaning unused images..."
-              docker image prune -f &&
-
-              echo "📊 Final container status:"
-              docker compose -f docker-compose.prod.yml ps
+              docker image prune -f
             ' > deploy.log 2>&1 &
 
-            echo "✅ Deployment started successfully (running in background)"
-            echo "📄 Check logs: tail -f deploy.log"
+            echo "✅ Deployment started"
+            echo "📄 Logs: tail -f deploy.log"
+
+      # ⏳ Step 3: Wait for App to Start
+      - name: Wait for Deployment
+        run: sleep 40
+
+      # 🔍 Step 4: Verify Deployment (CRITICAL)
+      - name: Verify Deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/AI_CONTROL_PLANE
+
+            echo "📊 Running containers:"
+            docker ps
+
+            echo "📄 Last 50 lines of logs:"
+            tail -n 50 deploy.log
+
+            echo "🌐 Checking health endpoint..."
+            curl -f http://localhost:8000/health || exit 1
+
+            echo "✅ Deployment successful 🎉"
