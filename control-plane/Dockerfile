@@ -34,4 +34,4 @@ EXPOSE 8000
 # Command to run the application
 # --host 0.0.0.0 makes it accessible from outside the container
 # --reload enables auto-reload when code changes (for development)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
