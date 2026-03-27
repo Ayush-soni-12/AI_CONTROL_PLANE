@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Cpu, LogIn, UserPlus, LogOut, Menu, X } from "lucide-react";
+import { ArrowRight, Cpu, LogIn, UserPlus, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCheckAuth, useLogout } from "@/hooks/useSignals";
