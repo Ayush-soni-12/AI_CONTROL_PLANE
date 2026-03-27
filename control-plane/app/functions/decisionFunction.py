@@ -9,7 +9,8 @@ IMPROVEMENTS over v1:
 5. Incident tracking: automatically opens/logs/resolves incidents
 """
 
-from ..realtime_aggregates import get_realtime_metrics
+from ..realtime_aggregates import get_realtime_metrics, get_active_flags_for_endpoint
+from ..router.flags import service_auto_disable_flag
 from ..customer_metrics import get_customer_metrics
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -263,7 +264,23 @@ async def make_decision(
     error_trend = trends['error_trend']
     rpm_trend = trends['rpm_trend']
 
-    if latency_trend != 'stable' or error_trend != 'stable' or rpm_trend != 'stable':
+    # ── STEP 4.5: Fetch Per-Flag Performance ──────────────────────────────────
+    flag_performance = {}
+    if user_id:
+        active_flags = await get_active_flags_for_endpoint(user_id, service_name, endpoint)
+        if active_flags:
+            print(f"📊 [Decision] Found active flags for {service_name}{endpoint}: {active_flags}")
+        for f_name in active_flags:
+            f_metrics = await get_realtime_metrics(user_id, service_name, endpoint, window='1h', flag_name=f_name)
+            if f_metrics and f_metrics['count'] >= 5:
+                flag_performance[f_name] = {
+                    'avg_latency': f_metrics['avg_latency'],
+                    'error_rate': f_metrics['error_rate'],
+                    'count': f_metrics['count']
+                }
+                print(f"   🚩 Flag '{f_name}' performance: {f_metrics['avg_latency']:.0f}ms, {f_metrics['error_rate']*100:.1f}% errors ({f_metrics['count']} calls)")
+
+    if latency_trend != 'stable' or error_trend != 'stable' or rpm_trend != 'stable' or flag_performance:
         print(
             f"📈 [Trends] {service_name}{endpoint} — "
             f"latency:{latency_trend} errors:{error_trend} rpm:{rpm_trend}"
@@ -316,6 +333,9 @@ async def make_decision(
                 latency_trend=latency_trend,
                 error_trend=error_trend,
                 rpm_trend=rpm_trend,
+                flag_performance=flag_performance,
+                total_count=metrics_1h.get('count', 0),
+                total_errors=metrics_1h.get('errors', 0),
             )
         else:
             ai_decision = make_ai_decision(
@@ -332,6 +352,7 @@ async def make_decision(
                 latency_trend=latency_trend,
                 error_trend=error_trend,
                 rpm_trend=rpm_trend,
+                flag_performance=flag_performance,
             )
 
         print(f"🤖 AI Decision: {ai_decision['reasoning']}")
@@ -358,6 +379,30 @@ async def make_decision(
         if ai_decision.get('send_alert'):
             print(f"🚨 Alert: Issues detected for {service_name}{endpoint}")
 
+        if ai_decision.get('disable_flag'):
+            print(f"🚩 AI ROLLBACK TRIGGERED: Disabling buggy flag '{ai_decision['flag_to_disable']}'")
+            # Trigger the disable in the background
+            if db:
+                try:
+                    async def _run_flag_rollback():
+                        from ..database.database import AsyncSessionLocal
+                        try:
+                            async with AsyncSessionLocal() as session:
+                                 print(f"⏳ [RollbackTask] Executing auto-disable for '{ai_decision['flag_to_disable']}'...")
+                                 result = await service_auto_disable_flag(
+                                     service_name=service_name,
+                                     name=ai_decision['flag_to_disable'],
+                                     reason=ai_decision['reasoning'],
+                                     trace_id=trace_id,
+                                     db=session
+                                 )
+                                 print(f"✅ [RollbackTask] Result: {result.get('status', 'Success' if result else 'Failed')}")
+                        except Exception as inner_e:
+                            print(f"❌ [RollbackTask] Fatal error during execution: {inner_e}")
+                    asyncio.create_task(_run_flag_rollback())
+                except Exception as e:
+                    print(f"⚠️  Failed to spawn automated flag rollback task: {e}")
+
         # ── STEP 7: Build result dict ─────────────────────────────────────────
         result = {
             'cache_enabled': ai_decision['cache_enabled'],
@@ -375,6 +420,8 @@ async def make_decision(
                 'threshold_ms': 2000,
                 'baseline_p99_ms': 0,
             }),
+            'disable_flag': ai_decision.get('disable_flag', False),
+            'flag_to_disable': ai_decision.get('flag_to_disable'),
             # Trend context for dashboard display
             'trends': {
                 'latency': latency_trend,

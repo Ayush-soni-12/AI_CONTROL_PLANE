@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from ..config import settings
 from app.database import models
+from app.database.database import get_async_db
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -54,7 +55,7 @@ def verify_token(token: str, credentials_exception):
 
 async def get_current_user(
     request: Request,
-    db: AsyncSession,  # Async database session
+    db: AsyncSession = Depends(get_async_db),  # Async database session
     token: str = Depends(oauth2_scheme)
 ):
   

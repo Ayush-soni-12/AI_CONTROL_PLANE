@@ -319,7 +319,9 @@ async def stream_services(
                             p99_latency=p99,
                             latency_trend=trends['latency_trend'],
                             error_trend=trends['error_trend'],
-                            rpm_trend=trends['rpm_trend']
+                            rpm_trend=trends['rpm_trend'],
+                            total_count=metrics_1h.get('count', 0),
+                            total_errors=metrics_1h.get('errors', 0)
                         )
                     else:
                         # Not enough data — show real metrics but skip AI decision
@@ -566,7 +568,9 @@ async def stream_endpoint_detail(
                         p99_latency=p99,
                         latency_trend=trends['latency_trend'],
                         error_trend=trends['error_trend'],
-                        rpm_trend=trends['rpm_trend']
+                        rpm_trend=trends['rpm_trend'],
+                        total_count=metrics_1h.get('count', 0),
+                        total_errors=metrics_1h.get('errors', 0)
                     )
                 else:
                     # Not enough data — show real metrics but skip AI decision

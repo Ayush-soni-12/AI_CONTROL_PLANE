@@ -162,6 +162,22 @@ async def delete_service(
     )
     deleted_counts["spans"] = len(result.all())
 
+    # ── 7.6. Feature Flags & Audit Logs ───────────────────────────────────────
+    # We delete Audit Logs first
+    result = await db.execute(
+        delete(models.FlagAuditLog).where(
+            models.FlagAuditLog.service_name == service_name
+        ).returning(models.FlagAuditLog.id)
+    )
+    deleted_counts["flag_audit_logs"] = len(result.all())
+
+    result = await db.execute(
+        delete(models.FeatureFlag).where(
+            models.FeatureFlag.service_name == service_name
+        ).returning(models.FeatureFlag.id)
+    )
+    deleted_counts["feature_flags"] = len(result.all())
+
     # ── 8. Raw Signals (last — biggest table) ────────────────────────────────
     result = await db.execute(
         delete(models.Signal).where(

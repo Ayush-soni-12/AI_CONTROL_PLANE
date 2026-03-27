@@ -55,7 +55,8 @@ async def update_realtime_aggregate(
     status: str,
     customer_identifier: str = None,  # NEW: For per-customer rate limiting
     priority: str = 'medium',  # NEW: For queue/shed decisions
-    action_taken: str = 'none' # NEW
+    action_taken: str = 'none', # NEW
+    flag_name: str = None # NEW: For feature flag performance tracking
 ):
     """
     Update real-time aggregates for ALL signals (100% coverage).
@@ -142,6 +143,25 @@ async def update_realtime_aggregate(
             # Save back to Redis with appropriate TTL
             await redis_client.setex(key, ttl, json.dumps(agg))  # await async call
             
+            # --- NEW: Flag-specific tracking ---
+            if flag_name:
+                flag_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:flag:{flag_name}:{window}"
+                # Store the name of the active flag so it can be listed later
+                flag_list_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:active_flags"
+                await redis_client.sadd(flag_list_key, flag_name)
+                await redis_client.expire(flag_list_key, 3600) # Expire after 1h of inactivity
+
+                flag_data = await redis_client.get(flag_key)
+                f_agg = json.loads(flag_data) if flag_data else {
+                    'count': 0, 'sum_latency': 0, 'errors': 0, 'last_updated': None
+                }
+                f_agg['count'] += 1
+                f_agg['sum_latency'] += latency_ms
+                if status == 'error': f_agg['errors'] += 1
+                f_agg['last_updated'] = datetime.now().isoformat()
+                await redis_client.setex(flag_key, ttl, json.dumps(f_agg))
+            # --- End Flag-specific tracking ---
+
             # Track individual latency in sorted set for percentile calculation
             # Use timestamp+random as member to allow duplicate latencies
             import uuid
@@ -192,7 +212,8 @@ async def get_realtime_metrics(
     service_name: str,
     endpoint: str,
     window: str = '1h',
-    db: AsyncSession = None
+    db: AsyncSession = None,
+    flag_name: str = None # NEW: Fetch metrics for a specific flag
 ) -> Optional[Dict]:
     """
     Get real-time metrics with THREE-TIER FALLBACK:
@@ -215,7 +236,10 @@ async def get_realtime_metrics(
         Dict with keys: count, sum_latency, errors, avg_latency, error_rate, requests_per_minute
         Returns None if no data exists in Redis or snapshots
     """
-    key = _get_aggregate_key(user_id, service_name, endpoint, window)
+    if flag_name:
+        key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:flag:{flag_name}:{window}"
+    else:
+        key = _get_aggregate_key(user_id, service_name, endpoint, window)
     
     try:
         # TIER 1: Try Redis first (most up-to-date)
@@ -227,8 +251,8 @@ async def get_realtime_metrics(
             avg_latency = agg['sum_latency'] / agg['count'] if agg['count'] > 0 else 0
             error_rate = agg['errors'] / agg['count'] if agg['count'] > 0 else 0
             
-            # 🔥 FIX: Get ACTUAL current rate from 1-minute aggregate
-            # This is more accurate than 1-hour average for detecting traffic spikes
+            # TIER 1.5: Actual 60s traffic rate (from the current 1m bucket)
+            requests_per_minute = 0
             try:
                 import time
                 current_timestamp = int(time.time())
@@ -237,19 +261,23 @@ async def get_realtime_metrics(
                 # Try current minute bucket first
                 one_min_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:1m:{current_minute}"
                 one_min_data = await redis_client.get(one_min_key)
-                print(f"One minute data: {one_min_data}")
                 
                 if one_min_data:
                     one_min_agg = json.loads(one_min_data)
-                    # Direct count from 1-minute window = requests per minute!
                     requests_per_minute = one_min_agg.get('count', 0)
-                    print(f"Requests per minute: {requests_per_minute}")
                 else:
-                    # Fallback: use window-based calculation
-                    window_minutes = 60 if window == '1h' else 1440
-                    requests_per_minute = agg['count'] / window_minutes
-            except Exception as e:
-                print(f"⚠️ Error getting 1min aggregate, using fallback: {e}")
+                    # Fallback: if current minute is empty (just started), try previous minute
+                    prev_min_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:1m:{current_minute - 1}"
+                    prev_min_data = await redis_client.get(prev_min_key)
+                    if prev_min_data:
+                        prev_min_agg = json.loads(prev_min_data)
+                        requests_per_minute = prev_min_agg.get('count', 0)
+                    else:
+                        # Fallback: use window-based calculation
+                        window_minutes = 60 if window == '1h' else 1440
+                        requests_per_minute = agg['count'] / window_minutes
+            except Exception:
+                # Fallback: use window-based calculation
                 window_minutes = 60 if window == '1h' else 1440
                 requests_per_minute = agg['count'] / window_minutes
             
@@ -302,12 +330,68 @@ async def get_realtime_metrics(
                 snapshot_metrics['source'] = 'snapshot'
                 return snapshot_metrics
         
-        # TIER 3: No data available (caller will use sampled DB signals)
+        # TIER 3: Fallback to evaluating raw sampled DB signals
+        # TIER 3: Fallback to evaluating raw sampled DB signals
+        if db is not None:
+            from app.database import models
+            from sqlalchemy import select, and_
+            
+            stmt = select(models.Signal).filter(
+                and_(
+                    models.Signal.user_id == user_id,
+                    models.Signal.service_name == service_name,
+                    models.Signal.endpoint == endpoint
+                )
+            ).order_by(models.Signal.timestamp.desc())
+            
+            result = await db.execute(stmt)
+            signals = result.scalars().all()
+            
+            if signals:
+                count = len(signals)
+                sum_latency = sum(s.latency_ms for s in signals)
+                errors = sum(1 for s in signals if s.status == 'error')
+                
+                avg_latency = sum_latency / count if count > 0 else 0
+                error_rate = errors / count if count > 0 else 0
+                
+                # Accurately compute percentiles from DB signals
+                latencies = sorted([s.latency_ms for s in signals])
+                p50 = _percentile(latencies, 50)
+                p95 = _percentile(latencies, 95)
+                p99 = _percentile(latencies, 99)
+                import datetime
+
+                return {
+                    'count': count,
+                    'sum_latency': sum_latency,
+                    'errors': errors,
+                    'avg_latency': avg_latency,
+                    'error_rate': error_rate,
+                    'requests_per_minute': 0,
+                    'rate_limit_enabled': False,
+                    'p50': p50,
+                    'p95': p95,
+                    'p99': p99,
+                    'last_updated': datetime.datetime.now().isoformat(),
+                    'source': 'database'
+                }
+        
         return None
         
     except Exception as e:
         print(f"❌ Error getting real-time metrics: {e}")
         return None
+
+
+async def get_active_flags_for_endpoint(user_id: int, service_name: str, endpoint: str) -> List[str]:
+    """Get list of feature flags that have sent signals in the last hour."""
+    key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:active_flags"
+    try:
+        flags = await redis_client.smembers(key)
+        return [f.decode('utf-8') if isinstance(f, bytes) else f for f in flags]
+    except Exception:
+        return []
 
 
 

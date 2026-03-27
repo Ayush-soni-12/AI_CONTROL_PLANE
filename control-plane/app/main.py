@@ -215,3 +215,7 @@ app.include_router(adaptive_timeout.router)
 
 # Distributed Tracing collector
 app.include_router(traces.router)
+
+# Feature Flags
+from app.router import flags
+app.include_router(flags.router)
