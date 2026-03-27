@@ -14,6 +14,8 @@ Microservices fail under unpredictable traffic spikes. Traditional static rate l
 
 ## ✨ Features
 
+- 🚩 **Feature Flags** — Zero-latency, consistent-hashing flag evaluation with AI auto-kill switch
+- 🔍 **Distributed Tracing** — OpenTelemetry-compatible span tracking for pinpointing latency sources
 - 🤖 **AI-Powered Decisions** — Analyzes the last N performance signals and adjusts thresholds dynamically using Gemini-guided decision logic
 - 📊 **Real-Time Monitoring** — SSE-based live dashboard with p50/p95/p99 latency tracking
 - 🔄 **Dynamic Caching** — AI enables caching when p95 latency exceeds adaptive thresholds
@@ -335,6 +337,26 @@ The current deployment runs 2 FastAPI replicas behind Nginx with Docker Compose 
 
 ---
 
+### 🚩 Feature Flags
+
+- **Zero Latency**: Synchronous evaluation in memory using consistent hashing
+- **AI Auto-Kill Switch**: Flags tied to telemetry are instantly disabled via SSE if they cause latency or error spikes
+- **Real-Time Push**: SDK listens to an SSE stream for instant rollout updates
+
+📖 [Learn More](./FEATURE_FLAGS.md)
+
+---
+
+### 🔍 Distributed Tracing
+
+- Auto-generates OpenTelemetry-compatible 32-character hex trace IDs for every request
+- **Zero Overhead Default**: Completely disabled with no performance penalty by default
+- Correlate AI Engine metrics with specific slow database queries or API calls via custom spans
+
+📖 [Learn More](./TRACING.md)
+
+---
+
 ### 🤖 AI Decision Engine
 
 - Reads rolling Redis aggregates (p50/p95/p99 latency, error rate, request rate)
@@ -401,6 +423,8 @@ docker-compose up --build
 ## 📚 Documentation
 
 - [Getting Started](./GETTING_STARTED.md)
+- [Feature Flags](./FEATURE_FLAGS.md)
+- [Distributed Tracing](./TRACING.md)
 - [AI Decision Engine](./AI_DECISIONS.md)
 - [Rate Limiting](./RATE_LIMITING.md)
 - [Circuit Breaker](./CIRCUIT_BREAKER.md)

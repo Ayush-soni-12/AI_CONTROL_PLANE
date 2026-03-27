@@ -105,6 +105,9 @@ The AI calls these to query or modify live data:
 | `get_open_incidents`          | Check for active incidents               |
 | `get_active_overrides`        | List manual threshold overrides          |
 | `create_threshold_override`   | Push a manual override from your editor  |
+| `get_feature_flags`           | Fetch all feature flags for a service    |
+| `set_feature_flag`            | Create/update a feature flag's rollout   |
+| `get_trace`                   | Fetch full distributed trace waterfall   |
 
 ### 💬 Prompts (Expert Tasks)
 

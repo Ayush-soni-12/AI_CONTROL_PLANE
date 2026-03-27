@@ -121,6 +121,8 @@ const controlPlane = new ControlPlaneSDK({
   tenantId: process.env.TENANT_ID,
   serviceName: process.env.SERVICE_NAME,
   controlPlaneUrl: process.env.CONTROL_PLANE_URL,
+  featureFlags: true, // 👈 Enable Feature Flags
+  tracing: true,      // 👈 Enable Distributed Tracing
 });
 ```
 
@@ -330,6 +332,8 @@ Your service is now protected by AI-powered traffic management with:
 - **Circuit Breaking** - Prevents cascade failures
 - **Adaptive Timeout** - Dynamically enforces strict latency boundaries
 - **Request Coalescing** - Automatically collapses simultaneous identical requests
+- **Feature Flags** - Zero-latency feature rollout with AI auto-kill
+- **Distributed Tracing** - OpenTelemetry-compatible internal span tracking
 - **Real-time Monitoring** - Live dashboards with SSE updates
 
 ---
@@ -362,6 +366,8 @@ SERVICE_NAME=product-service
 ## Next Steps
 
 - 📖 [Learn about Rate Limiting](./RATE_LIMITING.md)
+- 📖 [Learn about Feature Flags](./FEATURE_FLAGS.md)
+- 📖 [Learn about Distributed Tracing](./TRACING.md)
 - 📖 [Learn about Load Shedding](./LOAD_SHEDDING.md)
 - 📖 [Learn about Queue Deferral](./QUEUE_DEFERRAL.md)
 - 📖 [Understand AI Decisions](./AI_DECISIONS.md)
