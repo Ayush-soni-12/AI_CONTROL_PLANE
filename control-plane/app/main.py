@@ -182,6 +182,10 @@ async def shutdown():
     await close_rabbitmq_connection()
     print("🛑 Background jobs stopped")
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 
 
 app.include_router(signals.router)
