@@ -29,6 +29,17 @@ export interface ControlPlaneConfig {
    * @default 30000
    */
   configCacheTTL?: number;
+
+  /**
+   * API Key for authenticating with the control plane
+   */
+  apiKey?: string;
+
+  /**
+   * Enable distributed tracing to send span data to the control plane
+   * @default false
+   */
+  tracing?: boolean;
 }
 
 /**
@@ -84,6 +95,18 @@ export interface ControlPlaneMetadata {
    * Whether to skip the operation (circuit breaker active)
    */
   shouldSkip: boolean;
+
+  /**
+   * Current trace ID if tracing is enabled
+   */
+  traceId?: string;
+
+  /**
+   * Start a child span to trace a specific operation (e.g. database query, external API call)
+   * @param operationName - Name of the span operation
+   * @returns an object with an `end` function to close the span
+   */
+  startSpan: (operationName: string) => { end: (attributes?: Record<string, unknown>) => void };
 }
 
 /**
@@ -152,7 +175,15 @@ export default class ControlPlaneSDK {
    * @param endpoint - API endpoint path
    * @returns Express middleware function
    */
-  middleware(endpoint: string): (req: any, res: any, next: any) => Promise<void>;
+  middleware(endpoint: string, options?: any): (req: any, res: any, next: any) => Promise<void> | void;
+
+  /**
+   * Express middleware that applies an AI-calculated adaptive timeout
+   * @param endpoint - API endpoint path
+   * @param handler - Original route handler
+   * @returns Wrapped Express middleware function
+   */
+  withEndpointTimeout(endpoint: string, handler: any, options?: any): (req: any, res: any, next: any) => Promise<void> | void;
 }
 
 /**

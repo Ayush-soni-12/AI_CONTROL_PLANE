@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-03-27
+
+### ✨ Added
+- **Distributed Tracing**: The SDK now supports end-to-end distributed tracing. It automatically generates a `trace_id` per request and provides a `req.controlPlane.startSpan(name)` helper to track internal operations.
+- **Span Management**: High-performance, async span buffering and batch flushing to the Control Plane.
+- **Automatic Root Spans**: The `middleware` and `withEndpointTimeout` now automatically capture a root span reflecting the full HTTP request lifecycle.
+- **Enhanced Signal Tracking**: `track` signals now include `trace_id` and `flagName` for better correlation between performance metrics and traces.
+- **Feature Flag System**: New standalone feature flag system (`isEnabled(flagName, userId)`) with:
+    - **Consistent Hashing**: MD5-based deterministic user bucketing.
+    - **SSE Real-time Sync**: Instant rollout updates via Server-Sent Events.
+    - **AI Feedback Loop**: Flags are linked to performance signals via `flagName` in `track`, enabling AI to auto-disable buggy flags.
+    - **Auto-Refresh**: Background 30s polling fallback for reliability.
+
+### ⚡️ Performance
+- **No-op Tracing**: When tracing is disabled, the SDK uses zero-overhead no-op stubs to ensure no performance impact.
+
+---
+
 ## [1.2.0] - 2026-03-19
 
 ### ✨ Added

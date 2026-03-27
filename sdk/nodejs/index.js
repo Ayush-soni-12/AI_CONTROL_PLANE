@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 class ControlPlaneSDK {
   constructor(config = {}) {
     this.controlPlaneUrl = config.controlPlaneUrl || 'https://api.neuralcontrol.online';
@@ -18,11 +20,26 @@ class ControlPlaneSDK {
     this._flushTimer     = null;
     this._syncTimers     = {};  // one refresh timer per endpoint
 
+    // ── Distributed Tracing (disabled by default — zero overhead unless enabled) ──
+    this._tracingEnabled = config.tracing || false;
+    this._spanQueue      = [];  // spans collected per-flush-cycle
+    this._activeSpans    = new Map();  // spanId → { name, start, traceId, parentSpanId }
+
     // ── Local Sliding Window Tracker (For Rate Limiting Edge-Side) ──────────
     this._customerRateLimits = new Map();
 
     // ── Request Coalescing Tracker ──────────────────────────────────────────
     this._inFlightRequests = new Map();
+
+    // ── Feature Flags ────────────────────────────────────────────────────────
+    // Map<flagName, { rolloutPercent, status }> — never queried over the network
+    this._flags           = new Map();
+    this._flagsEnabled    = config.featureFlags || false;
+    this._flagRefreshTimer = null;
+    if (this._flagsEnabled) {
+      // Load on next tick so constructor completes first
+      setImmediate(() => this._loadFlags());
+    }
 
     // ── Safe defaults returned when control plane is unreachable ────────────
     this._safeDefaults = {
@@ -106,17 +123,31 @@ class ControlPlaneSDK {
 
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PUBLIC: track(endpoint, latencyMs, status, priority, customer_identifier, action_taken)
+  // PRIVATE: _generateTraceId() / _generateSpanId()
+  // Built-in crypto — no new npm dependencies
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _generateTraceId() {
+    return crypto.randomBytes(16).toString('hex');  // 32-char hex, OpenTelemetry-compatible
+  }
+
+  _generateSpanId() {
+    return crypto.randomBytes(8).toString('hex');   // 16-char hex
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC: track(endpoint, latencyMs, status, priority, customer_identifier, action_taken, trace_id, flagName)
   // NOW: queues signal locally — NO immediate HTTP call
   // ═══════════════════════════════════════════════════════════════════════════
 
-  track(endpoint, latencyMs, status = 'success', priority = 'medium', customer_identifier = null, action_taken = 'none') {
+  track(endpoint, latencyMs, status = 'success', priority = 'medium', customer_identifier = null, action_taken = 'none', trace_id = null, flagName = null) {
     if (this._signalQueue.length >= this._maxQueueSize) {
       // Queue is full — drop oldest signal (ring buffer behavior)
       this._signalQueue.shift();
     }
 
-    this._signalQueue.push({
+    const signal = {
       service_name:         this.serviceName,
       endpoint,
       latency_ms:           Math.round(latencyMs),
@@ -126,8 +157,126 @@ class ControlPlaneSDK {
       customer_identifier,
       action_taken, // Tells the backend if it was rate limited locally!
       recorded_at:          new Date().toISOString(),
-    });
+    };
+
+    // Include trace_id if tracing is enabled — links signal to span data
+    if (this._tracingEnabled && trace_id) {
+      signal.trace_id = trace_id;
+    }
+
+    // Include flag_name if provided — allows AI to auto-disable the flag on anomaly
+    if (flagName) {
+      signal.flag_name = flagName;
+    }
+
+    this._signalQueue.push(signal);
   }
+
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PUBLIC: isEnabled(flagName, userId)
+  // Zero-latency evaluation using consistent hashing — reads only from memory.
+  // Same user ALWAYS gets the same result for any given rollout percentage.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  isEnabled(flagName, userId) {
+    if (!this._flagsEnabled) {
+      console.warn('[ControlPlane] isEnabled() called but featureFlags is not enabled in config.');
+      return false;
+    }
+
+    const flag = this._flags.get(flagName);
+    if (!flag) return false;                       // unknown flag → off by default
+    if (flag.status === 'disabled') return false;
+    if (flag.status === 'auto-disabled') return false;
+    if (flag.rollout_percent === 0) return false;
+    if (flag.rollout_percent === 100) return true;
+
+    // Consistent hash: MD5(flagName + userId) % 100
+    // Same input → same bucket → same user always in/out of rollout
+    const hash   = crypto.createHash('md5').update(flagName + String(userId)).digest('hex');
+    const bucket = parseInt(hash.slice(0, 4), 16) % 100;
+    return bucket < flag.rollout_percent;
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRIVATE: _loadFlags() — fetches all flags for this service and starts refresh
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async _loadFlags() {
+    try {
+      const res = await fetch(
+        `${this.controlPlaneUrl}/api/flags/${encodeURIComponent(this.serviceName)}`,
+        { headers: { 'Authorization': `Bearer ${this.apiKey}` }, signal: AbortSignal.timeout(3000) }
+      );
+      if (!res.ok) {
+        console.warn(`[ControlPlane] Failed to load flags: ${res.status}`);
+        return;
+      }
+      const { flags } = await res.json();
+      for (const f of (flags || [])) {
+        this._flags.set(f.name, { rollout_percent: f.rollout_percent, status: f.status });
+      }
+      console.log(`[ControlPlane] ✅ Loaded ${flags.length} feature flag(s) for "${this.serviceName}"`);
+    } catch (err) {
+      console.warn('[ControlPlane] Could not load feature flags:', err.message);
+    }
+
+    // Periodic refresh every 30s as a safety net (SSE handles instant updates)
+    if (!this._flagRefreshTimer) {
+      this._flagRefreshTimer = setInterval(() => this._loadFlags(), 30_000);
+      this._flagRefreshTimer.unref?.();  // Don't block process exit
+    }
+
+    // Open SSE stream for instant updates when AI disables a flag
+    this._connectFlagStream();
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRIVATE: _connectFlagStream() — SSE stream for instant flag rollout updates
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _connectFlagStream() {
+    const url = `${this.controlPlaneUrl}/api/flags/stream/${encodeURIComponent(this.serviceName)}`;
+    const headers = { 'Authorization': `Bearer ${this.apiKey}`, 'Accept': 'text/event-stream' };
+
+    const connect = () => {
+      fetch(url, { headers })
+        .then(res => {
+          if (!res.ok) { console.warn('[ControlPlane] Flag SSE connection failed.'); return; }
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+
+          const pump = () => reader.read().then(({ done, value }) => {
+            if (done) { setTimeout(connect, 5000); return; }  // reconnect on disconnect
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();  // keep any incomplete line
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const flag = JSON.parse(line.slice(6));
+                  this._flags.set(flag.name, { rollout_percent: flag.rollout_percent, status: flag.status });
+                  console.log(`[ControlPlane] 🔄 Flag updated via SSE: ${flag.name} → ${flag.rollout_percent}% (${flag.status})`);
+                } catch {}
+              }
+            }
+            pump();
+          }).catch(() => setTimeout(connect, 5000));  // reconnect on error
+
+          pump();
+        })
+        .catch(() => setTimeout(connect, 5000));  // reconnect backoff
+    };
+
+    connect();
+  }
+
 
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -138,6 +287,7 @@ class ControlPlaneSDK {
   middleware(endpoint, options = {}) {
     const sdk      = this;
     const priority = options.priority || 'medium';
+    const flagName = options.flagName || null;   // NEW: Feature flag telemetry link
     const coalesceEnabled = options.coalesce !== false;
 
     // Ensure this endpoint is being synced in the background
@@ -176,14 +326,77 @@ class ControlPlaneSDK {
         coalesce: (key, fn) => sdk._coalesce(key, fn),
       };
 
+      // ── Distributed Tracing: generate per-request trace_id + startSpan helper ──
+      if (sdk._tracingEnabled) {
+        req._traceId    = sdk._generateTraceId();
+        req._rootSpanId = sdk._generateSpanId();
+
+        // Track the root span (closed in res.finish below)
+        sdk._activeSpans.set(req._rootSpanId, { start: startTime });
+
+        // Expose startSpan() so customers can instrument DB calls, external APIs, etc.
+        req.controlPlane.startSpan = (operationName) => {
+          const spanId    = sdk._generateSpanId();
+          const spanStart = Date.now();
+          sdk._activeSpans.set(spanId, { name: operationName, start: spanStart });
+          return {
+            end: (attributes = {}) => {
+              const duration = Date.now() - spanStart;
+              sdk._activeSpans.delete(spanId);
+              sdk._spanQueue.push({
+                trace_id:       req._traceId,  // Tag each span with its trace
+                span_id:        spanId,
+                parent_span_id: req._rootSpanId,
+                operation:      operationName,
+                start_time:     new Date(spanStart).toISOString(),
+                end_time:       new Date().toISOString(),
+                duration_ms:    duration,
+                attributes,
+              });
+            },
+          };
+        };
+
+        // Expose trace_id so customers can log it or add it to response headers
+        req.controlPlane.traceId = req._traceId;
+      } else {
+        // No-op stubs — zero overhead when tracing disabled
+        req.controlPlane.startSpan = () => ({ end: () => {} });
+      }
+
       // Queue signal after response — non-blocking
       res.on('finish', () => {
         const latency = Date.now() - startTime;
         const isTrafficManagement = [202, 429, 503].includes(res.statusCode);
         const status = (res.statusCode < 400 || isTrafficManagement) ? 'success' : 'error';
         const action = isRateLimited ? 'rate_limited' : 'none';
-        
-        sdk.track(endpoint, latency, status, priority, customer_identifier, action);
+
+        sdk.track(endpoint, latency, status, priority, customer_identifier, action, req._traceId || null, flagName);
+
+        // Flush spans async if tracing is enabled for this request
+        if (sdk._tracingEnabled && req._traceId) {
+          console.log(`[DEBUG] res.on('finish') called. trace_id=${req._traceId}, rootSpanId=${req._rootSpanId}`);
+          // Close root span
+          if (req._rootSpanId && sdk._activeSpans.has(req._rootSpanId)) {
+            const root = sdk._activeSpans.get(req._rootSpanId);
+            const rootSpan = {
+              trace_id:       req._traceId,  // Tag root span with trace
+              span_id:        req._rootSpanId,
+              parent_span_id: null,
+              operation:      `HTTP: ${req.method} ${endpoint}`,
+              start_time:     new Date(root.start).toISOString(),
+              end_time:       new Date().toISOString(),
+              duration_ms:    latency,
+              attributes:     { status_code: res.statusCode },
+            };
+            console.log(`[DEBUG] Pushing root span:`, rootSpan.operation);
+            sdk._spanQueue.push(rootSpan);
+            sdk._activeSpans.delete(req._rootSpanId);
+          } else {
+            console.log(`[DEBUG] Root span NOT FOUND in activeSpans!`);
+          }
+          // Don't wait for flush — same async pattern as signals
+        }
       });
 
       // ✅ [NEW] Automatic Request Coalescing for standard middleware
@@ -232,6 +445,7 @@ class ControlPlaneSDK {
   withEndpointTimeout(endpoint, handler, options = {}) {
     const sdk = this;
     const priority = options.priority || 'medium';
+    const flagName = options.flagName || null;
 
     if (!sdk._syncTimers[endpoint]) {
       sdk._syncConfig(endpoint).then(() => sdk._startSyncLoop(endpoint));
@@ -278,6 +492,40 @@ class ControlPlaneSDK {
         );
       }
 
+      // ── Distributed Tracing: generate per-request trace_id + startSpan helper ──
+      if (sdk._tracingEnabled) {
+        req._traceId    = sdk._generateTraceId();
+        req._rootSpanId = sdk._generateSpanId();
+
+        sdk._activeSpans.set(req._rootSpanId, { start: startTime });
+
+        req.controlPlane.startSpan = (operationName) => {
+          const spanId    = sdk._generateSpanId();
+          const spanStart = Date.now();
+          sdk._activeSpans.set(spanId, { name: operationName, start: spanStart });
+          return {
+            end: (attributes = {}) => {
+              const duration = Date.now() - spanStart;
+              sdk._activeSpans.delete(spanId);
+              sdk._spanQueue.push({
+                trace_id:       req._traceId,
+                span_id:        spanId,
+                parent_span_id: req._rootSpanId,
+                operation:      operationName,
+                start_time:     new Date(spanStart).toISOString(),
+                end_time:       new Date().toISOString(),
+                duration_ms:    duration,
+                attributes,
+              });
+            },
+          };
+        };
+
+        req.controlPlane.traceId = req._traceId;
+      } else {
+        req.controlPlane.startSpan = () => ({ end: () => {} });
+      }
+
       // Track upon finish
       res.on('finish', () => {
         const latency = Date.now() - startTime;
@@ -285,7 +533,30 @@ class ControlPlaneSDK {
         const status = (res.statusCode < 400 || isTrafficManagement) ? 'success' : 'error';
         const action = isRateLimited ? 'rate_limited' : 'none';
         
-        sdk.track(endpoint, latency, status, priority, customer_identifier, action);
+        sdk.track(endpoint, latency, status, priority, customer_identifier, action, req._traceId || null, flagName);
+
+        // Flush spans async if tracing is enabled for this request
+        if (sdk._tracingEnabled && req._traceId) {
+          console.log(`[DEBUG_WITH_TIMEOUT] res.on('finish') called. trace_id=${req._traceId}, rootSpanId=${req._rootSpanId}`);
+          if (req._rootSpanId && sdk._activeSpans.has(req._rootSpanId)) {
+            const root = sdk._activeSpans.get(req._rootSpanId);
+            const rootSpan = {
+              trace_id:       req._traceId,
+              span_id:        req._rootSpanId,
+              parent_span_id: null,
+              operation:      `HTTP: ${req.method} ${endpoint}`,
+              start_time:     new Date(root.start).toISOString(),
+              end_time:       new Date().toISOString(),
+              duration_ms:    latency,
+              attributes:     { status_code: res.statusCode },
+            };
+            console.log(`[DEBUG_WITH_TIMEOUT] Pushing root span:`, rootSpan.operation);
+            sdk._spanQueue.push(rootSpan);
+            sdk._activeSpans.delete(req._rootSpanId);
+          } else {
+            console.log(`[DEBUG_WITH_TIMEOUT] Root span NOT FOUND in activeSpans!`);
+          }
+        }
       });
 
       let timeoutId;
@@ -637,6 +908,10 @@ class ControlPlaneSDK {
       if (this._signalQueue.length > 0) {
         this._flushSignals().catch(() => {});
       }
+      // Also flush spans if tracing is enabled and there are spans to send
+      if (this._tracingEnabled && this._spanQueue.length > 0) {
+        this._flushSpans().catch(() => {});
+      }
     }, this._flushInterval);
   }
 
@@ -671,6 +946,52 @@ class ControlPlaneSDK {
     } catch (error) {
       if (error.name !== 'AbortError' && !requeued) {
         this._signalQueue.unshift(...batch.slice(0, this._maxQueueSize - this._signalQueue.length));
+      }
+    }
+  }
+
+  async _flushSpans() {
+    if (this._spanQueue.length === 0) return;
+
+    // Drain atomically
+    const batch = this._spanQueue.splice(0, this._spanQueue.length);
+
+    // Group spans by trace_id — each unique trace sends one POST
+    const byTrace = {};
+    for (const span of batch) {
+      const tid = span.trace_id || 'unknown';
+      if (!byTrace[tid]) byTrace[tid] = [];
+      byTrace[tid].push(span);
+    }
+
+    for (const [trace_id, spans] of Object.entries(byTrace)) {
+      try {
+        const controller = new AbortController();
+        const timeoutId  = setTimeout(() => controller.abort(), 3_000);
+
+        try {
+          const response = await fetch(`${this.controlPlaneUrl}/api/traces/spans`, {
+            method:  'POST',
+            headers: this._buildHeaders(),
+            body:    JSON.stringify({
+              trace_id,
+              service_name: this.serviceName,
+              tenant_id:    this.tenantId,
+              spans,
+            }),
+            signal: controller.signal,
+          });
+
+          if (!response.ok && response.status !== 401) {
+            // Re-queue on failure (best-effort, cap at 200 total)
+            this._spanQueue.unshift(...spans.slice(0, 200 - this._spanQueue.length));
+          }
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+      } catch (error) {
+        // Network error — tracing is best-effort, silently discard
       }
     }
   }

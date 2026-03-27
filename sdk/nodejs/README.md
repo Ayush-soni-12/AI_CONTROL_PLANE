@@ -64,6 +64,7 @@ const controlPlane = new ControlPlaneSDK({
   serviceName: "my-service",
   controlPlaneUrl:
     process.env.CONTROL_PLANE_URL || "https://api.neuralcontrol.online",
+  tracing: true, // Optional: Enable distributed tracing
 });
 
 // Pre-warm config for known endpoints (Recommended for 0ms latency overlay)
@@ -88,6 +89,7 @@ const controlPlane = new ControlPlaneSDK({
   serviceName: "demo-service",
   controlPlaneUrl:
     process.env.CONTROL_PLANE_URL || "https://api.neuralcontrol.online",
+  tracing: true, // Enable distributed tracing
 });
 
 // Example: Product API with automatic tracking
@@ -311,6 +313,28 @@ app.get(
 );
 ```
 
+### Distributed Tracing
+
+Enabling the `tracing: true` flag in the SDK automatically generates a unique `traceId` for every request. You can manually instrument specific operations (like database queries) using the `startSpan` helper.
+
+```javascript
+app.get("/checkout", controlPlane.middleware("/checkout"), async (req, res) => {
+  // 1. Trace a database call
+  const dbSpan = req.controlPlane.startSpan("DB: Verify Inventory");
+  const inventory = await db.checkInventory();
+  dbSpan.end({ items_checked: inventory.length });
+
+  // 2. Trace an external payment provider
+  const stripeSpan = req.controlPlane.startSpan("Stripe: Process Payment");
+  const paymentStatus = await stripe.process();
+  stripeSpan.end({ status: paymentStatus });
+
+  res.json({ success: true, traceId: req.controlPlane.traceId });
+});
+```
+
+The tracing data is heavily utilized by NeuralControl's AI engine to provide **evidence-based root-cause analysis** when incidents (like latency spikes) occur, pinpointing the exact operation that slowed down the request.
+
 ## Current Features
 
 This SDK currently provides:
@@ -318,6 +342,7 @@ This SDK currently provides:
 - ✅ **API Key Authentication** - Secure authentication for all SDK operations
 - ✅ **Performance Tracking** - Latency and success/error rate monitoring
 - ✅ **Runtime Configuration** - AI-driven decisions from Control Plane
+- ✅ **Distributed Tracing** - Request waterfalls and AI root-cause pinpointing
 - ✅ **Express Middleware** - Automatic tracking with zero code changes
 - ✅ **Adaptive Timeouts** - Dynamically abort requests when latency spikes using AI thresholds
 - ✅ **Request Coalescing** - Auto-collapses identical simultaneous requests to protect backend capacity
