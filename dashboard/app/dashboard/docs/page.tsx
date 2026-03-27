@@ -99,6 +99,20 @@ const docsList = [
     emoji: "🔌",
   },
   {
+    slug: "FEATURE_FLAGS",
+    title: "Feature Flags",
+    description: "Deterministic rollout & AI auto-disable",
+    category: "Features",
+    emoji: "🚩",
+  },
+  {
+    slug: "TRACING",
+    title: "Distributed Tracing",
+    description: "E2E visibility across microservices",
+    category: "Features",
+    emoji: "🔍",
+  },
+  {
     slug: "CONTRIBUTOR_WORKFLOW",
     title: "Contributing",
     description: "How to contribute to this project",

@@ -87,6 +87,20 @@ export const docsList = [
     icon: "🔌",
   },
   {
+    slug: "FEATURE_FLAGS",
+    title: "Feature Flags",
+    description: "Deterministic rollout & AI auto-disable",
+    category: "features",
+    icon: "🚩",
+  },
+  {
+    slug: "TRACING",
+    title: "Distributed Tracing",
+    description: "E2E visibility across microservices",
+    category: "features",
+    icon: "🔍",
+  },
+  {
     slug: "CONTRIBUTOR_WORKFLOW",
     title: "Contributing",
     description: "How to contribute to this project",
