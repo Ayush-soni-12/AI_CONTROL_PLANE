@@ -54,7 +54,7 @@ app.add_middleware(
 # print("environment: ", settings.ENVIRONMENT)
 # print("redis url: ", settings.REDIS_URL)
 
-print("check the new workflow")
+print("check the updated github actions")
 
 # Create one simple endpoint
 @app.get("/")
