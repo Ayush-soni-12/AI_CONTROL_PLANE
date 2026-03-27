@@ -42,6 +42,10 @@ class DecisionState(TypedDict):
     error_trend: str                    # 'rising', 'falling', 'stable'
     rpm_trend: str                      # 'rising', 'falling', 'stable'
 
+    # NEW: Per-flag performance data (for anomaly attribution)
+    # Structure: { "flag_name": { "avg_latency": float, "error_rate": float, "count": int } }
+    flag_performance: Optional[dict] = None
+
     # Outputs
     analysis: str
     decision: dict
@@ -135,6 +139,22 @@ def analyze_node(state: DecisionState) -> DecisionState:
     p50 = state.get('p50_latency', 0)
     if p99 > 0 and p50 > 0 and (p99 / max(p50, 1)) > 5:
         issues.append(f"High tail latency: p99={p99:.0f}ms vs p50={p50:.0f}ms ({p99/p50:.1f}x spread)")
+
+    # Check for problematic feature flags (Anomaly Attribution)
+    if state.get('flag_performance'):
+        baseline_latency = state['avg_latency']
+        baseline_error = state['error_rate']
+        
+        for flag_name, metrics in state['flag_performance'].items():
+            if metrics['count'] < 5: continue # Ignore flags with very low sample size
+            
+            # If flag latency is 2x baseline and > 400ms
+            if metrics['avg_latency'] > baseline_latency * 1.8 and metrics['avg_latency'] > 400:
+                issues.append(f"Flag '{flag_name}' is degrading performance (Lat: {metrics['avg_latency']:.0f}ms vs baseline: {baseline_latency:.0f}ms)")
+            
+            # If flag error rate is 3x baseline and > 10%
+            if metrics['error_rate'] > baseline_error * 2.5 and metrics['error_rate'] > 0.1:
+                issues.append(f"Flag '{flag_name}' is causing errors ({metrics['error_rate']*100:.1f}% vs baseline: {baseline_error*100:.1f}%)")
 
     state['analysis'] = ", ".join(issues) if issues else "No issues detected"
     return state
@@ -326,12 +346,26 @@ def decide_node(state: DecisionState) -> DecisionState:
         'load_shedding': False,
         'request_coalescing': should_coalesce,
         'send_alert': 'alert' in actions,
+        'disable_flag': False,
+        'flag_to_disable': None,
         # Adaptive Timeout: always compute and return the recommended timeout
         # The SDK should use this value as its request timeout.
         # We use the fixed threshold from DEFAULTS.
         'adaptive_timeout': _compute_adaptive_timeout(state),
     }
-    state['reasoning'] = reasoning
+    # Anomaly Attribution Kill-Switch
+    if state.get('flag_performance'):
+        for flag_name, metrics in state['flag_performance'].items():
+            if metrics['count'] < 5: continue
+            # If flag brings 2x latency and > 400ms, or high error rate
+            if (metrics['avg_latency'] > state['avg_latency'] * 1.8 and metrics['avg_latency'] > 400) or (metrics['error_rate'] > state['error_rate'] * 2.5 and metrics['error_rate'] > 0.1):
+                state['decision']['disable_flag'] = True
+                state['decision']['flag_to_disable'] = flag_name
+                state['reasoning'] = f"Feature Flag Rollback: Flag '{flag_name}' is identified as the root cause of degradation. Automated kill-switch triggered to protect service stability."
+                state['decision']['send_alert'] = True
+                break
+
+    state['reasoning'] = reasoning if not state['decision'].get('disable_flag') else state['reasoning']
     return state
 
 
@@ -420,6 +454,7 @@ def make_ai_decision(
         "latency_trend": latency_trend,
         "error_trend": error_trend,
         "rpm_trend": rpm_trend,
+        "flag_performance": None,  # Fix: Default for simple rule-based decisions
         "analysis": "",
         "decision": {},
         "reasoning": "",
@@ -441,6 +476,8 @@ def make_ai_decision(
         "load_shedding": result['decision'].get('load_shedding', False),
         "request_coalescing": result['decision'].get('request_coalescing', False),
         "send_alert": result['decision'].get('send_alert', False),
+        "disable_flag": result['decision'].get('disable_flag', False),
+        "flag_to_disable": result['decision'].get('flag_to_disable'),
         "adaptive_timeout": result['decision'].get('adaptive_timeout', {'active': False, 'recommended_timeout_ms': 2000, 'baseline_p99_ms': 0}),
         "reasoning": result['reasoning'],
         "analysis": result['analysis'],
@@ -464,6 +501,7 @@ async def get_ai_tuned_decision(
     user_id: int = None,
     db=None,
     threshold_overrides: dict | None = None,
+    flag_performance: dict | None = None,
     # NEW: trend & percentile context (passed from decisionFunction)
     p50_latency: float = 0,
     p95_latency: float = 0,
@@ -471,6 +509,8 @@ async def get_ai_tuned_decision(
     latency_trend: str = 'stable',
     error_trend: str = 'stable',
     rpm_trend: str = 'stable',
+    total_count: int = 0,
+    total_errors: int = 0,
 ) -> dict:
     """
     AI-tuned decision using DB thresholds + trend awareness.
@@ -743,11 +783,84 @@ async def get_ai_tuned_decision(
         'threshold_ms': at_threshold,
         'baseline_p99_ms': round(p99_latency, 1),
     }
-    if adaptive_timeout_active:
-        reasoning += (
-            f" | ⏱️ Adaptive Timeout ACTIVE: p99 {p99_latency:.0f}ms exceeds "
-            f"threshold {at_threshold}ms. SDK timeout reduced to {recommended_timeout_ms}ms."
-        )
+    # Manual kill-switch check for tuned decision
+    if flag_performance:
+        for flag_name, metrics in flag_performance.items():
+            if metrics['count'] < 5: continue
+            
+            # --- IMPROVED HEURISTIC: Corrected Baseline ---
+            # Instead of comparing flag to TOTAL average (which is contaminated by the flag itself),
+            # we compare it to the 'Clean Baseline' (the latency of requests WITHOUT the flag).
+            
+            flag_count = metrics['count']
+            flag_avg = metrics['avg_latency']
+            flag_err = metrics['error_rate']
+            
+            # Calculate what the performance would be WITHOUT this flag
+            if total_count > flag_count:
+                # Corrected Latency = (TotalSum - FlagSum) / (TotalCount - FlagCount)
+                total_sum = avg_latency * total_count
+                corrected_baseline_latency = (total_sum - (flag_avg * flag_count)) / (total_count - flag_count)
+                
+                # Corrected Errors = (TotalErrors - FlagErrors) / (TotalCount - FlagCount)
+                flag_error_count = flag_err * flag_count
+                corrected_baseline_errors = (total_errors - flag_error_count) / (total_count - flag_count)
+            else:
+                # 100% rollout - use healthy thresholds as baseline
+                corrected_baseline_latency = thresholds.get('cache_latency_ms', 500)
+                corrected_baseline_errors = thresholds.get('circuit_breaker_error_rate', 0.1)
+
+            # Defensive min-bounds for baseline to avoid division by zero or extreme ratios
+            corrected_baseline_latency = max(corrected_baseline_latency, 20)
+            corrected_baseline_errors = max(corrected_baseline_errors, 0.01)
+
+            # Now compare Flag to the CLEAN baseline
+            latency_ratio = flag_avg / corrected_baseline_latency
+            error_ratio = flag_err / corrected_baseline_errors
+
+            is_outlier_latency = (latency_ratio > 1.8 and flag_avg > 400)
+            is_outlier_errors = (error_ratio > 2.5 and flag_err > 0.1)
+            
+            # Also keep catastrophic absolute checks
+            is_catastrophic_latency = flag_avg > thresholds.get('cache_latency_ms', 500) * 4.0
+            is_catastrophic_errors = flag_err > thresholds.get('circuit_breaker_error_rate', 0.3) * 4.0
+            
+            if is_catastrophic_latency or is_catastrophic_errors or is_outlier_latency or is_outlier_errors:
+                return {
+                    'cache_enabled': True,
+                    'circuit_breaker': False,
+                    'rate_limit_customer': False,
+                    'queue_deferral': False,
+                    'load_shedding': False,
+                    'send_alert': True,
+                    'disable_flag': True,
+                    'flag_to_disable': flag_name,
+                    'request_coalescing': True,
+                    'adaptive_timeout': adaptive_timeout,
+                    'reasoning': f"Feature Flag Rollback: Flag '{flag_name}' is causing significant performance degradation (Ratio: {latency_ratio:.1f}x baseline). AI is triggering automated kill-switch.",
+                    'analysis': f"Flag '{flag_name}' metrics: {flag_avg:.0f}ms vs Baseline: {corrected_baseline_latency:.0f}ms. Rollout: {flag_count/total_count*100:.0f}%",
+                    'ai_decision': 'Flag Rollback',
+                    'thresholds_source': source,
+                    'status': 'degraded',
+                }
+            # --- End Improved Heuristic ---
+                return {
+                    'cache_enabled': True,
+                    'circuit_breaker': False,
+                    'rate_limit_customer': False,
+                    'queue_deferral': False,
+                    'load_shedding': False,
+                    'send_alert': True,
+                    'disable_flag': True,
+                    'flag_to_disable': flag_name,
+                    'request_coalescing': True,
+                    'adaptive_timeout': adaptive_timeout,
+                    'reasoning': f"Feature Flag Rollback: Flag '{flag_name}' is causing significant performance degradation. AI is triggering automated kill-switch.",
+                    'analysis': f"Flag '{flag_name}' metrics: {metrics['avg_latency']:.0f}ms / {metrics['error_rate']*100:.1f}% errors",
+                    'ai_decision': 'Flag Rollback',
+                    'thresholds_source': source,
+                    'status': 'degraded',
+                }
 
     return {
         'cache_enabled': 'enable_cache' in actions,
@@ -756,6 +869,8 @@ async def get_ai_tuned_decision(
         'queue_deferral': False,
         'load_shedding': False,
         'send_alert': 'alert' in actions,
+        'disable_flag': False,
+        'flag_to_disable': None,
         'request_coalescing': 'enable_cache' in actions or latency_trend == 'rising' or avg_latency > cache_threshold * 0.7,
         'adaptive_timeout': adaptive_timeout,
         'reasoning': reasoning,

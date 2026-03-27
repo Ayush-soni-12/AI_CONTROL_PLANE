@@ -146,20 +146,28 @@ async def analyze_all_services():
                             f"latency:{latency_trend} errors:{error_trend} rpm:{rpm_trend}"
                         )
 
-                    # 4. Fetch recent decision history (NEW: feedback loop)
-                    recent_decisions = []
+                    # 4. Proactive Protection Check (NEW)
+                    # This triggers the 'Kill Switch' logic if a flag is causing a spike,
+                    # even if the client hasn't requested a new config yet.
                     try:
-                        from app.functions.decisionFunction import get_recent_decisions
-                        recent_decisions = await get_recent_decisions(
-                            user_id=user.id,
+                        from app.functions.decisionFunction import make_decision
+                        print(f"🛡️  [Proactive] Checking protections for {service_name}{endpoint}...")
+                        await make_decision(
                             service_name=service_name,
                             endpoint=endpoint,
-                            limit=5,
+                            db=async_session,
+                            user_id=user.id
                         )
                     except Exception as e:
-                        print(f"⚠️  Could not fetch decision history: {e}")
+                        print(f"⚠️  Proactive check failed for {service_name}{endpoint}: {e}")
 
-                    # 5. Get current thresholds
+                    # 5. Fetch recent decision history (feedback loop)
+                    from app.functions.decisionFunction import get_recent_decisions
+                    recent_decisions = await get_recent_decisions(
+                        user.id, service_name, endpoint
+                    )
+
+                    # 6. Get current thresholds
                     current = await get_all_thresholds(
                         async_session, user.id, service_name, endpoint
                     )
