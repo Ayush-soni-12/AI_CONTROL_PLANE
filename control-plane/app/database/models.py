@@ -25,6 +25,9 @@ class Signal(Base):
     
     # NEW: Edge SDK Action Taken locally without hitting control plane decision
     action_taken = Column(String, nullable=True, server_default=text("'none'"))
+    
+    # NEW: Feature Flag telemetry for automated rollbacks
+    flag_name = Column(String, nullable=True, index=True)
 
     user = relationship("User", back_populates="signals")
     
@@ -397,6 +400,9 @@ class Incident(Base):
 
     # Trace link — join key between this incident and the spans that caused it
     trace_id           = Column(String(32), nullable=True, index=True)
+    
+    # Feature Flag link — maps this incident to a specific flag (populated by background AI or signals)
+    flag_name          = Column(String(255), nullable=True, index=True)
 
     # AI root cause analysis (filled by background job or on demand)
     root_cause_summary = Column(Text, nullable=True)
@@ -522,3 +528,47 @@ class Span(Base):
         # User-scoped lookup for dashboard queries
         Index('idx_spans_user_created', 'user_id', 'created_at'),
     )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Feature Flags
+# ─────────────────────────────────────────────────────────────────────────────
+
+class FeatureFlag(Base):
+    """
+    Application feature flags with percentage-based rollout.
+    Synchronized to the Node.js SDK via Server-Sent Events (SSE).
+    """
+    __tablename__ = "feature_flags"
+    
+    id              = Column(Integer, primary_key=True)
+    name            = Column(String(255), nullable=False)
+    service_name    = Column(String(255), nullable=False, index=True)
+    tenant_id       = Column(String(255), nullable=False, index=True)
+    rollout_percent = Column(Integer, nullable=False, default=0)
+    status          = Column(String(50), nullable=False, default="disabled") # 'enabled', 'disabled', 'auto-disabled'
+    updated_at      = Column(TIMESTAMP(timezone=True), server_default=text('now()'), onupdate=text('now()'))
+    updated_by      = Column(String(255), nullable=False)
+    created_at      = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
+
+    __table_args__ = (
+        Index('idx_feature_flag_unique_name', 'name', 'service_name', unique=True),
+    )
+
+
+class FlagAuditLog(Base):
+    """
+    Append-only audit log tracking changes to feature flags, 
+    including automated kill-switch events executed by the AI.
+    """
+    __tablename__ = "flag_audit_logs"
+    
+    id           = Column(Integer, primary_key=True)
+    flag_name    = Column(String(255), nullable=False, index=True)
+    service_name = Column(String(255), nullable=False, index=True)
+    old_rollout  = Column(Integer, nullable=False)
+    new_rollout  = Column(Integer, nullable=False)
+    changed_by   = Column(String(255), nullable=False)
+    reason       = Column(String(1000), nullable=True)
+    trace_id     = Column(String(32), nullable=True)
+    created_at   = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
+
