@@ -72,6 +72,6 @@ jobs:
             tail -n 50 deploy.log
 
             echo "🌐 Checking health endpoint..."
-            curl -f http://localhost:8000/health || exit 1
+            curl -f https://api.neuralcontrol.online/health || exit 1
 
             echo "✅ Deployment successful 🎉"
