@@ -11,6 +11,9 @@ import {
   Clock,
   ShieldOff,
   Brain,
+  Timer,
+  GitPullRequest,
+  Flag,
   LucideIcon,
 } from "lucide-react";
 
@@ -99,6 +102,30 @@ const features: Feature[] = [
     details: ["Gemini AI analysis", "Dynamic thresholds", "Anomaly detection"],
     gradient: "from-violet-500 to-purple-500",
     iconColor: "text-violet-400",
+  },
+  {
+    icon: Timer,
+    title: "Adaptive Timeout",
+    description: "Dynamic request timeout that adjusts based on real‑time latency and load, preventing hangs.",
+    details: ["Latency‑aware", "Auto‑adjust", "Graceful abort"],
+    gradient: "from-indigo-500 to-blue-500",
+    iconColor: "text-indigo-400",
+  },
+  {
+    icon: GitPullRequest,
+    title: "Request Coalescing",
+    description: "Combines identical in‑flight requests to reduce load and improve latency.",
+    details: ["Deduplicate", "Batch responses", "Reduce backend pressure"],
+    gradient: "from-teal-500 to-cyan-500",
+    iconColor: "text-teal-400",
+  },
+  {
+    icon: Flag,
+    title: "Feature Flag System",
+    description: "Fine‑grained rollout control for new capabilities with percentage‑based targeting.",
+    details: ["Gradual rollout", "Targeted users", "Instant toggle"],
+    gradient: "from-rose-500 to-pink-500",
+    iconColor: "text-rose-400",
   },
 ];
 
