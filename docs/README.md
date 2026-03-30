@@ -1,5 +1,11 @@
 # 🚀 AI Control Plane
 
+## 📌 Problem Statement
+Many small services get overwhelmed when traffic suddenly spikes. This causes slow responses, errors, and can crash the system. Fixing this usually means constantly changing settings like rate limits and timeouts, which is hard and error‑prone.
+
+## 🛠️ Solution Overview
+AI Control Plane watches how your services are performing and automatically adjusts things like timeouts, circuit breakers, and caching. It does this without you having to change any config files.
+
 > **Intelligent runtime protection for microservices** — AI-driven circuit breaking, rate limiting, caching, and load shedding that adapts automatically without manual tuning.
 
 ---
@@ -14,20 +20,20 @@ Microservices fail under unpredictable traffic spikes. Traditional static rate l
 
 ## ✨ Features
 
-- 🚩 **Feature Flags** — Zero-latency, consistent-hashing flag evaluation with AI auto-kill switch
-- 🔍 **Distributed Tracing** — OpenTelemetry-compatible span tracking for pinpointing latency sources
-- 🤖 **AI-Powered Decisions** — Analyzes the last N performance signals and adjusts thresholds dynamically using Gemini-guided decision logic
-- 📊 **Real-Time Monitoring** — SSE-based live dashboard with p50/p95/p99 latency tracking
-- 🔄 **Dynamic Caching** — AI enables caching when p95 latency exceeds adaptive thresholds
-- ⏱️ **Adaptive Timeout** — Fails fast on latency spikes to prevent connection pool exhaustion
-- 🚦 **Rate Limiting** — AI-tuned per-tenant rate limits, enforced via HTTP 429 with Retry-After
-- ⚖️ **Load Shedding** — Graceful degradation under traffic spikes; sheds low-priority requests first
-- 📋 **Queue Deferral** — Async processing for non-critical operations via RabbitMQ
-- ⚡ **Circuit Breaker** — Opens at >5% error rate; auto-recovers when metrics normalize
-- 🤝 **Request Coalescing** — Collapses multiple simultaneous requests for the same resource into a single backend call
-- 👥 **Multi-Tenant** — Isolated metrics, thresholds, and decisions per tenant
-- 📦 **SDK** — Drop-in Express middleware (`npm install neuralcontrol`)
-- 🐳 **Docker Ready** — Full stack with one command
+- 🚩 **Feature Flags** — Turn features on or off instantly; the system can automatically disable a flag if it causes problems.
+- 🔍 **Distributed Tracing** — Shows where time is spent in each request.
+- 🤖 **AI-Powered Decisions** — The AI looks at recent performance data and decides how to adjust settings.
+- 📊 **Real-Time Monitoring** — Live dashboard that shows latency numbers.
+- 🔄 **Dynamic Caching** — Caches responses automatically when it helps performance.
+- ⏱️ **Adaptive Timeout** — Quickly stops slow requests to protect the system.
+- 🚦 **Rate Limiting** — Limits how many requests each user can make, adjusted automatically.
+- ⚖️ **Load Shedding** — Drops low‑priority requests when the system is overloaded.
+- 📋 **Queue Deferral** — Sends non‑critical work to a background queue.
+- ⚡ **Circuit Breaker** — Stops calling a failing service and resumes when it’s healthy again.
+- 🤝 **Request Coalescing** — Combines identical requests so only one reaches the backend.
+- 👥 **Multi-Tenant** — Keeps data and settings separate for each customer.
+- 📦 **SDK** — Easy‑to‑use library you add to your code (`npm install neuralcontrol`).
+- 🐳 **Docker Ready** — Run everything with a single Docker command.
 
 ---
 
