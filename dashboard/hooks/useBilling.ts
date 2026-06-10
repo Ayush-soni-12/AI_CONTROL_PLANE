@@ -139,7 +139,12 @@ export const useUpgradePlan = (userInfo?: { name?: string; email?: string }) => 
         body: JSON.stringify({ plan: planTier }),
       });
       if (!res.ok) throw new Error('Failed to create payment order');
-      const data: CreateOrderResponse = await res.json();
+      const data: CreateOrderResponse & { message?: string } = await res.json();
+
+      // Guard: backend returned self-hosted "billing not enabled" message
+      if (data.message || !data.key_id || !data.order_id) {
+        throw new Error(data.message ?? 'Billing is not enabled on this server.');
+      }
 
       // Step 2: Load checkout.js
       const loaded = await loadRazorpayScript();
