@@ -1,0 +1,8 @@
+{
+  "name": "razorpay-webhook-worker",
+  "version": "1.0.0",
+  "description": "AWS Lambda worker for Razorpay Webhooks",
+  "dependencies": {
+    "serverless-python-requirements": "^6.0.0"
+  }
+}

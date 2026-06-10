@@ -1,0 +1,22 @@
+service: neuralcontrol-webhooks
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: ap-south-1 # Mumbai
+  environment:
+    RAZORPAY_WEBHOOK_SECRET: ${env:RAZORPAY_WEBHOOK_SECRET}
+    DATABASE_URL: ${env:DATABASE_URL}
+    
+custom:
+  pythonRequirements:
+    dockerizePip: false # Assuming deployment from Linux, psycopg2-binary usually installs fine without dockerizePip
+
+functions:
+  razorpayWebhook:
+    handler: handler.process_webhook
+    events:
+      - http:
+          path: /billing/webhook
+          method: post
+          cors: true
