@@ -222,6 +222,8 @@ app.include_router(adaptive_timeout.router)
 # Distributed Tracing collector
 app.include_router(traces.router)
 
+print(f"check the github actions ")
+
 # Feature Flags
 from app.router import flags
 app.include_router(flags.router)
