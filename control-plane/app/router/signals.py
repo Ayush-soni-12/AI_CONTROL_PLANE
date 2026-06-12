@@ -12,7 +12,6 @@ from collections import defaultdict
 from app.queue.email_publisher import publish_email
 from app.redis.cache import cache_get, cache_set, invalidate_user_cache
 from app.queue.publisher import publish_signal
-from app.realtime_aggregates import update_realtime_aggregate
 import time
 from typing import List, Optional
 from pydantic import BaseModel
@@ -54,24 +53,6 @@ async def receive_signal(
     # Build the signal payload (include user_id so the consumer knows which user)
     signal_data = signals.model_dump()
     signal_data['user_id'] = current_user.id
-
-    # ── STEP 0: Update Redis aggregates immediately (inline) ─────────────────
-    # This ensures the dashboard signal count is always up-to-date,
-    # even when the RabbitMQ consumer is not running (e.g. local dev).
-    try:
-        await update_realtime_aggregate(
-            user_id=current_user.id,
-            service_name=signals.service_name,
-            endpoint=signals.endpoint,
-            latency_ms=signals.latency_ms,
-            status=signals.status,
-            customer_identifier=getattr(signals, 'customer_identifier', None),
-            priority=getattr(signals, 'priority', 'medium'),
-            action_taken=getattr(signals, 'action_taken', 'none'),
-            flag_name=getattr(signals, 'flag_name', None),
-        )
-    except Exception as _agg_err:
-        print(f"⚠️  [signals] Inline aggregate update failed (non-critical): {_agg_err}")
 
     # Publish to RabbitMQ — instant, non-blocking
     # Raises 503 only if RabbitMQ itself is unreachable (very rare)
@@ -135,23 +116,6 @@ async def receive_signal_batch(
                     # Keep it as string, Pydantic/SQLAlchemy will parse it from ISO or consumer will handle
                     signal_data['timestamp'] = datetime.fromisoformat(recorded_val.replace('Z', '+00:00'))
             
-            # ── Inline Redis aggregate update ──────────────────────────────────
-            # Keeps dashboard count accurate regardless of RabbitMQ consumer state.
-            try:
-                await update_realtime_aggregate(
-                    user_id=current_user.id,
-                    service_name=signal.service_name,
-                    endpoint=signal.endpoint,
-                    latency_ms=signal.latency_ms,
-                    status=signal.status,
-                    customer_identifier=signal.customer_identifier,
-                    priority=signal.priority or 'medium',
-                    action_taken=signal.action_taken or 'none',
-                    flag_name=signal.flag_name,
-                )
-            except Exception as _agg_err:
-                print(f"⚠️  [batch] Inline aggregate update failed (non-critical): {_agg_err}")
-
             # Send each to RabbitMQ just like the single endpoint does
             await publish_signal(signal_data)
             processed += 1

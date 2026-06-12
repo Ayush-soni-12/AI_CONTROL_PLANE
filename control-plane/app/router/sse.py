@@ -324,32 +324,16 @@ async def stream_services(
                             total_errors=metrics_1h.get('errors', 0)
                         )
                     else:
-                        # Not enough data in Redis — show real metrics but skip AI decision.
-                        # Fall back to a direct DB COUNT to ensure signal_count is never 0
-                        # when signals exist in the database (e.g. Redis cold-start in prod).
+                        # Not enough data — show real metrics but skip AI decision
                         avg_latency = metrics_1h['avg_latency'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
                         error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                        signal_count = metrics_1h['count'] if metrics_1h else 0
                         requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
                         rate_limit_enabled = False
                         p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
                         p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
                         p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
-
-                        # ── Direct DB count fallback ──────────────────────────────
-                        # Use the session already open in this loop (safe, no conflict).
-                        from sqlalchemy import func as _func
-                        try:
-                            _count_stmt = select(_func.count()).select_from(models.Signal).where(
-                                models.Signal.user_id == current_user.id,
-                                models.Signal.service_name == service_name,
-                                models.Signal.endpoint == endpoint,
-                            )
-                            _count_result = await db.execute(_count_stmt)
-                            signal_count = _count_result.scalar_one() or 0
-                        except Exception as _ce:
-                            print(f"⚠️  [SSE] DB count fallback failed: {_ce}")
-                            signal_count = metrics_1h['count'] if metrics_1h else 0
-
+                        
                         ai_decision = {
                             'cache_enabled': False,
                             'circuit_breaker': False,
