@@ -103,6 +103,10 @@ async def update_realtime_aggregate(
             if data:
                 agg = json.loads(data)
             else:
+                # Always start fresh from zero when the Redis key is missing/expired.
+                # The snapshot is only a READ fallback in get_realtime_metrics — it must
+                # never be pre-seeded here, or every new signal would be counted as
+                # snapshot_count + 1 instead of just 1, inflating all metrics.
                 agg = {
                     'count': 0,
                     'sum_latency': 0,
@@ -111,23 +115,6 @@ async def update_realtime_aggregate(
                     'last_updated': None,
                     'window_start': current_timestamp if window == '1m' else None
                 }
-                
-                # FIX: Initialize from latest snapshot to prevent drop after Redis TTL expires
-                if window in ['1h', '24h']:
-                    try:
-                        from app.redis.aggregate_persistence import get_snapshot_metrics
-                        recent_snap = await get_snapshot_metrics(
-                            user_id=user_id,
-                            service_name=service_name,
-                            endpoint=endpoint,
-                            window=window
-                        )
-                        if recent_snap:
-                            agg['count'] = recent_snap.get('count', 0)
-                            agg['sum_latency'] = recent_snap.get('sum_latency', 0)
-                            agg['errors'] = recent_snap.get('errors', 0)
-                    except Exception as e:
-                        print(f"⚠️ Could not initialize from snapshot: {e}")
             
             # Update counters
             agg['count'] += 1

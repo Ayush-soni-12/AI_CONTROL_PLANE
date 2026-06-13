@@ -103,15 +103,17 @@ async def _on_message(message: aio_pika.abc.AbstractIncomingMessage) -> None:
     """
     Called for each message delivered by RabbitMQ.
     ACK on success, NACK (requeue) on failure so the message is retried.
+
+    NOTE: Do NOT call message.nack() manually inside here.
+    The message.process(requeue=True) context manager already nacks automatically
+    when an exception propagates — a manual nack causes a double-nack which
+    requeues the message twice and leads to duplicate DB writes.
     """
     async with message.process(requeue=True, ignore_processed=True):
-        try:
-            signal_data = json.loads(message.body.decode())
-            await _process_signal(signal_data)
-            # ACK is sent automatically when the context manager exits cleanly
-        except Exception as exc:
-            print(f"❌ [Consumer] Failed to process signal: {exc} — requeueing")
-            await message.nack(requeue=True)
+        signal_data = json.loads(message.body.decode())
+        await _process_signal(signal_data)
+        # ACK sent automatically when context manager exits cleanly.
+        # On exception: context manager nacks + requeues automatically.
 
 
 async def start_signal_consumer() -> None:
