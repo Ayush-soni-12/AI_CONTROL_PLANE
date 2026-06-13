@@ -73,22 +73,33 @@ async def _process_signal(signal_data: dict) -> None:
 
     if should_store:
         async with AsyncSessionLocal() as db:
-            # Pop trace_id since it belongs purely to the spans/incidents model hierarchy
-            # and we intentionally keep the dense signals table as lightweight as possible.
-            signal_data.pop("trace_id", None)
-            # flag_name is stored on the Signal row for linking signals to feature flags
-            # (no pop needed — it maps directly to the Signal.flag_name column)
-            
-            # The timestamp from JS might be a string (e.g. from recorded_at or timestamp)
-            ts_str = signal_data.get("timestamp") or signal_data.get("recorded_at")
-            if ts_str and isinstance(ts_str, str):
+            # Build a clean dict with ONLY the columns that exist on the Signal model.
+            # The SDK sends extra fields (recorded_at, trace_id) that are NOT Signal columns.
+            # Passing them to models.Signal(**signal_data) causes SQLAlchemy to silently
+            # accept them in some versions, creating unpredictable ORM state.
+
+            # Resolve timestamp: SDK sends 'recorded_at' (ISO string); fall back to 'timestamp'
+            ts_raw = signal_data.get("timestamp") or signal_data.get("recorded_at")
+            resolved_ts = None
+            if ts_raw and isinstance(ts_raw, str):
                 try:
-                    # Remove 'Z' if present for fromisoformat compatibility in <3.11
-                    signal_data["timestamp"] = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                    resolved_ts = datetime.fromisoformat(ts_raw.replace('Z', '+00:00'))
                 except ValueError:
                     pass
-                    
-            signal = models.Signal(**signal_data)
+            elif isinstance(ts_raw, datetime):
+                resolved_ts = ts_raw
+
+            # Only include columns that exist in the Signal model
+            SIGNAL_COLUMNS = {
+                "user_id", "service_name", "tenant_id", "endpoint",
+                "latency_ms", "status", "priority",
+                "customer_identifier", "action_taken", "flag_name",
+            }
+            clean = {k: v for k, v in signal_data.items() if k in SIGNAL_COLUMNS}
+            if resolved_ts:
+                clean["timestamp"] = resolved_ts
+
+            signal = models.Signal(**clean)
             db.add(signal)
             await db.commit()
         print(f"💾 [Consumer] Signal stored in DB | {service_name}{endpoint}")
