@@ -48,24 +48,7 @@ async def _process_signal(signal_data: dict) -> None:
     action_taken   = signal_data.get("action_taken", "none")
     flag_name      = signal_data.get("flag_name")
 
-    # ── STEP 1: Update Redis real-time aggregates ──────────────────────────
-    await update_realtime_aggregate(
-        user_id=user_id,
-        service_name=service_name,
-        endpoint=endpoint,
-        latency_ms=latency_ms,
-        status=sig_status,
-        customer_identifier=customer_id,
-        priority=priority,
-        action_taken=action_taken,
-        flag_name=flag_name,
-    )
-    print(
-        f"✅ [Consumer] Redis updated | "
-        f"{service_name}{endpoint} | user_id={user_id}"
-    )
-
-    # ── STEP 2: Store in PostgreSQL (sampling logic) ───────────────────────
+    # ── STEP 1: Store in PostgreSQL (sampling logic) ───────────────────────
     should_store = (
         sig_status == "error"
         or random.random() < settings.SIGNAL_SAMPLING_RATE
@@ -101,10 +84,28 @@ async def _process_signal(signal_data: dict) -> None:
 
             signal = models.Signal(**clean)
             db.add(signal)
-            await db.commit()
+            await db.commit()  # If this fails due to a stale connection, the exception bubbles up and the message is requeued *before* Redis is updated.
         print(f"💾 [Consumer] Signal stored in DB | {service_name}{endpoint}")
     else:
         print(f"⏭️  [Consumer] Signal aggregated only (sampling) | {service_name}{endpoint}")
+
+    # ── STEP 2: Update Redis real-time aggregates ──────────────────────────
+    # Moved AFTER database commit to prevent duplicate Redis increments on DB connection retries
+    await update_realtime_aggregate(
+        user_id=user_id,
+        service_name=service_name,
+        endpoint=endpoint,
+        latency_ms=latency_ms,
+        status=sig_status,
+        customer_identifier=customer_id,
+        priority=priority,
+        action_taken=action_taken,
+        flag_name=flag_name,
+    )
+    print(
+        f"✅ [Consumer] Redis updated | "
+        f"{service_name}{endpoint} | user_id={user_id}"
+    )
 
     # ── STEP 3: Invalidate user cache ─────────────────────────────────────
     await invalidate_user_cache(user_id)
