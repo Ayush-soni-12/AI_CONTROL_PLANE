@@ -93,23 +93,15 @@ async def stream_signals(
                 }
                 
                 # Wait 2 seconds before next update (same as polling interval)
-                await asyncio.sleep(2)
-                
+                await asyncio.sleep(2)        
         except asyncio.CancelledError:
-            if 'db' in locals() and not db.is_active:
-                await getattr(db, 'close')()
             print(f"🛑 SSE stream cancelled for user {current_user.id}")
         except Exception as e:
-            if 'db' in locals() and not db.is_active:
-                await getattr(db, 'close')()
             print(f"❌ Error in SSE stream: {e}")
             yield {
                 "event": "error",
                 "data": json.dumps({"error": str(e)})
             }
-        finally:
-            if 'db' in locals():
-                await db.close()
     
     return EventSourceResponse(event_generator())
 
@@ -174,8 +166,7 @@ async def stream_service_signals(
                 }
                 
                 # Wait 2 seconds before next update (same as polling interval)
-                await asyncio.sleep(2)
-                
+                await asyncio.sleep(2)        
         except asyncio.CancelledError:
             print(f"🛑 SSE stream cancelled for user {current_user.id} (service: {service_name})")
         except Exception as e:
@@ -238,252 +229,245 @@ async def stream_services(
                 from app.functions.decisionFunction import _compute_trends
                 
                 db = AsyncSessionLocal()
-                
-                # STEP 1: Get unique service/endpoint combinations
-                stmt = select(
-                    models.Signal.service_name,
-                    models.Signal.endpoint
-                ).filter(
-                    models.Signal.user_id == current_user.id
-                ).distinct()
-                result = await db.execute(stmt)
-                distinct_endpoints = result.all()
-                
-                if not distinct_endpoints:
-                    yield {
-                        "event": "services",
-                        "data": json.dumps({
-                            "services": [],
-                            "overall": {
-                                "total_signals": 0,
-                                "avg_latency": 0,
-                                "error_rate": 0,
-                                "active_services": 0
-                            }
-                        })
-                    }
-                    await db.close()
-                    await asyncio.sleep(2)
-                    continue
-                
-                # STEP 2: Build service metrics using Redis aggregates
-                service_map = defaultdict(lambda: {
-                    'endpoints': [],
-                    'total_signals': 0,
-                    'total_latency': 0,
-                    'total_errors': 0
-                })
-                
-                for service_name, endpoint in distinct_endpoints:
-                    # Get metrics from Redis (1h and 24h for trends)
-                    metrics_1h = await get_realtime_metrics(
-                        user_id=current_user.id,
-                        service_name=service_name,
-                        endpoint=endpoint,
-                        window='1h',
-                        db=db
-                    )
-                    metrics_24h = await get_realtime_metrics(
-                        user_id=current_user.id,
-                        service_name=service_name,
-                        endpoint=endpoint,
-                        window='24h',
-                        db=db
-                    )
-                    
-                    trends = _compute_trends(metrics_1h, metrics_24h)
-                    
-                    endpoint_normalized = endpoint if endpoint.startswith('/') else '/' + endpoint
-                    
-                    if metrics_1h and metrics_1h['count'] >= 3:
-                        # Enough data — use real metrics and get AI decision
-                        avg_latency = metrics_1h['avg_latency']
-                        error_rate = metrics_1h['error_rate']
-                        signal_count = metrics_1h['count']
-                        requests_per_minute = metrics_1h.get('requests_per_minute', 0)
-                        p50 = metrics_1h.get('p50', 0)
-                        p95 = metrics_1h.get('p95', 0)
-                        p99 = metrics_1h.get('p99', 0)
-                        rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
-
-                        ai_decision = await get_ai_tuned_decision(
-                            service_name, 
-                            endpoint_normalized, 
-                            avg_latency, 
-                            error_rate,
-                            requests_per_minute=requests_per_minute,
-                            user_id=current_user.id,
-                            db=db,
-                            p50_latency=p50,
-                            p95_latency=p95,
-                            p99_latency=p99,
-                            latency_trend=trends['latency_trend'],
-                            error_trend=trends['error_trend'],
-                            rpm_trend=trends['rpm_trend'],
-                            total_count=metrics_1h.get('count', 0),
-                            total_errors=metrics_1h.get('errors', 0)
-                        )
-                    else:
-                        # Not enough data — show real metrics but skip AI decision
-                        avg_latency = metrics_1h['avg_latency'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
-                        error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
-                        signal_count = metrics_1h['count'] if metrics_1h else 0
-                        requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
-                        rate_limit_enabled = False
-                        p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
-                        p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
-                        p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
-                        
-                        ai_decision = {
-                            'cache_enabled': False,
-                            'circuit_breaker': False,
-                            'queue_deferral': False,
-                            'load_shedding': False,
-                            'request_coalescing': False,
-                            'reasoning': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
-                            'status': 'healthy'
-                        }
-
-                    # Get most recent signal for tenant_id
-                    stmt = select(models.Signal).filter(
-                        models.Signal.user_id == current_user.id,
-                        models.Signal.service_name == service_name,
-                        models.Signal.endpoint == endpoint
-                    ).order_by(models.Signal.timestamp.desc())
+                try:
+                        # STEP 1: Get unique service/endpoint combinations
+                    stmt = select(
+                        models.Signal.service_name,
+                        models.Signal.endpoint
+                    ).filter(
+                        models.Signal.user_id == current_user.id
+                    ).distinct()
                     result = await db.execute(stmt)
-                    recent_signal = result.scalars().first()
-                    
-                    tenant_id = recent_signal.tenant_id if recent_signal else None
-                    
-                    # Get effective threshold values (AI + override) for frontend
-                    thresholds = await get_all_thresholds_with_override(
-                        db, current_user.id, service_name, endpoint_normalized
-                    )
-                    
-                    # Build endpoint metrics  
-                    endpoint_metrics = {
-                        'path': endpoint,
-                        'avg_latency': avg_latency,
-                        'error_rate': error_rate,
-                        'signal_count': signal_count,
-                        'tenant_id': tenant_id,
-                        'cache_enabled': ai_decision['cache_enabled'],
-                        'circuit_breaker': ai_decision['circuit_breaker'],
-                        'rate_limit_enabled': rate_limit_enabled,
-                        'queue_deferral': ai_decision.get('queue_deferral', False),
-                        'load_shedding': ai_decision.get('load_shedding', False),
-                        'request_coalescing': ai_decision.get('request_coalescing', False),
-                        'reasoning': ai_decision['reasoning'],
-                        'status': ai_decision.get('status', 'healthy'),
-                        'thresholds': {
-                            'cache_latency_ms': thresholds['cache_latency_ms'],
-                            'circuit_breaker_error_rate': thresholds['circuit_breaker_error_rate'],
-                            'queue_deferral_rpm': thresholds['queue_deferral_rpm'],
-                            'load_shedding_rpm': thresholds['load_shedding_rpm'],
-                            'rate_limit_customer_rpm': thresholds['rate_limit_customer_rpm'],
-                            'source': thresholds.get('source', 'default')
+                    distinct_endpoints = result.all()
+                
+                    if not distinct_endpoints:
+                        await db.close()
+                        yield {
+                            "event": "services",
+                            "data": json.dumps({
+                                "services": [],
+                                "overall": {
+                                    "total_signals": 0,
+                                    "avg_latency": 0,
+                                    "error_rate": 0,
+                                    "active_services": 0
+                                }
+                            })
                         }
-                    }
-                    
-                    # Accumulate for service-level metrics
-                    service_map[service_name]['endpoints'].append(endpoint_metrics)
-                    service_map[service_name]['total_signals'] += signal_count
-                    service_map[service_name]['total_latency'] += avg_latency * signal_count
-                    service_map[service_name]['total_errors'] += error_rate * signal_count
-                
-                # STEP 3: Build service list
-                services = []
-                
-                for service_name, data in service_map.items():
-                    if not data['endpoints']:
+                        await asyncio.sleep(2)
                         continue
-                    
-                    total_signals = data['total_signals']
-                    avg_latency = data['total_latency'] / total_signals if total_signals > 0 else 0
-                    error_rate = data['total_errors'] / total_signals if total_signals > 0 else 0
-                    
-                    # Get last signal timestamp
-                    stmt = select(models.Signal).filter(
-                        models.Signal.user_id == current_user.id,
-                        models.Signal.service_name == service_name
-                    ).order_by(models.Signal.timestamp.desc())
-                    result = await db.execute(stmt)
-                    last_signal_record = result.scalars().first()
-                    
-                    last_signal = last_signal_record.timestamp.isoformat() if last_signal_record else None
-                    
-                    # Determine status
-                    endpoint_statuses = [e.get('status', 'healthy') for e in data['endpoints']]
-                    if 'down' in endpoint_statuses:
-                        status = 'down'
-                    elif 'degraded' in endpoint_statuses:
-                        status = 'degraded'
-                    else:
-                        status = 'healthy'
-                    
-                    services.append({
-                        'name': service_name,
-                        'endpoints': data['endpoints'],
-                        'total_signals': total_signals,
-                        'avg_latency': avg_latency,
-                        'error_rate': error_rate,
-                        'last_signal': last_signal,
-                        'status': status
+                
+                    # STEP 2: Build service metrics using Redis aggregates
+                    service_map = defaultdict(lambda: {
+                        'endpoints': [],
+                        'total_signals': 0,
+                        'total_latency': 0,
+                        'total_errors': 0
                     })
                 
-                # Calculate overall metrics
-                if services:
-                    overall_total_signals = sum(s['total_signals'] for s in services)
-                    overall_avg_latency = sum(s['avg_latency'] * s['total_signals'] for s in services) / overall_total_signals if overall_total_signals > 0 else 0
-                    overall_error_rate = sum(s['error_rate'] * s['total_signals'] for s in services) / overall_total_signals if overall_total_signals > 0 else 0
-                    overall_active_services = len(services)
-                else:
-                    overall_total_signals = 0
-                    overall_avg_latency = 0
-                    overall_error_rate = 0
-                    overall_active_services = 0
+                    for service_name, endpoint in distinct_endpoints:
+                        # Get metrics from Redis (1h and 24h for trends)
+                        metrics_1h = await get_realtime_metrics(
+                            user_id=current_user.id,
+                            service_name=service_name,
+                            endpoint=endpoint,
+                            window='1h',
+                            db=db
+                        )
+                        metrics_24h = await get_realtime_metrics(
+                            user_id=current_user.id,
+                            service_name=service_name,
+                            endpoint=endpoint,
+                            window='24h',
+                            db=db
+                        )
+                    
+                        trends = _compute_trends(metrics_1h, metrics_24h)
+                    
+                        endpoint_normalized = endpoint if endpoint.startswith('/') else '/' + endpoint
+                    
+                        if metrics_1h and metrics_1h['count'] >= 3:
+                            # Enough data — use real metrics and get AI decision
+                            avg_latency = metrics_1h['avg_latency']
+                            error_rate = metrics_1h['error_rate']
+                            signal_count = metrics_1h['count']
+                            requests_per_minute = metrics_1h.get('requests_per_minute', 0)
+                            p50 = metrics_1h.get('p50', 0)
+                            p95 = metrics_1h.get('p95', 0)
+                            p99 = metrics_1h.get('p99', 0)
+                            rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
+
+                            ai_decision = await get_ai_tuned_decision(
+                                service_name, 
+                                endpoint_normalized, 
+                                avg_latency, 
+                                error_rate,
+                                requests_per_minute=requests_per_minute,
+                                user_id=current_user.id,
+                                db=db,
+                                p50_latency=p50,
+                                p95_latency=p95,
+                                p99_latency=p99,
+                                latency_trend=trends['latency_trend'],
+                                error_trend=trends['error_trend'],
+                                rpm_trend=trends['rpm_trend'],
+                                total_count=metrics_1h.get('count', 0),
+                                total_errors=metrics_1h.get('errors', 0)
+                            )
+                        else:
+                            # Not enough data — show real metrics but skip AI decision
+                            avg_latency = metrics_1h['avg_latency'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                            error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                            signal_count = metrics_1h['count'] if metrics_1h else 0
+                            requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
+                            rate_limit_enabled = False
+                            p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
+                            p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
+                            p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
+                        
+                            ai_decision = {
+                                'cache_enabled': False,
+                                'circuit_breaker': False,
+                                'queue_deferral': False,
+                                'load_shedding': False,
+                                'request_coalescing': False,
+                                'reasoning': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
+                                'status': 'healthy'
+                            }
+
+                        # Get most recent signal for tenant_id
+                        stmt = select(models.Signal).filter(
+                            models.Signal.user_id == current_user.id,
+                            models.Signal.service_name == service_name,
+                            models.Signal.endpoint == endpoint
+                        ).order_by(models.Signal.timestamp.desc())
+                        result = await db.execute(stmt)
+                        recent_signal = result.scalars().first()
+                    
+                        tenant_id = recent_signal.tenant_id if recent_signal else None
+                    
+                        # Get effective threshold values (AI + override) for frontend
+                        thresholds = await get_all_thresholds_with_override(
+                            db, current_user.id, service_name, endpoint_normalized
+                        )
+                    
+                        # Build endpoint metrics  
+                        endpoint_metrics = {
+                            'path': endpoint,
+                            'avg_latency': avg_latency,
+                            'error_rate': error_rate,
+                            'signal_count': signal_count,
+                            'tenant_id': tenant_id,
+                            'cache_enabled': ai_decision['cache_enabled'],
+                            'circuit_breaker': ai_decision['circuit_breaker'],
+                            'rate_limit_enabled': rate_limit_enabled,
+                            'queue_deferral': ai_decision.get('queue_deferral', False),
+                            'load_shedding': ai_decision.get('load_shedding', False),
+                            'request_coalescing': ai_decision.get('request_coalescing', False),
+                            'reasoning': ai_decision['reasoning'],
+                            'status': ai_decision.get('status', 'healthy'),
+                            'thresholds': {
+                                'cache_latency_ms': thresholds['cache_latency_ms'],
+                                'circuit_breaker_error_rate': thresholds['circuit_breaker_error_rate'],
+                                'queue_deferral_rpm': thresholds['queue_deferral_rpm'],
+                                'load_shedding_rpm': thresholds['load_shedding_rpm'],
+                                'rate_limit_customer_rpm': thresholds['rate_limit_customer_rpm'],
+                                'source': thresholds.get('source', 'default')
+                            }
+                        }
+                    
+                        # Accumulate for service-level metrics
+                        service_map[service_name]['endpoints'].append(endpoint_metrics)
+                        service_map[service_name]['total_signals'] += signal_count
+                        service_map[service_name]['total_latency'] += avg_latency * signal_count
+                        service_map[service_name]['total_errors'] += error_rate * signal_count
                 
-                # Prepare response data
-                response_data = {
-                    "services": services,
-                    "overall": {
-                        "total_signals": overall_total_signals,
-                        "avg_latency": overall_avg_latency,
-                        "error_rate": overall_error_rate,
-                        "active_services": overall_active_services
+                    # STEP 3: Build service list
+                    services = []
+                
+                    for service_name, data in service_map.items():
+                        if not data['endpoints']:
+                            continue
+                    
+                        total_signals = data['total_signals']
+                        avg_latency = data['total_latency'] / total_signals if total_signals > 0 else 0
+                        error_rate = data['total_errors'] / total_signals if total_signals > 0 else 0
+                    
+                        # Get last signal timestamp
+                        stmt = select(models.Signal).filter(
+                            models.Signal.user_id == current_user.id,
+                            models.Signal.service_name == service_name
+                        ).order_by(models.Signal.timestamp.desc())
+                        result = await db.execute(stmt)
+                        last_signal_record = result.scalars().first()
+                    
+                        last_signal = last_signal_record.timestamp.isoformat() if last_signal_record else None
+                    
+                        # Determine status
+                        endpoint_statuses = [e.get('status', 'healthy') for e in data['endpoints']]
+                        if 'down' in endpoint_statuses:
+                            status = 'down'
+                        elif 'degraded' in endpoint_statuses:
+                            status = 'degraded'
+                        else:
+                            status = 'healthy'
+                    
+                        services.append({
+                            'name': service_name,
+                            'endpoints': data['endpoints'],
+                            'total_signals': total_signals,
+                            'avg_latency': avg_latency,
+                            'error_rate': error_rate,
+                            'last_signal': last_signal,
+                            'status': status
+                        })
+                
+                    # Calculate overall metrics
+                    if services:
+                        overall_total_signals = sum(s['total_signals'] for s in services)
+                        overall_avg_latency = sum(s['avg_latency'] * s['total_signals'] for s in services) / overall_total_signals if overall_total_signals > 0 else 0
+                        overall_error_rate = sum(s['error_rate'] * s['total_signals'] for s in services) / overall_total_signals if overall_total_signals > 0 else 0
+                        overall_active_services = len(services)
+                    else:
+                        overall_total_signals = 0
+                        overall_avg_latency = 0
+                        overall_error_rate = 0
+                        overall_active_services = 0
+                
+                    # Prepare response data
+                    response_data = {
+                        "services": services,
+                        "overall": {
+                            "total_signals": overall_total_signals,
+                            "avg_latency": overall_avg_latency,
+                            "error_rate": overall_error_rate,
+                            "active_services": overall_active_services
+                        }
                     }
-                }
                 
-                # Cache for 30 seconds (before yielding so it's available for next iteration)
-                await cache_set(cache_key, response_data, ttl=30)
-                print(f"💾 Cached /services data for user {current_user.id}")
+                    # Cache for 30 seconds (before yielding so it's available for next iteration)
+                    await cache_set(cache_key, response_data, ttl=30)
+                    print(f"💾 Cached /services data for user {current_user.id}")
                 
-                # Send event to client
+                finally:
+                    await db.close()
+
+                # Send event to client OUTSIDE the DB try/finally block so it doesn't hold the connection during yield
                 yield {
                     "event": "services",
                     "data": json.dumps(response_data)
                 }
                 
-                await db.close()
-                
                 # Wait 2 seconds before next update
-                await asyncio.sleep(2)
-                
+                await asyncio.sleep(2)        
         except asyncio.CancelledError:
-            if 'db' in locals() and not db.is_active:
-                await getattr(db, 'close')()
             print(f"🛑 SSE stream cancelled for user {current_user.id}")
         except Exception as e:
-            if 'db' in locals() and not db.is_active:
-                await getattr(db, 'close')()
             print(f"❌ Error in SSE stream: {e}")
             yield {
                 "event": "error",
                 "data": json.dumps({"error": str(e)})
             }
-        finally:
-            if 'db' in locals():
-                await getattr(db, 'close')()
     
     return EventSourceResponse(event_generator())
 
@@ -525,120 +509,123 @@ async def stream_endpoint_detail(
                 from app.functions.decisionFunction import _compute_trends
                 
                 db = AsyncSessionLocal()
-                
-                # Get metrics from Redis (1h and 24h for trends)
-                metrics_1h = await get_realtime_metrics(
-                    user_id=current_user.id,
-                    service_name=service_name,
-                    endpoint=endpoint_path,
-                    window='1h',
-                    db=db
-                )
-                metrics_24h = await get_realtime_metrics(
-                    user_id=current_user.id,
-                    service_name=service_name,
-                    endpoint=endpoint_path,
-                    window='24h',
-                    db=db
-                )
-                
-                trends = _compute_trends(metrics_1h, metrics_24h)
-                
-                if metrics_1h and metrics_1h['count'] >= 3:
-                    # Enough data — use real metrics and get AI decision
-                    total_signals = metrics_1h['count']
-                    avg_latency = metrics_1h['avg_latency']
-                    error_rate = metrics_1h['error_rate']
-                    requests_per_minute = metrics_1h.get('requests_per_minute', 0)
-                    p50 = metrics_1h.get('p50', 0)
-                    p95 = metrics_1h.get('p95', 0)
-                    p99 = metrics_1h.get('p99', 0)
-                    rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
-
-                    ai_decision = await get_ai_tuned_decision(
-                        service_name, 
-                        endpoint_path, 
-                        avg_latency, 
-                        error_rate,
-                        requests_per_minute=requests_per_minute,
+                try:
+                        # Get metrics from Redis (1h and 24h for trends)
+                    metrics_1h = await get_realtime_metrics(
                         user_id=current_user.id,
-                        db=db,
-                        p50_latency=p50,
-                        p95_latency=p95,
-                        p99_latency=p99,
-                        latency_trend=trends['latency_trend'],
-                        error_trend=trends['error_trend'],
-                        rpm_trend=trends['rpm_trend'],
-                        total_count=metrics_1h.get('count', 0),
-                        total_errors=metrics_1h.get('errors', 0)
+                        service_name=service_name,
+                        endpoint=endpoint_path,
+                        window='1h',
+                        db=db
                     )
-                else:
-                    # Not enough data — show real metrics but skip AI decision
-                    total_signals = metrics_1h['count'] if metrics_1h else 0
-                    avg_latency = metrics_1h['avg_latency'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
-                    error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
-                    requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
-                    rate_limit_enabled = False
-                    p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
-                    p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
-                    p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
+                    metrics_24h = await get_realtime_metrics(
+                        user_id=current_user.id,
+                        service_name=service_name,
+                        endpoint=endpoint_path,
+                        window='24h',
+                        db=db
+                    )
+                
+                    trends = _compute_trends(metrics_1h, metrics_24h)
+                
+                    if metrics_1h and metrics_1h['count'] >= 3:
+                        # Enough data — use real metrics and get AI decision
+                        total_signals = metrics_1h['count']
+                        avg_latency = metrics_1h['avg_latency']
+                        error_rate = metrics_1h['error_rate']
+                        requests_per_minute = metrics_1h.get('requests_per_minute', 0)
+                        p50 = metrics_1h.get('p50', 0)
+                        p95 = metrics_1h.get('p95', 0)
+                        p99 = metrics_1h.get('p99', 0)
+                        rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
+
+                        ai_decision = await get_ai_tuned_decision(
+                            service_name, 
+                            endpoint_path, 
+                            avg_latency, 
+                            error_rate,
+                            requests_per_minute=requests_per_minute,
+                            user_id=current_user.id,
+                            db=db,
+                            p50_latency=p50,
+                            p95_latency=p95,
+                            p99_latency=p99,
+                            latency_trend=trends['latency_trend'],
+                            error_trend=trends['error_trend'],
+                            rpm_trend=trends['rpm_trend'],
+                            total_count=metrics_1h.get('count', 0),
+                            total_errors=metrics_1h.get('errors', 0)
+                        )
+                    else:
+                        # Not enough data — show real metrics but skip AI decision
+                        total_signals = metrics_1h['count'] if metrics_1h else 0
+                        avg_latency = metrics_1h['avg_latency'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                        error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
+                        requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
+                        rate_limit_enabled = False
+                        p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
+                        p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
+                        p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
                     
-                    ai_decision = {
-                        'cache_enabled': False,
-                        'circuit_breaker': False,
-                        'queue_deferral': False,
-                        'load_shedding': False,
-                        'request_coalescing': False,
-                        'reasoning': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
-                        'status': 'healthy'
-                    }
+                        ai_decision = {
+                            'cache_enabled': False,
+                            'circuit_breaker': False,
+                            'queue_deferral': False,
+                            'load_shedding': False,
+                            'request_coalescing': False,
+                            'reasoning': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
+                            'status': 'healthy'
+                        }
                 
-                # Get effective threshold values (AI + override) for frontend
-                thresholds = await get_all_thresholds_with_override(
-                    db, current_user.id, service_name, endpoint_path
-                )
+                    # Get effective threshold values (AI + override) for frontend
+                    thresholds = await get_all_thresholds_with_override(
+                        db, current_user.id, service_name, endpoint_path
+                    )
 
-                # Fetch history for graph (last 20 signals from database)
-                stmt = select(models.Signal).filter(
-                    models.Signal.user_id == current_user.id,
-                    models.Signal.service_name == service_name,
-                    models.Signal.endpoint == endpoint_path
-                ).order_by(models.Signal.timestamp.desc()).limit(20)
-                result = await db.execute(stmt)
-                history_signals = result.scalars().all()
+                    # Fetch history for graph (last 20 signals from database)
+                    stmt = select(models.Signal).filter(
+                        models.Signal.user_id == current_user.id,
+                        models.Signal.service_name == service_name,
+                        models.Signal.endpoint == endpoint_path
+                    ).order_by(models.Signal.timestamp.desc()).limit(20)
+                    result = await db.execute(stmt)
+                    history_signals = result.scalars().all()
                 
-                history = []
-                for s in history_signals:
-                    history.append({
-                        "timestamp": s.timestamp.isoformat(),
-                        "latency_ms": s.latency_ms,
-                        "status": s.status
-                    })
+                    history = []
+                    for s in history_signals:
+                        history.append({
+                            "timestamp": s.timestamp.isoformat(),
+                            "latency_ms": s.latency_ms,
+                            "status": s.status
+                        })
                 
-                cache_threshold = thresholds['cache_latency_ms']
-                cb_threshold = thresholds['circuit_breaker_error_rate']
+                    cache_threshold = thresholds['cache_latency_ms']
+                    cb_threshold = thresholds['circuit_breaker_error_rate']
                 
-                # Generate suggestions using AI-tuned thresholds
-                suggestions = []
-                if error_rate > cb_threshold:
-                    suggestions.append(f"⚠️ High error rate detected ({error_rate*100:.1f}% exceeds {cb_threshold*100:.0f}% threshold). Consider implementing retry logic or circuit breakers.")
-                if avg_latency > cache_threshold:
-                    suggestions.append(f"🐌 High latency detected ({avg_latency:.0f}ms exceeds {cache_threshold}ms threshold). Consider caching frequently accessed data.")
-                if error_rate > cb_threshold * 0.5 and avg_latency > cache_threshold * 0.6:
-                    suggestions.append("💡 Both latency and errors are elevated. Review service dependencies and database queries.")
+                    # Generate suggestions using AI-tuned thresholds
+                    suggestions = []
+                    if error_rate > cb_threshold:
+                        suggestions.append(f"⚠️ High error rate detected ({error_rate*100:.1f}% exceeds {cb_threshold*100:.0f}% threshold). Consider implementing retry logic or circuit breakers.")
+                    if avg_latency > cache_threshold:
+                        suggestions.append(f"🐌 High latency detected ({avg_latency:.0f}ms exceeds {cache_threshold}ms threshold). Consider caching frequently accessed data.")
+                    if error_rate > cb_threshold * 0.5 and avg_latency > cache_threshold * 0.6:
+                        suggestions.append("💡 Both latency and errors are elevated. Review service dependencies and database queries.")
                 
-                if ai_decision['cache_enabled']:
-                    suggestions.append("✅ Caching is recommended and enabled for this endpoint.")
+                    if ai_decision['cache_enabled']:
+                        suggestions.append("✅ Caching is recommended and enabled for this endpoint.")
                 
-                if ai_decision.get('circuit_breaker'):
-                    suggestions.append("🔴 Circuit breaker is active due to high error rate. Service is in degraded mode.")
+                    if ai_decision.get('circuit_breaker'):
+                        suggestions.append("🔴 Circuit breaker is active due to high error rate. Service is in degraded mode.")
 
-                if ai_decision.get('request_coalescing'):
-                    suggestions.append("🤝 Request Coalescing is active to prevent thundering herds during latency spikes.")
+                    if ai_decision.get('request_coalescing'):
+                        suggestions.append("🤝 Request Coalescing is active to prevent thundering herds during latency spikes.")
                 
-                if not suggestions:
-                    suggestions.append("✨ Endpoint is performing well! No immediate optimizations needed.")
+                    if not suggestions:
+                        suggestions.append("✨ Endpoint is performing well! No immediate optimizations needed.")
                 
+                finally:
+                    await db.close()
+
                 # Send event to client
                 yield {
                     "event": "endpoint-detail",
@@ -667,25 +654,15 @@ async def stream_endpoint_detail(
                     })
                 }
                 
-                await db.close()
-                
                 # Wait 3 seconds before next update (same as polling interval)
-                await asyncio.sleep(3)
-                
+                await asyncio.sleep(3)        
         except asyncio.CancelledError:
-            if 'db' in locals() and not db.is_active:
-                await getattr(db, 'close')()
             print(f"🛑 SSE stream cancelled for user {current_user.id}")
         except Exception as e:
-            if 'db' in locals() and not db.is_active:
-                await getattr(db, 'close')()
             print(f"❌ Error in SSE stream: {e}")
             yield {
                 "event": "error",
                 "data": json.dumps({"error": str(e)})
             }
-        finally:
-            if 'db' in locals():
-                await getattr(db, 'close')()
     
     return EventSourceResponse(event_generator())

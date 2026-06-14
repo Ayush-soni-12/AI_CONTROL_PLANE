@@ -134,16 +134,33 @@ async def start_signal_consumer() -> None:
 
     Retries connection every 5s if RabbitMQ is not yet available.
     This is safe to run as an asyncio background task.
+
+    IMPORTANT: Each iteration MUST open a fresh channel so that
+    queue.consume() is only ever registered ONCE per channel.
+    If the same channel/queue object is reused across retries,
+    queue.consume() accumulates duplicate callbacks — causing
+    every message to invoke _on_message twice, writing two DB rows.
     """
+    from app.queue.connection import _connection  # raw connection for manual channel creation
     print("🐇 [Consumer] Starting signal consumer...")
 
     while True:
+        channel = None
         try:
+            # Always get a fresh channel for each connection attempt.
+            # We deliberately bypass the module singleton here so we
+            # don't re-use a channel that already has a consumer registered.
+            from app.queue.connection import get_rabbitmq_channel, SIGNALS_QUEUE_NAME, DEAD_LETTER_QUEUE_NAME
             channel = await get_rabbitmq_channel()
-            queue   = await channel.get_queue(SIGNALS_QUEUE_NAME)
+
+            # Declare queues (idempotent) and get a handle to the work queue
+            queue = await channel.get_queue(SIGNALS_QUEUE_NAME)
 
             print(f"🐇 [Consumer] Listening on queue: '{SIGNALS_QUEUE_NAME}'")
-            await queue.consume(_on_message)
+
+            # consume() registers the callback ONCE on this channel.
+            # The context manager in _on_message handles ack/nack.
+            consumer_tag = await queue.consume(_on_message)
 
             # Keep the consumer alive indefinitely
             await asyncio.Future()
@@ -153,4 +170,16 @@ async def start_signal_consumer() -> None:
             break
         except Exception as exc:
             print(f"❌ [Consumer] Connection error: {exc} — retrying in 5s...")
+            # Close the channel so next iteration gets a fresh one with no
+            # leftover consumer registrations.
+            if channel and not channel.is_closed:
+                try:
+                    await channel.close()
+                except Exception:
+                    pass
+            # Reset the module-level channel singleton so get_rabbitmq_channel()
+            # creates a new one on the next attempt.
+            import app.queue.connection as _conn_mod
+            _conn_mod._channel = None
+            _conn_mod._queue_declared = False
             await asyncio.sleep(5)
