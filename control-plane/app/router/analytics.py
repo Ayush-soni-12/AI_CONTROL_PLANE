@@ -99,15 +99,38 @@ async def get_traffic_patterns(
         from collections import defaultdict
         pattern_data = defaultdict(lambda: {'count': 0, 'latency_sum': 0})
         
-        for signal in signals:
-            # signal.timestamp is UTC - keep it, frontend will convert
-            hour = signal.timestamp.hour
-            day_of_week = signal.timestamp.weekday()  # Monday=0, Sunday=6
-            
-            key = (hour, day_of_week)
-            pattern_data[key]['count'] += 1
-            pattern_data[key]['latency_sum'] += signal.latency_ms
-        
+        if signals:
+            for signal in signals:
+                # signal.timestamp is UTC - keep it, frontend will convert
+                hour = signal.timestamp.hour
+                day_of_week = signal.timestamp.weekday()  # Monday=0, Sunday=6
+                
+                key = (hour, day_of_week)
+                pattern_data[key]['count'] += 1
+                pattern_data[key]['latency_sum'] += signal.latency_ms
+        else:
+            from app.database.models import SignalAggregateHourly
+            # Fallback to SignalAggregateHourly
+            query_fallback = select(
+                SignalAggregateHourly.hour_bucket,
+                SignalAggregateHourly.total_requests,
+                SignalAggregateHourly.avg_latency_ms
+            ).where(
+                and_(
+                    SignalAggregateHourly.user_id == current_user.id,
+                    SignalAggregateHourly.hour_bucket >= cutoff_date
+                )
+            )
+            result_fallback = await db.execute(query_fallback)
+            snapshots = result_fallback.all()
+            for snapshot in snapshots:
+                hour = snapshot.hour_bucket.hour
+                day_of_week = snapshot.hour_bucket.weekday()
+                
+                key = (hour, day_of_week)
+                pattern_data[key]['count'] += snapshot.total_requests
+                pattern_data[key]['latency_sum'] += snapshot.avg_latency_ms * snapshot.total_requests
+
         # Convert to response format
         patterns = [
             TrafficPatternItem(
@@ -238,7 +261,7 @@ async def get_percentiles(
                 and_(
                     AggregateSnapshot.user_id == current_user.id,
                     AggregateSnapshot.snapshot_at >= cutoff_date,
-                    AggregateSnapshot.window == '24h'  # Use 1h window for hourly granularity
+                    AggregateSnapshot.window == '1h'  # Use 1h window for hourly granularity
                 )
             )
             

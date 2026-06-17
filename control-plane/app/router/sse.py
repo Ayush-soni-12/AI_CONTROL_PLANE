@@ -83,6 +83,28 @@ async def stream_signals(
                         "priority": signal.priority
                     })
                 
+                if not signals_data:
+                    # Fallback to AggregateSnapshot
+                    stmt_agg = select(models.AggregateSnapshot).filter(
+                        models.AggregateSnapshot.user_id == current_user.id,
+                        models.AggregateSnapshot.window == '1h'
+                    ).order_by(models.AggregateSnapshot.snapshot_at.desc()).limit(20)
+                    result_agg = await db.execute(stmt_agg)
+                    snapshots = result_agg.scalars().all()
+                    
+                    for snap in snapshots:
+                        signals_data.append({
+                            "id": snap.id,
+                            "service_name": snap.service_name,
+                            "endpoint": snap.endpoint,
+                            "latency_ms": snap.avg_latency,
+                            "status": "500" if snap.error_rate > 0 else "200",
+                            "timestamp": snap.snapshot_at.isoformat(),
+                            "tenant_id": "fallback",
+                            "customer_identifier": "fallback",
+                            "priority": "medium"
+                        })
+                
                 # Send event to client
                 yield {
                     "event": "signals",
@@ -155,6 +177,29 @@ async def stream_service_signals(
                         "customer_identifier": signal.customer_identifier,
                         "priority": signal.priority
                     })
+                
+                if not signals_data:
+                    # Fallback to AggregateSnapshot
+                    stmt_agg = select(models.AggregateSnapshot).filter(
+                        models.AggregateSnapshot.user_id == current_user.id,
+                        models.AggregateSnapshot.service_name == service_name,
+                        models.AggregateSnapshot.window == '1h'
+                    ).order_by(models.AggregateSnapshot.snapshot_at.desc()).limit(20)
+                    result_agg = await db.execute(stmt_agg)
+                    snapshots = result_agg.scalars().all()
+                    
+                    for snap in snapshots:
+                        signals_data.append({
+                            "id": snap.id,
+                            "service_name": snap.service_name,
+                            "endpoint": snap.endpoint,
+                            "latency_ms": snap.avg_latency,
+                            "status": "500" if snap.error_rate > 0 else "200",
+                            "timestamp": snap.snapshot_at.isoformat(),
+                            "tenant_id": "fallback",
+                            "customer_identifier": "fallback",
+                            "priority": "medium"
+                        })
                 
                 # Send event to client
                 yield {
@@ -230,7 +275,7 @@ async def stream_services(
                 
                 db = AsyncSessionLocal()
                 try:
-                        # STEP 1: Get unique service/endpoint combinations
+                    # STEP 1: Get unique service/endpoint combinations
                     stmt = select(
                         models.Signal.service_name,
                         models.Signal.endpoint
@@ -238,7 +283,18 @@ async def stream_services(
                         models.Signal.user_id == current_user.id
                     ).distinct()
                     result = await db.execute(stmt)
-                    distinct_endpoints = result.all()
+                    distinct_endpoints = set(result.all())
+                
+                    stmt_agg = select(
+                        models.AggregateSnapshot.service_name,
+                        models.AggregateSnapshot.endpoint
+                    ).filter(
+                        models.AggregateSnapshot.user_id == current_user.id
+                    ).distinct()
+                    result_agg = await db.execute(stmt_agg)
+                    distinct_endpoints.update(result_agg.all())
+                    
+                    distinct_endpoints = list(distinct_endpoints)
                 
                     if not distinct_endpoints:
                         await db.close()
@@ -344,7 +400,10 @@ async def stream_services(
                         result = await db.execute(stmt)
                         recent_signal = result.scalars().first()
                     
-                        tenant_id = recent_signal.tenant_id if recent_signal else None
+                        if recent_signal:
+                            tenant_id = recent_signal.tenant_id
+                        else:
+                            tenant_id = None
                     
                         # Get effective threshold values (AI + override) for frontend
                         thresholds = await get_all_thresholds_with_override(
@@ -401,7 +460,16 @@ async def stream_services(
                         result = await db.execute(stmt)
                         last_signal_record = result.scalars().first()
                     
-                        last_signal = last_signal_record.timestamp.isoformat() if last_signal_record else None
+                        if last_signal_record:
+                            last_signal = last_signal_record.timestamp.isoformat()
+                        else:
+                            stmt_agg = select(models.AggregateSnapshot).filter(
+                                models.AggregateSnapshot.user_id == current_user.id,
+                                models.AggregateSnapshot.service_name == service_name
+                            ).order_by(models.AggregateSnapshot.snapshot_at.desc())
+                            result_agg = await db.execute(stmt_agg)
+                            last_agg = result_agg.scalars().first()
+                            last_signal = last_agg.snapshot_at.isoformat() if last_agg else None
                     
                         # Determine status
                         endpoint_statuses = [e.get('status', 'healthy') for e in data['endpoints']]
@@ -592,11 +660,43 @@ async def stream_endpoint_detail(
                     history_signals = result.scalars().all()
                 
                     history = []
-                    for s in history_signals:
+                    if history_signals:
+                        for s in reversed(history_signals):
+                            history.append({
+                                "timestamp": s.timestamp.isoformat(),
+                                "latency_ms": s.latency_ms,
+                                "status": s.status
+                            })
+                    else:
+                        stmt_agg = select(models.AggregateSnapshot).filter(
+                            models.AggregateSnapshot.user_id == current_user.id,
+                            models.AggregateSnapshot.service_name == service_name,
+                            models.AggregateSnapshot.endpoint == endpoint_path,
+                            models.AggregateSnapshot.window == '1h'
+                        ).order_by(models.AggregateSnapshot.snapshot_at.desc()).limit(20)
+                        result_agg = await db.execute(stmt_agg)
+                        history_aggregates = result_agg.scalars().all()
+                        for a in reversed(history_aggregates):
+                            history.append({
+                                "timestamp": a.snapshot_at.isoformat(),
+                                "latency_ms": a.avg_latency,
+                                "status": "500" if a.error_rate > 0 else "200"
+                            })
+                    
+                    # If no history from raw signals or hourly aggregates, fallback to the window's avg_latency
+                    if not history:
+                        import datetime
+                        now = datetime.datetime.now(datetime.timezone.utc)
+                        # Add two points to ensure the line chart can draw a flat line
                         history.append({
-                            "timestamp": s.timestamp.isoformat(),
-                            "latency_ms": s.latency_ms,
-                            "status": s.status
+                            "timestamp": (now - datetime.timedelta(minutes=30)).isoformat(),
+                            "latency_ms": avg_latency if avg_latency else 0,
+                            "status": "500" if error_rate > 0 else "200"
+                        })
+                        history.append({
+                            "timestamp": now.isoformat(),
+                            "latency_ms": avg_latency if avg_latency else 0,
+                            "status": "500" if error_rate > 0 else "200"
                         })
                 
                     cache_threshold = thresholds['cache_latency_ms']
