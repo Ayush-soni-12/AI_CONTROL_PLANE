@@ -1,0 +1,15 @@
+{
+  "name": "hackathon-agent",
+  "version": "1.0.0",
+  "description": "Autonomous AI Agent demo for NeuralControl x402 Agentic Payments (Avalanche Fuji Testnet)",
+  "type": "module",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js",
+    "start:bad": "node agent.js --bad"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "ethers": "^6.11.0"
+  }
+}

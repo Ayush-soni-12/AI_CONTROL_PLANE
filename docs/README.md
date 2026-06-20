@@ -21,6 +21,7 @@ Microservices fail under unpredictable traffic spikes. Traditional static rate l
 ## ✨ Features
 
 - 🚩 **Feature Flags** — Turn features on or off instantly; the system can automatically disable a flag if it causes problems.
+- 🤖 **Agentic Pay-to-Bypass** — Autonomous agents can pay in AVAX via x402 protocol to temporarily bypass rate limits.
 - 🔍 **Distributed Tracing** — Shows where time is spent in each request.
 - 🤖 **AI-Powered Decisions** — The AI looks at recent performance data and decides how to adjust settings.
 - 📊 **Real-Time Monitoring** — Live dashboard that shows latency numbers.
@@ -279,6 +280,17 @@ The current deployment runs 2 FastAPI replicas behind Nginx with Docker Compose 
 - HTTP 429 with `Retry-After` header — SDK handles retry automatically
 
 📖 [Learn More](./RATE_LIMITING.md)
+
+---
+
+### 🤖 Agentic Pay-to-Bypass (x402)
+
+- Seamlessly handles AI Agents hitting rate limits by issuing an x402 (Payment Required) invoice.
+- Authenticates agent reputation on-chain via the **ERC-8004** identity standard.
+- Agents autonomously pay AVAX on the Avalanche Fuji network to gain temporary "Burst Access", bypassing rate limits without human intervention.
+- The funds go directly from the agent to the API provider's wallet.
+
+📖 [Learn More](./RATE_LIMITING.md#agentic-pay-to-bypass-x402-)
 
 ---
 

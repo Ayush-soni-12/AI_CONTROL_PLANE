@@ -21,6 +21,7 @@ import {
   CreditCard,
   Timer,
   Flag,
+  Bot,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useLogout } from "@/hooks/useSignals";
@@ -63,6 +64,7 @@ export function DashboardSidebar() {
     { icon: AlertTriangle, label: "Incidents", href: "/dashboard/incidents" },
     { icon: Flag, label: "Feature Flags", href: "/dashboard/flags" },
     { icon: Shield, label: "Overrides", href: "/dashboard/overrides" },
+    { icon: Bot, label: "Agentic Payments", href: "/dashboard/agentic-payments" },
 
     {
       icon: Timer,

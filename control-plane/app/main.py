@@ -229,3 +229,7 @@ print(f"check the github actions ")
 # Feature Flags
 from app.router import flags
 app.include_router(flags.router)
+
+# Agentic Payments
+from app.router import agentic_payments
+app.include_router(agentic_payments.router)

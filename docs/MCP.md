@@ -121,15 +121,16 @@ Pre-built workflows the AI can follow:
 
 ---
 
-## Installation
+## Installation & Configuration
 
-The easiest way to get the MCP server is via PyPI:
+The most reliable way to run the Python-based MCP server is using `uvx` (an ultra-fast package runner that automatically downloads and runs the latest version from PyPI without messy virtual environments).
 
+If you don't have `uv` installed, you can install it via:
 ```bash
-pip install neuralcontrol-mcp
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-## Configuration
+*(Alternative: You can also run `pip install neuralcontrol-mcp` globally and use `neuralcontrol-mcp` as the command instead of `uvx`).*
 
 The MCP server needs two environment variables to talk to your Control Plane. Use the **Live URL** for the standard managed experience.
 
@@ -153,7 +154,8 @@ Add to your `.cursor/mcp.json` (or via Settings → MCP):
 {
   "mcpServers": {
     "neuralcontrol": {
-      "command": "neuralcontrol-mcp",
+      "command": "uvx",
+      "args": ["neuralcontrol-mcp"],
       "env": {
         "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
         "NEURALCONTROL_API_KEY": "your_key_here"
@@ -176,7 +178,8 @@ VS Code supports MCP servers through GitHub Copilot's Agent mode. Add to your gl
   "mcp": {
     "servers": {
       "neuralcontrol": {
-        "command": "neuralcontrol-mcp",
+        "command": "uvx",
+        "args": ["neuralcontrol-mcp"],
         "env": {
           "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
           "NEURALCONTROL_API_KEY": "your_key_here"
@@ -199,7 +202,8 @@ Windsurf supports MCP via its configuration file. Open **Windsurf Settings → M
 {
   "mcpServers": {
     "neuralcontrol": {
-      "command": "neuralcontrol-mcp",
+      "command": "uvx",
+      "args": ["neuralcontrol-mcp"],
       "env": {
         "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
         "NEURALCONTROL_API_KEY": "your_key_here"
@@ -221,7 +225,8 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "neuralcontrol": {
-      "command": "neuralcontrol-mcp",
+      "command": "uvx",
+      "args": ["neuralcontrol-mcp"],
       "env": {
         "CONTROL_PLANE_URL": "https://api.neuralcontrol.online",
         "NEURALCONTROL_API_KEY": "your_key_here"
@@ -239,7 +244,8 @@ Add to your `claude_desktop_config.json`:
 
 Antigravity supports MCP servers. Add it as a stdio-based MCP server:
 
-- **Command:** `neuralcontrol-mcp`
+- **Command:** `uvx`
+- **Args:** `["neuralcontrol-mcp"]`
 - **Transport:** `stdio`
 - **Env Vars:** Set `CONTROL_PLANE_URL` and `NEURALCONTROL_API_KEY` in the configuration.
 
