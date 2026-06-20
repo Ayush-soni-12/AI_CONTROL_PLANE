@@ -208,9 +208,8 @@ async def cleanup_old_data():
     - Daily aggregates: Keep forever
     - Traces (Spans): 48 hours
     """
-    db: AsyncSession = AsyncSessionLocal()
-    
-    try:
+    async with AsyncSessionLocal() as db:
+        try:
         now = datetime.now(timezone.utc)
         
         # Delete spans older than 48 hours

@@ -273,8 +273,7 @@ async def stream_services(
                 from app.ai_engine.threshold_manager import get_all_thresholds_with_override
                 from app.functions.decisionFunction import _compute_trends
                 
-                db = AsyncSessionLocal()
-                try:
+                async with AsyncSessionLocal() as db:
                     # STEP 1: Get unique service/endpoint combinations
                     stmt = select(
                         models.Signal.service_name,
@@ -297,7 +296,6 @@ async def stream_services(
                     distinct_endpoints = list(distinct_endpoints)
                 
                     if not distinct_endpoints:
-                        await db.close()
                         yield {
                             "event": "services",
                             "data": json.dumps({
@@ -517,9 +515,6 @@ async def stream_services(
                     await cache_set(cache_key, response_data, ttl=30)
                     print(f"💾 Cached /services data for user {current_user.id}")
                 
-                finally:
-                    await db.close()
-
                 # Send event to client OUTSIDE the DB try/finally block so it doesn't hold the connection during yield
                 yield {
                     "event": "services",
@@ -576,8 +571,7 @@ async def stream_endpoint_detail(
                 from app.ai_engine.threshold_manager import get_all_thresholds_with_override
                 from app.functions.decisionFunction import _compute_trends
                 
-                db = AsyncSessionLocal()
-                try:
+                async with AsyncSessionLocal() as db:
                         # Get metrics from Redis (1h and 24h for trends)
                     metrics_1h = await get_realtime_metrics(
                         user_id=current_user.id,
@@ -722,9 +716,6 @@ async def stream_endpoint_detail(
                 
                     if not suggestions:
                         suggestions.append("✨ Endpoint is performing well! No immediate optimizations needed.")
-                
-                finally:
-                    await db.close()
 
                 # Send event to client
                 yield {
