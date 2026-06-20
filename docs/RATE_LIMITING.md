@@ -216,6 +216,76 @@ app.get(
 
 ---
 
+## Agentic Pay-to-Bypass (x402) 🤖
+
+Standard rate limits (HTTP 429) work perfectly for humans and bad bots. However, when an autonomous AI agent hits a rate limit, it breaks. NeuralControl supports the **x402 Pay-to-Bypass** protocol to allow highly trusted AI agents to autonomously pay for temporary burst access.
+
+### How it Works:
+1. The agent sends an `x-agent-id` header with its request.
+2. If rate-limited, NeuralControl checks the agent's **ERC-8004** on-chain reputation score.
+3. If the agent is highly trusted, it returns an **HTTP 402 Payment Required** with an invoice, instead of a 429.
+4. The agent autonomously pays AVAX on the Avalanche Fuji network and submits the transaction hash.
+5. NeuralControl verifies the transaction on-chain and grants temporary "Burst Access" allowing the agent to bypass the rate limits.
+
+> **⚠️ Setup Requirement:** To use this feature, you must deploy the `ERC8004Registry.sol` smart contract (using Remix or Hardhat) to the Avalanche Fuji C-Chain and set the `ERC8004_CONTRACT_ADDRESS` in your Control Plane `.env` file. Without this, NeuralControl cannot verify agent reputations.
+
+### Implementation Example:
+
+```javascript
+import axios from 'axios';
+
+app.get(
+  "/api/data",
+  controlPlane.middleware("/api/data"),
+  async (req, res) => {
+    
+    // 1. If NeuralControl flags the request as rate-limited
+    if (req.controlPlane.isRateLimitedCustomer) {
+      
+      const agentId = req.headers['x-agent-id'];
+      
+      // 2. If it's an AI Agent, ask NeuralControl for a payment invoice
+      if (agentId) {
+        try {
+          const invoiceRes = await axios.post(
+            `https://api.neuralcontrol.online/api/agentic/invoice/my-service/api/data`,
+            { agent_id: agentId },
+            { headers: { Authorization: `Bearer ${process.env.CONTROL_PLANE_API_KEY}` } }
+          );
+          
+          const invoice = invoiceRes.data;
+
+          // 3. If they already paid, override the rate limit and grant burst access
+          if (invoice.status === 'authorized') {
+            return res.json(await getData()); 
+          }
+
+          // 4. Otherwise, return the x402 invoice
+          return res.status(402).json({
+            error: 'x402 Payment Required',
+            invoice_id: invoice.invoice_id,
+            pay_to_wallet: invoice.pay_to_wallet,
+            amount_wei: invoice.amount_wei,
+            verify_url: invoice.verify_url,
+            reason: 'Agent rate limit reached. Pay to unlock burst access.'
+          });
+        } catch (err) {
+          // Untrusted agent or payment system disabled -> fall through to normal 429
+        }
+      }
+
+      // Normal human or untrusted bot -> standard 429 block
+      return res.status(429).json({ error: "Rate limit exceeded" });
+    }
+
+    // Normal processing if no rate limits are hit
+    res.json(await getData());
+  }
+);
+```
+
+---
+
 ## Multi-Tenant Rate Limiting
 
 Each tenant gets isolated rate limits for fair resource allocation.
