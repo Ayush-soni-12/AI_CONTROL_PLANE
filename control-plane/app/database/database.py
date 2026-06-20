@@ -68,5 +68,8 @@ AsyncSessionLocal = async_sessionmaker(
 
 async def get_async_db():
     """Async database session for API endpoints"""
-    async with AsyncSessionLocal() as session:
+    session = AsyncSessionLocal()
+    try:
         yield session
+    finally:
+        await session.close()
