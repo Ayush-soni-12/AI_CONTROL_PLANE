@@ -40,8 +40,9 @@ class Settings(BaseSettings):
     RAZORPAY_PRO_PLAN_ID:      str | None = None   # plan_...
     RAZORPAY_BUSINESS_PLAN_ID: str | None = None   # plan_...
     
+    # ── Agentic Payments ──────────────────────────────────────────────────────
+    ERC8004_CONTRACT_ADDRESS: str | None = None
 
-    
     class Config:
         env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
         env_file_encoding = 'utf-8'

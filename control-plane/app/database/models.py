@@ -572,3 +572,133 @@ class FlagAuditLog(Base):
     trace_id     = Column(String(32), nullable=True)
     created_at   = Column(TIMESTAMP(timezone=True), server_default=text('now()'))
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Agentic Payments (Hackathon Feature: x402 + ERC-8004 on Avalanche)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class UserAgentSettings(Base):
+    """
+    Stores each NeuralControl customer's configuration for receiving
+    payments from AI agents.
+
+    WHY THIS TABLE EXISTS:
+        When an AI agent hits a rate limit on a customer's API, NeuralControl
+        needs to know WHERE to send the payment invoice. This table stores:
+        - The customer's Avalanche wallet address (money goes here directly)
+        - How much to charge per burst bypass
+        - How long access is granted after payment
+
+    HOW IT'S POPULATED:
+        The customer fills out a form in the NeuralControl dashboard
+        (Settings → Agentic Payments). That form calls a PATCH endpoint
+        which updates this table.
+
+    ONE ROW PER USER — it is a 1-to-1 extension of the User table.
+    """
+    __tablename__ = "user_agent_settings"
+
+    id      = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     nullable=False, unique=True, index=True)
+
+    # The customer's Avalanche C-Chain wallet address.
+    # Payments from AI agents go DIRECTLY to this address — NeuralControl
+    # never touches the funds. We are just the verifier.
+    # Example: "0x742d35Cc6634C0532925a3b8D4C0C8b3d3b4e6d9"
+    avalanche_wallet = Column(String(42), nullable=True)
+
+    # How much to charge the agent per "burst bypass" in wei.
+    # 1 AVAX = 1_000_000_000_000_000_000 wei.
+    # Stored as String because wei values can exceed Python int max.
+    # Default: 0.01 AVAX (a tiny, demo-friendly amount)
+    payment_amount_wei = Column(
+        String(30), nullable=False,
+        server_default=text("'10000000000000000'")  # 0.01 AVAX
+    )
+
+    # How many minutes of burst access the agent gets after a successful payment.
+    # Default: 10 minutes. Customer can change this in the dashboard.
+    access_duration_minutes = Column(Integer, nullable=False,
+                                     server_default=text("10"))
+
+    # Master on/off switch. If False, the customer has not opted in to
+    # agentic payments. Their API will just return the normal 429.
+    agentic_payments_enabled = Column(Boolean, nullable=False,
+                                      server_default=text("false"))
+
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False,
+                        server_default=text("now()"))
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False,
+                        server_default=text("now()"))
+
+
+class AgentPayment(Base):
+    """
+    Audit log of every payment transaction processed by NeuralControl's
+    agentic payments gateway.
+
+    ONE ROW per payment attempt (successful or failed).
+
+    WHY THIS TABLE EXISTS:
+        1. Dashboard display — customers can see "Your API earned X AVAX
+           from AI agents this week."
+        2. Fraud prevention — detect agents that claim to pay but provide
+           fake transaction hashes.
+        3. Access control — we look up this table to check if an agent
+           currently has an active "paid burst window" before allowing them
+           past the rate limit.
+        4. Hackathon demo — judges can see real payment records being created.
+
+    STATUS FLOW:
+        pending → verified (payment confirmed on-chain, access granted)
+        pending → failed   (tx_hash invalid or payment went to wrong wallet)
+    """
+    __tablename__ = "agent_payments"
+
+    id      = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"),
+                     nullable=False, index=True)
+
+    # The agent's self-reported ID from the 'x-agent-id' header.
+    # Example: "agent_good_weather_bot_v1"
+    agent_id = Column(String(255), nullable=False, index=True)
+
+    # The ERC-8004 reputation score at the time of the payment check.
+    # Stored so we have a historical record even if the score changes later.
+    agent_erc8004_score = Column(Integer, nullable=True)
+
+    # Which of the customer's API endpoints was the agent trying to access?
+    service_name = Column(String(255), nullable=False)
+    endpoint     = Column(String(255), nullable=False)
+
+    # The Avalanche transaction hash provided by the agent as proof of payment.
+    # Example: "0xabc123def456..."
+    # Null initially — set after the agent calls our /verify endpoint.
+    tx_hash = Column(String(66), nullable=True, unique=True, index=True)
+
+    # How much the agent actually paid, in wei (stored as string for precision).
+    amount_paid_wei = Column(String(30), nullable=True)
+
+    # Payment status lifecycle:
+    #   'pending'  = invoice was issued, waiting for agent to pay
+    #   'verified' = payment confirmed on Avalanche, access granted
+    #   'failed'   = payment was invalid (wrong wallet, wrong amount, etc.)
+    #   'expired'  = agent never paid within the time window
+    status = Column(String(20), nullable=False, server_default=text("'pending'"),
+                    index=True)
+
+    # When does/did the agent's burst access window expire?
+    # Null if payment is still pending or failed.
+    access_granted_until = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False,
+                        server_default=text("now()"))
+    verified_at = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    __table_args__ = (
+        # Fast lookup: "Does agent X currently have paid access on endpoint Y?"
+        Index("idx_agent_payment_active",
+              "user_id", "agent_id", "service_name", "endpoint",
+              "status", "access_granted_until"),
+    )
