@@ -85,12 +85,13 @@ async def stream_signals(
                 
                 if not signals_data:
                     # Fallback to AggregateSnapshot
-                    stmt_agg = select(models.AggregateSnapshot).filter(
-                        models.AggregateSnapshot.user_id == current_user.id,
-                        models.AggregateSnapshot.window == '1h'
-                    ).order_by(models.AggregateSnapshot.snapshot_at.desc()).limit(20)
-                    result_agg = await db.execute(stmt_agg)
-                    snapshots = result_agg.scalars().all()
+                    async with AsyncSessionLocal() as db:
+                        stmt_agg = select(models.AggregateSnapshot).filter(
+                            models.AggregateSnapshot.user_id == current_user.id,
+                            models.AggregateSnapshot.window == '1h'
+                        ).order_by(models.AggregateSnapshot.snapshot_at.desc()).limit(20)
+                        result_agg = await db.execute(stmt_agg)
+                        snapshots = result_agg.scalars().all()
                     
                     for snap in snapshots:
                         signals_data.append({
@@ -180,13 +181,14 @@ async def stream_service_signals(
                 
                 if not signals_data:
                     # Fallback to AggregateSnapshot
-                    stmt_agg = select(models.AggregateSnapshot).filter(
-                        models.AggregateSnapshot.user_id == current_user.id,
-                        models.AggregateSnapshot.service_name == service_name,
-                        models.AggregateSnapshot.window == '1h'
-                    ).order_by(models.AggregateSnapshot.snapshot_at.desc()).limit(20)
-                    result_agg = await db.execute(stmt_agg)
-                    snapshots = result_agg.scalars().all()
+                    async with AsyncSessionLocal() as db:
+                        stmt_agg = select(models.AggregateSnapshot).filter(
+                            models.AggregateSnapshot.user_id == current_user.id,
+                            models.AggregateSnapshot.service_name == service_name,
+                            models.AggregateSnapshot.window == '1h'
+                        ).order_by(models.AggregateSnapshot.snapshot_at.desc()).limit(20)
+                        result_agg = await db.execute(stmt_agg)
+                        snapshots = result_agg.scalars().all()
                     
                     for snap in snapshots:
                         signals_data.append({
