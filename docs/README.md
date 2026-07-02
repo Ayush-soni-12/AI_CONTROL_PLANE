@@ -415,6 +415,38 @@ ai-control-plane/
 
 ---
 
+
+### 💰 Connecting the Payment MCP (For AI Agents)
+If you are building an AI Agent and you want it to autonomously pay 402 Invoices when it encounters paywalls on NeuralControl-protected sites, you can connect our dedicated Payment MCP.
+
+Add this to your agent's MCP settings (e.g. Claude Desktop):
+```json
+{
+  "mcpServers": {
+    "neuralcontrol_payments": {
+      "command": "node",
+      "args": ["/path/to/neuralcontrol-mcp/index.js"],
+      "env": {
+        "AGENT_WALLET_PRIVATE_KEY": "your_avalanche_fuji_private_key"
+      }
+    }
+  }
+}
+```
+Your agent will now automatically use its crypto wallet to pay 402 invoices on the Avalanche Fuji network whenever it gets blocked by an API!
+
+---
+
+## ⚡ Don't want the full platform? Use the Lite SDK!
+If you only want to implement the AI Agent Payment verification and ERC-8004 Reputation system, but you do **not** want to use the NeuralControl dashboard, rate limiting, or telemetry, you can use our open-source Lite SDK!
+
+It provides simple, zero-dependency functions to verify payments and report malicious agents directly to the Avalanche blockchain.
+
+**Package:** [`neuralcontrol-payments-lite` on npm](https://www.npmjs.com/package/neuralcontrol-payments-lite)
+
+---
+
+
 ## 🛠️ Troubleshooting
 
 ### Port Already in Use
@@ -451,6 +483,7 @@ docker-compose up --build
 - [Load Shedding](./LOAD_SHEDDING.md)
 - [Queue Deferral](./QUEUE_DEFERRAL.md)
 - [Request Coalescing](./REQUEST_COALESCING.md)
+- [Agentic Payments & Trust Ecosystem](./AGENTIC_PAYMENTS.md)
 - [MCP Integration](./MCP.md)
 - [Contributor Workflow](./CONTRIBUTOR_WORKFLOW.md)
 
