@@ -1,14 +1,17 @@
 {
   "name": "neuralcontrol-mcp",
   "version": "1.0.0",
-  "description": "",
+  "description": "Model Context Protocol (MCP) server for autonomous AI agent payments on the Avalanche Fuji testnet.",
   "main": "index.js",
+  "bin": {
+    "neuralcontrol-mcp": "./index.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["mcp", "ai", "payments", "avalanche", "crypto", "agentic-payments", "neuralcontrol"],
+  "author": "Ayush",
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
