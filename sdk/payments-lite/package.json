@@ -1,0 +1,16 @@
+{
+  "name": "neuralcontrol-payments-lite",
+  "version": "1.1.0",
+  "description": "A lightweight SDK for independent websites to verify NeuralControl AI agent payments and interact with the ERC-8004 decentralized reputation registry on Avalanche.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "ethers": "^6.17.0"
+  }
+}
