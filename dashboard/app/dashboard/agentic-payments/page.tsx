@@ -85,9 +85,15 @@ export default function AgenticPaymentsPage() {
   const [duration, setDuration] = useState(10);
   const [enabled, setEnabled]   = useState(false);
 
+  // Pay-Per-Request state
+  const [pprEnabled, setPprEnabled] = useState(false);
+  const [pprAmountAvax, setPprAmountAvax] = useState("0.01");
+  const [pprDuration, setPprDuration] = useState(0);
+
   // Sync form with loaded settings
   useEffect(() => {
     if (!settings) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setWallet(settings.avalanche_wallet ?? "");
     setAmountAvax(
       settings.payment_amount_wei
@@ -96,6 +102,14 @@ export default function AgenticPaymentsPage() {
     );
     setDuration(settings.access_duration_minutes);
     setEnabled(settings.agentic_payments_enabled);
+
+    setPprEnabled(settings.pay_per_request_enabled);
+    setPprAmountAvax(
+      settings.pay_per_request_amount_wei
+        ? (Number(settings.pay_per_request_amount_wei) / 1e18).toString()
+        : "0.01"
+    );
+    setPprDuration(settings.pay_per_request_duration_minutes);
   }, [settings]);
 
   const handleSave = () => {
@@ -104,6 +118,9 @@ export default function AgenticPaymentsPage() {
       payment_amount_wei: Math.round(Number(amountAvax) * 1e18).toString(),
       access_duration_minutes: duration,
       agentic_payments_enabled: enabled,
+      pay_per_request_enabled: pprEnabled,
+      pay_per_request_amount_wei: Math.round(Number(pprAmountAvax) * 1e18).toString(),
+      pay_per_request_duration_minutes: pprDuration,
     });
   };
 
@@ -139,11 +156,21 @@ export default function AgenticPaymentsPage() {
           <div>
             <h2 className="text-2xl font-bold text-white flex items-center gap-2">
               <Bot className="w-6 h-6 text-purple-400" />
-              Agentic Payments
+              Agentic Payments & Trust
             </h2>
             <p className="text-sm text-gray-400 mt-1">
               Let AI agents autonomously pay to bypass rate limits — money goes directly to your Avalanche wallet.
             </p>
+            <div className="flex gap-4 mt-4">
+              <a href="/registry" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-sm font-semibold transition-colors border border-purple-500/20">
+                <ShieldCheck className="w-4 h-4" />
+                View Global Agent Registry
+              </a>
+              <a href="https://github.com/Ayush-soni-12/ai-control-plane/blob/main/docs/AGENTIC_PAYMENTS.md" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800/50 text-gray-300 hover:bg-gray-800 text-sm font-semibold transition-colors border border-gray-700">
+                <ExternalLink className="w-4 h-4" />
+                Read Full Documentation
+              </a>
+            </div>
           </div>
 
           {/* ── Stats Row ────────────────────────────────────────────────── */}
@@ -284,6 +311,82 @@ export default function AgenticPaymentsPage() {
                       <p className="text-xs text-gray-500">
                         Agent bypasses rate limits for this long after paying
                       </p>
+                    </div>
+                  </div>
+
+                  {/* ── Standalone Monetization (Pay-Per-Request) ── */}
+                  <div className="pt-6 border-t border-gray-800">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-white">Standalone Pay-Per-Request</h4>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Charge for every single request (ignores rate limits). Useful for expensive AI generation endpoints.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setPprEnabled((v) => !v)}
+                        className="flex items-center gap-2 text-sm font-medium transition-colors"
+                      >
+                        {pprEnabled ? (
+                          <>
+                            <ToggleRight className="w-6 h-6 text-emerald-400" />
+                            <span className="text-emerald-400">Enabled</span>
+                          </>
+                        ) : (
+                          <>
+                            <ToggleLeft className="w-6 h-6 text-gray-500" />
+                            <span className="text-gray-500">Disabled</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* PPR Price */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          Price per Request (AVAX)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.001"
+                            min="0.001"
+                            value={pprAmountAvax}
+                            onChange={(e) => setPprAmountAvax(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-gray-700 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-medium">
+                            AVAX
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* PPR Duration */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          Access Duration
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            max="60"
+                            value={pprDuration}
+                            onChange={(e) => setPprDuration(Number(e.target.value))}
+                            className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-gray-700 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-medium">
+                            min
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-500/80 mt-2 font-medium">
+                          Strictly enforced: Agent gets exactly 1 request per payment.
+                        </p>
+                        <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                          Set this to 5 or 10 minutes. This gives the agent a short window to claim their single request after paying. Once claimed, the payment is instantly marked as <strong>consumed</strong> so they cannot make a second request. (Do not set to 0, or it will expire instantly before they can fetch the data).
+                        </p>
+                      </div>
                     </div>
                   </div>
 

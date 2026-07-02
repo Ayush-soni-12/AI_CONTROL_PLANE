@@ -11,6 +11,9 @@ export interface AgentSettings {
   payment_amount_wei: string;
   access_duration_minutes: number;
   agentic_payments_enabled: boolean;
+  pay_per_request_enabled: boolean;
+  pay_per_request_amount_wei: string;
+  pay_per_request_duration_minutes: number;
 }
 
 export interface AgentPayment {

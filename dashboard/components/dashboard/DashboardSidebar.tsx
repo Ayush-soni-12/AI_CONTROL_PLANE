@@ -65,6 +65,7 @@ export function DashboardSidebar() {
     { icon: Flag, label: "Feature Flags", href: "/dashboard/flags" },
     { icon: Shield, label: "Overrides", href: "/dashboard/overrides" },
     { icon: Bot, label: "Agentic Payments", href: "/dashboard/agentic-payments" },
+    { icon: Shield, label: "Agent Registry", href: "/registry" },
 
     {
       icon: Timer,
