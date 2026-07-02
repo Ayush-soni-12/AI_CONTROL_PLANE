@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # AI Control Plane - Caching Test Script
-# This script tests the caching functionality for /products endpoint
+# This script tests the caching functionality for /searchs endpoint
 
-echo "🧪 Testing Caching Functionality for /products"
+echo "🧪 Testing Caching Functionality for /searchs"
 echo "=============================================="
 echo ""
 
@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 BASE_URL="http://localhost:3001"
 
 echo -e "${BLUE}📋 Test Plan:${NC}"
-echo "1. Send 15 requests to /products (slow, ~800ms each)"
+echo "1. Send 15 requests to /searchs (slow, ~800ms each)"
 echo "2. AI will detect high latency and enable caching"
 echo "3. Subsequent requests should be fast (cached)"
 echo ""
@@ -27,7 +27,7 @@ echo -e "${YELLOW}Phase 1: Sending initial requests (slow database calls)${NC}"
 echo "Sending 15 requests to trigger caching decision..."
 echo ""
 
-for i in {1..15}
+for i in {1..25}
 do
   echo -n "Request $i: "
   START=$(date +%s%N)
@@ -47,7 +47,7 @@ done
 
 echo ""
 echo -e "${BLUE}⏳ Waiting 12 seconds for AI to analyze and make decision...${NC}"
-sleep 5
+sleep 5E
 
 echo ""
 echo -e "${YELLOW}Phase 2: Testing if caching is enabled${NC}"

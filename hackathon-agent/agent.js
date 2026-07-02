@@ -53,7 +53,7 @@ const isBadAgent = process.argv.includes('--bad');
 // "bad_bot_*"    prefix → ERC-8004 score 5  → hard blocked with 429
 const AGENT_ID = isBadAgent
   ? 'bad_bot_scraper_v1'            // ← untrusted, no ERC-8004 registration
-  : 'agent_good_market_feed_v1';    // ← trusted, ERC-8004 verified
+  : 'bot_2';    // ← trusted, ERC-8004 verified
 
 // How many total requests to make in the demo loop
 const TOTAL_REQUESTS = 30;
