@@ -34,6 +34,7 @@ router = APIRouter(prefix="/api/agentic", tags=["Agentic Payments"])
 
 class InvoiceRequest(BaseModel):
     agent_id: str
+    mode: Optional[str] = "rate_limit"  # 'rate_limit' or 'pay_per_request'
 
 @router.post("/invoice/{service_name}/{endpoint:path}")
 async def get_or_create_invoice(
@@ -56,9 +57,15 @@ async def get_or_create_invoice(
     )
     settings = (await db.execute(stmt)).scalars().first()
 
-    if not settings or not settings.agentic_payments_enabled or not settings.avalanche_wallet:
-        # Not enabled, just return 403 so the SDK blocks them with standard 429
-        raise HTTPException(status_code=403, detail="Agentic payments disabled by customer")
+    mode = payload.mode
+    if mode == "pay_per_request":
+        if not settings or not settings.pay_per_request_enabled or not settings.avalanche_wallet:
+            raise HTTPException(status_code=403, detail="Pay-Per-Request disabled by customer")
+        required_amount_wei = settings.pay_per_request_amount_wei
+    else:
+        if not settings or not settings.agentic_payments_enabled or not settings.avalanche_wallet:
+            raise HTTPException(status_code=403, detail="Agentic payments disabled by customer")
+        required_amount_wei = settings.payment_amount_wei
 
     # 2. Check Agent Reputation (ERC-8004)
     reputation = check_agent_reputation(payload.agent_id)
@@ -80,7 +87,13 @@ async def get_or_create_invoice(
     active_payment = (await db.execute(stmt_active)).scalars().first()
 
     if active_payment:
-        # They already paid! Tell the SDK to let them through (override rate limit)
+        if mode == "pay_per_request":
+            # Strictly consume this payment so it can never be used again!
+            active_payment.status = "consumed"
+            await db.commit()
+            return {"status": "authorized", "message": "Payment consumed for single request."}
+
+        # For rate_limit mode, they get the full burst window
         return {"status": "authorized", "message": "Active burst window."}
 
     # 4. Issue a new invoice
@@ -91,6 +104,7 @@ async def get_or_create_invoice(
         agent_erc8004_score=reputation["score"],
         service_name=service_name,
         endpoint=endpoint,
+        payment_mode=mode,
         status="pending"
     )
     db.add(payment)
@@ -101,7 +115,7 @@ async def get_or_create_invoice(
         "status": "payment_required",
         "invoice_id": str(payment.id),
         "pay_to_wallet": settings.avalanche_wallet,
-        "amount_wei": settings.payment_amount_wei,
+        "amount_wei": required_amount_wei,
         "reputation": format_reputation_for_response(reputation)
     }
 
@@ -140,10 +154,17 @@ async def verify_agent_payment(
         raise HTTPException(status_code=500, detail="Customer settings invalid")
 
     # 3. Call the Avalanche Blockchain!
+    if payment.payment_mode == "pay_per_request":
+        min_amount = settings.pay_per_request_amount_wei or "0"
+        access_duration = settings.pay_per_request_duration_minutes or 5
+    else:
+        min_amount = settings.payment_amount_wei
+        access_duration = settings.access_duration_minutes
+
     verify_result = verify_payment(
         tx_hash=payload.tx_hash,
         expected_recipient=settings.avalanche_wallet,
-        min_amount_wei=int(settings.payment_amount_wei)
+        min_amount_wei=int(min_amount)
     )
 
     if not verify_result["verified"]:
@@ -158,14 +179,14 @@ async def verify_agent_payment(
     payment.tx_hash = payload.tx_hash
     payment.amount_paid_wei = str(verify_result["amount_avax"] * 10**18) # convert back to wei
     payment.verified_at = now
-    payment.access_granted_until = now + timedelta(minutes=settings.access_duration_minutes)
+    payment.access_granted_until = now + timedelta(minutes=access_duration)
 
     await db.commit()
 
     return {
         "verified": True,
         "message": "Payment confirmed on Avalanche.",
-        "expires_in_minutes": settings.access_duration_minutes,
+        "expires_in_minutes": access_duration,
         "access_granted_until": payment.access_granted_until.isoformat()
     }
 
@@ -183,6 +204,9 @@ class AgentSettingsUpdate(BaseModel):
     payment_amount_wei: Optional[str] = None         # How much to charge (in wei)
     access_duration_minutes: Optional[int] = None    # How long access lasts after pay
     agentic_payments_enabled: Optional[bool] = None  # Master on/off switch
+    pay_per_request_enabled: Optional[bool] = None
+    pay_per_request_amount_wei: Optional[str] = None
+    pay_per_request_duration_minutes: Optional[int] = None
 
 
 @router.get("/settings")
@@ -206,6 +230,9 @@ async def get_agent_settings(
             "payment_amount_wei": "10000000000000000",  # 0.01 AVAX
             "access_duration_minutes": 10,
             "agentic_payments_enabled": False,
+            "pay_per_request_enabled": False,
+            "pay_per_request_amount_wei": "10000000000000000",
+            "pay_per_request_duration_minutes": 5,
         }
 
     return {
@@ -213,6 +240,9 @@ async def get_agent_settings(
         "payment_amount_wei": settings.payment_amount_wei,
         "access_duration_minutes": settings.access_duration_minutes,
         "agentic_payments_enabled": settings.agentic_payments_enabled,
+        "pay_per_request_enabled": settings.pay_per_request_enabled,
+        "pay_per_request_amount_wei": settings.pay_per_request_amount_wei,
+        "pay_per_request_duration_minutes": settings.pay_per_request_duration_minutes,
     }
 
 
@@ -248,6 +278,12 @@ async def update_agent_settings(
         settings.access_duration_minutes = payload.access_duration_minutes
     if payload.agentic_payments_enabled is not None:
         settings.agentic_payments_enabled = payload.agentic_payments_enabled
+    if payload.pay_per_request_enabled is not None:
+        settings.pay_per_request_enabled = payload.pay_per_request_enabled
+    if payload.pay_per_request_amount_wei is not None:
+        settings.pay_per_request_amount_wei = payload.pay_per_request_amount_wei
+    if payload.pay_per_request_duration_minutes is not None:
+        settings.pay_per_request_duration_minutes = payload.pay_per_request_duration_minutes
 
     settings.updated_at = datetime.now(timezone.utc)
     await db.commit()

@@ -11,6 +11,7 @@ from app.redis.cache import redis_client
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from app.jobs.aggregation_jobs import aggregate_signals_hourly, aggregate_signals_daily, cleanup_old_data
+from app.jobs.agent_scoring import run_scoring_job
 from app.redis.aggregate_persistence import snapshot_redis_aggregates
 from app.ai_engine.background_analyzer import analyze_all_services
 from app.queue.consumer import start_signal_consumer
@@ -127,6 +128,16 @@ async def startup():
     #     name="AI background service analysis",
     #     replace_existing=True
     # )
+    
+    # ── Agentic Payments: Dynamic Trust Scoring ──
+    # Runs at the top of every hour to evaluate agent behavior and update blockchain
+    scheduler.add_job(
+        run_scoring_job,
+        trigger=CronTrigger(minute=0),
+        id="agent_trust_scoring",
+        name="Update AI Agent Trust Scores on Blockchain",
+        replace_existing=True
+    )
     
     # Monthly quota reset: Run on the 1st of every month at 00:00 UTC
     async def reset_monthly_signal_counters():
