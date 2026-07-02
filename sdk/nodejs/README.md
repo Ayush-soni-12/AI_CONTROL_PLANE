@@ -335,6 +335,116 @@ app.get("/checkout", controlPlane.middleware("/checkout"), async (req, res) => {
 
 The tracing data is heavily utilized by NeuralControl's AI engine to provide **evidence-based root-cause analysis** when incidents (like latency spikes) occur, pinpointing the exact operation that slowed down the request.
 
+### 🤖 Web3 Agentic Payments (ERC-8004)
+
+NeuralControl provides built-in, native support for monetizing your API traffic via the **Avalanche Fuji Blockchain** and the **ERC-8004 Agent Reputation Registry**. 
+When an AI agent accesses your API and gets blocked or attempts to access a premium endpoint, the SDK natively supports issuing a `402 Payment Required` invoice. If the agent pays and their on-chain reputation score is high enough, NeuralControl handles the verification and automatically unlocks access.
+
+**Mode 1: Rate Limit Burst Access (Automatic)**
+If an agent hits your rate limit (429), NeuralControl can automatically offer them a 402 Pay-to-Bypass invoice instead of a hard block.
+
+```javascript
+app.get('/api/agent-data',
+  controlPlane.middleware('/api/agent-data'),
+  async (req, res) => {
+
+    // ── Step 1: Check if rate limited ─────────────────────────────────────────
+    if (req.controlPlane.isRateLimitedCustomer) {
+
+      // ── Step 2: Is this an AI Agent? ────────────────────────────────────────
+      // Regular browsers/humans never send x-agent-id.
+      // Only AI agents that follow the ERC-8004 standard send this header.
+      const agentId = req.headers['x-agent-id'];
+
+      if (agentId) {
+        try {
+          // ── Step 3: Ask the control plane for a payment invoice ──────────────
+          // The control plane checks ERC-8004 reputation and issues an invoice
+          // if the agent is trusted and the customer has enabled agentic payments.
+          const invoiceRes = await axios.post(
+            `${process.env.CONTROL_PLANE_URL}/api/agentic/invoice/my-service/api/agent-data`,
+            { agent_id: agentId },
+            { headers: { Authorization: `Bearer ${process.env.API_KEY}` } }
+          );
+
+          const invoice = invoiceRes.data;
+
+          // If the agent already has a verified payment, grant access!
+          if (invoice.status === 'authorized') {
+            return res.json({
+              success: true,
+              data: "Here is the burst access data!"
+            });
+          } else {
+            // ── Step 4: Return the x402 invoice to the agent ─────────────────────
+            return res.status(402).json({
+              error: 'x402 Payment Required',
+              invoice_id: invoice.invoice_id,
+              pay_to_wallet: invoice.pay_to_wallet,
+              amount_wei: invoice.amount_wei,
+              network: 'Avalanche Fuji Testnet (C-Chain)',
+              verify_url: `${process.env.CONTROL_PLANE_URL}/api/agentic/verify`,
+              agent_reputation: invoice.reputation
+            });
+          }
+        } catch (err) {
+          // Control plane said the agent is untrusted or customer hasn't enabled payments
+        }
+      }
+
+      // ── Regular 429 for humans and untrusted agents ──────────────────────────
+      return res.status(429).json({
+        error: 'Rate limit exceeded',
+        message: 'Too many requests. Slow down or use an ERC-8004 registered agent to pay for burst access.',
+        retry_after: req.controlPlane.retryAfter,
+      });
+    }
+
+    // ── Normal response — rate limit not hit ──────────────────────────────────
+    res.json({
+      success: true,
+      data: "Here is the normal free data!"
+    });
+  }
+);
+```
+
+> **Note on URL Structure:** In the `axios.post` URL `/api/agentic/invoice/my-service/api/agent-data`, notice the `my-service` part. This must match exactly the **service name** you created in your NeuralControl dashboard (e.g., `hi-service`, `demo-service`). Replace `my-service` with your actual service name!
+
+**Mode 2: Strict Pay-Per-Request (Manual Integration)**
+For expensive operations (e.g., Image Generation), you can bypass rate limits entirely and force payment on *every single request*:
+
+```javascript
+app.get('/api/premium-data', controlplane.middleware('/api/premium-data'), async (req, res) => {
+  const agentId = req.headers['x-agent-id'];
+
+  // 1. Fetch an invoice from the Control Plane for this specific agent
+  const invoiceRes = await axios.post(
+    `${process.env.CONTROL_PLANE_URL}/api/agentic/invoice/my-service/api/premium-data`,
+    { agent_id: agentId, mode: 'pay_per_request' },
+    { headers: { Authorization: `Bearer ${process.env.API_KEY}` } }
+  );
+
+  const invoice = invoiceRes.data;
+
+  // 2. Check if NeuralControl verified their payment
+  if (invoice.status === 'authorized') {
+    return res.json({ premium_data: "Here is the expensive AI data!" });
+  }
+
+  // 3. Otherwise, return the 402 invoice back to the Agent so their wallet can pay it
+  return res.status(402).json({
+    error: 'x402 Payment Required',
+    invoice_id: invoice.invoice_id,
+    pay_to_wallet: invoice.pay_to_wallet,
+    amount_wei: invoice.amount_wei,
+    verify_url: `${process.env.CONTROL_PLANE_URL}/api/agentic/verify`,
+  });
+});
+```
+
+*Note: The NeuralControl SDK automatically parses the `x-agent-id` header to cleanly differentiate AI Agent traffic from normal Human (IP) traffic in your telemetry!*
+
 ## Current Features
 
 This SDK currently provides:
@@ -385,6 +495,34 @@ Once connected, you can ask things like:
 - *"Analyze why `/products` is slow and suggest a fix"*
 - *"Set up all 6 protection flags for my new route"*
 - *"Are there any active latency spikes?"*
+
+### 💰 Connecting the Payment MCP (For AI Agents)
+If you are building an AI Agent and you want it to autonomously pay 402 Invoices when it encounters paywalls on NeuralControl-protected sites, you can connect our dedicated Payment MCP.
+
+Add this to your agent's MCP settings (e.g. Claude Desktop):
+```json
+{
+  "mcpServers": {
+    "neuralcontrol_payments": {
+      "command": "node",
+      "args": ["/path/to/neuralcontrol-mcp/index.js"],
+      "env": {
+        "AGENT_WALLET_PRIVATE_KEY": "your_avalanche_fuji_private_key"
+      }
+    }
+  }
+}
+```
+Your agent will now automatically use its crypto wallet to pay 402 invoices on the Avalanche Fuji network whenever it gets blocked by an API!
+
+---
+
+## ⚡ Don't want the full platform? Use the Lite SDK!
+If you only want to implement the AI Agent Payment verification and ERC-8004 Reputation system, but you do **not** want to use the NeuralControl dashboard, rate limiting, or telemetry, you can use our open-source Lite SDK!
+
+It provides simple, zero-dependency functions to verify payments and report malicious agents directly to the Avalanche blockchain.
+
+**Package:** [`neuralcontrol-payments-lite` on npm](https://www.npmjs.com/package/neuralcontrol-payments-lite)
 
 ---
 

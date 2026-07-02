@@ -137,11 +137,11 @@ class ControlPlaneSDK {
 
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PUBLIC: track(endpoint, latencyMs, status, priority, customer_identifier, action_taken, trace_id, flagName)
+  // PUBLIC: track(endpoint, latencyMs, status, priority, customer_identifier, action_taken, trace_id, flagName, is_agent)
   // NOW: queues signal locally — NO immediate HTTP call
   // ═══════════════════════════════════════════════════════════════════════════
 
-  track(endpoint, latencyMs, status = 'success', priority = 'medium', customer_identifier = null, action_taken = 'none', trace_id = null, flagName = null) {
+  track(endpoint, latencyMs, status = 'success', priority = 'medium', customer_identifier = null, action_taken = 'none', trace_id = null, flagName = null, is_agent = false) {
     if (this._signalQueue.length >= this._maxQueueSize) {
       // Queue is full — drop oldest signal (ring buffer behavior)
       this._signalQueue.shift();
@@ -155,6 +155,7 @@ class ControlPlaneSDK {
       tenant_id:            this.tenantId,
       priority,
       customer_identifier,
+      is_agent,     // ✅ NEW: Explicitly marks AI vs Human traffic
       action_taken, // Tells the backend if it was rate limited locally!
       recorded_at:          new Date().toISOString(),
     };
@@ -299,11 +300,15 @@ class ControlPlaneSDK {
       const startTime = Date.now();
 
       // Extract customer IP
+      const agentId = req.headers['x-agent-id'];
       const customer_identifier =
+        agentId ||
         req.headers['x-forwarded-for']?.split(',')[0].trim() ||
         req.ip ||
         req.connection?.remoteAddress ||
         null;
+        
+      const is_agent = !!agentId;
 
       // ✅ Decision from local cache — zero network I/O
       const config = sdk.getConfig(endpoint, priority, customer_identifier);
@@ -367,11 +372,11 @@ class ControlPlaneSDK {
       // Queue signal after response — non-blocking
       res.on('finish', () => {
         const latency = Date.now() - startTime;
-        const isTrafficManagement = [202, 429, 503].includes(res.statusCode);
+        const isTrafficManagement = [202, 402, 429, 503].includes(res.statusCode);
         const status = (res.statusCode < 400 || isTrafficManagement) ? 'success' : 'error';
         const action = isRateLimited ? 'rate_limited' : 'none';
 
-        sdk.track(endpoint, latency, status, priority, customer_identifier, action, req._traceId || null, flagName);
+        sdk.track(endpoint, latency, status, priority, customer_identifier, action, req._traceId || null, flagName, is_agent);
 
         // Flush spans async if tracing is enabled for this request
         if (sdk._tracingEnabled && req._traceId) {
@@ -454,11 +459,15 @@ class ControlPlaneSDK {
     return async (req, res, next) => {
       const startTime = Date.now();
 
+      const agentId = req.headers['x-agent-id'];
       const customer_identifier =
+        agentId ||
         req.headers['x-forwarded-for']?.split(',')[0].trim() ||
         req.ip ||
         req.connection?.remoteAddress ||
         null;
+        
+      const is_agent = !!agentId;
 
       const config = sdk.getConfig(endpoint, priority, customer_identifier);
       const isRateLimited = config.rate_limited_customer || false;
@@ -529,11 +538,11 @@ class ControlPlaneSDK {
       // Track upon finish
       res.on('finish', () => {
         const latency = Date.now() - startTime;
-        const isTrafficManagement = [202, 429, 503, 504].includes(res.statusCode);
+        const isTrafficManagement = [202, 402, 429, 503, 504].includes(res.statusCode);
         const status = (res.statusCode < 400 || isTrafficManagement) ? 'success' : 'error';
         const action = isRateLimited ? 'rate_limited' : 'none';
         
-        sdk.track(endpoint, latency, status, priority, customer_identifier, action, req._traceId || null, flagName);
+        sdk.track(endpoint, latency, status, priority, customer_identifier, action, req._traceId || null, flagName, is_agent);
 
         // Flush spans async if tracing is enabled for this request
         if (sdk._tracingEnabled && req._traceId) {

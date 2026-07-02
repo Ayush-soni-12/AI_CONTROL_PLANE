@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-07-02
+
+### 🐛 Fixed
+- **Agentic Payments Telemetry (`x402`)**: Added HTTP `402` to the `isTrafficManagement` array inside the SDK's telemetry emitter. Previously, `402 Payment Required` responses were incorrectly tracked as a `5xx`/`4xx` server error, causing false-positive Circuit Breaker trips and inflating the dashboard error rate. Now, 402 invoices issued to AI Agents correctly register as `status: 'success'` to keep telemetry mathematically pure.
+
+---
+
+## [1.4.0] - 2026-07-01
+
+### ✨ Added
+- **AI Traffic Detection (`is_agent`)**: The SDK now automatically parses the `x-agent-id` HTTP header. If present, it injects an `is_agent = true` flag into the telemetry payload. This allows the backend to perfectly distinguish AI agent traffic from standard human traffic (IP-based) for accurate slashing and scoring, completely immune to naming workarounds!
+
+---
+
 ## [1.3.0] - 2026-03-27
 
 ### ✨ Added
