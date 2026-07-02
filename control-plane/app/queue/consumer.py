@@ -76,7 +76,7 @@ async def _process_signal(signal_data: dict) -> None:
             SIGNAL_COLUMNS = {
                 "user_id", "service_name", "tenant_id", "endpoint",
                 "latency_ms", "status", "priority",
-                "customer_identifier", "action_taken", "flag_name",
+                "customer_identifier", "action_taken", "flag_name", "is_agent"
             }
             clean = {k: v for k, v in signal_data.items() if k in SIGNAL_COLUMNS}
             if resolved_ts:

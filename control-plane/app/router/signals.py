@@ -83,6 +83,7 @@ class SignalItem(BaseModel):
     recorded_at: Optional[str] = None
     trace_id: Optional[str] = None  # Distributed tracing — set when SDK has tracing: true
     flag_name: Optional[str] = None  # Feature flag active during this request (for auto-rollback)
+    is_agent: Optional[bool] = False
 
 class BatchSignalRequest(BaseModel):
     signals: List[SignalItem]
