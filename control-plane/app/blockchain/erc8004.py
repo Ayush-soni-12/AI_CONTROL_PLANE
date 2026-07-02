@@ -37,31 +37,28 @@ w3 = Web3(Web3.HTTPProvider(FUJI_RPC))
 # ── Deployed contract address ─────────────────────────────────────────────────
 # Set this in your environment after deploying ERC8004Registry.sol on Fuji.
 # Example: ERC8004_CONTRACT_ADDRESS=0xABC123...
-CONTRACT_ADDRESS = os.environ.get("ERC8004_CONTRACT_ADDRESS", "")
+from app.config import settings
+
+CONTRACT_ADDRESS = settings.ERC8004_CONTRACT_ADDRESS or ""
 
 # ── Minimal ABI — only the functions NeuralControl needs ─────────────────────
 CONTRACT_ABI = [
     {
         "inputs": [{"internalType": "string", "name": "agentId", "type": "string"}],
-        "name": "getScore",
-        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "string", "name": "agentId", "type": "string"}],
-        "name": "isRegistered",
-        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "string", "name": "agentId", "type": "string"}],
-        "name": "getAgentInfo",
+        "name": "getAgent",
         "outputs": [
-            {"internalType": "uint256", "name": "score", "type": "uint256"},
-            {"internalType": "bool",    "name": "registered", "type": "bool"},
-            {"internalType": "bool",    "name": "trusted", "type": "bool"}
+            {
+                "components": [
+                    {"internalType": "address", "name": "ownerWallet", "type": "address"},
+                    {"internalType": "uint256", "name": "trustScore", "type": "uint256"},
+                    {"internalType": "uint256", "name": "balance", "type": "uint256"},
+                    {"internalType": "bool", "name": "isRegistered", "type": "bool"},
+                    {"internalType": "bool", "name": "isRevoked", "type": "bool"}
+                ],
+                "internalType": "struct AgentRegistry.Agent",
+                "name": "",
+                "type": "tuple"
+            }
         ],
         "stateMutability": "view",
         "type": "function"
@@ -69,7 +66,7 @@ CONTRACT_ABI = [
 ]
 
 # ── Score threshold for payment eligibility ────────────────────────────────────
-TRUSTED_SCORE_THRESHOLD = 60
+TRUSTED_SCORE_THRESHOLD = 30
 
 # ── Contract instance (created once at startup) ────────────────────────────────
 _contract = None
@@ -150,12 +147,13 @@ def check_agent_reputation(agent_id: Optional[str]) -> dict:
     contract = _get_contract()
     if contract and w3.is_connected():
         try:
-            # Single call — returns (score, registered, trusted)
-            score, registered, trusted = contract.functions.getAgentInfo(agent_id).call()
-            score = int(score)
+            # Single call — returns (ownerWallet, trustScore, balance, isRegistered, isRevoked)
+            agent_data = contract.functions.getAgent(agent_id).call()
+            owner_wallet, score_raw, balance, registered, is_revoked = agent_data
+            score = int(score_raw)
 
-            if not registered:
-                logger.info(f"🔍 Agent '{agent_id}' not found in on-chain registry")
+            if not registered or is_revoked:
+                logger.info(f"🔍 Agent '{agent_id}' not found or is revoked in on-chain registry")
                 return {
                     "is_trusted": False,
                     "score": 0,
