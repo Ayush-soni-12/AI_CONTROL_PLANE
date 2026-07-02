@@ -9,12 +9,15 @@ Design philosophy:
   - Async-first: uses httpx.AsyncClient so it works in FastAPI, async Django, etc.
   - Fail-silent: if the Control Plane is unreachable, the SDK never crashes your service.
   - Lightweight: no heavy dependencies — just httpx.
+  - Zero-latency: uses local memory caching and sliding window rate limits.
 """
 
 import time
+import asyncio
 import warnings
 import httpx
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Optional, Dict
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -59,27 +62,36 @@ class ControlPlaneSDK:
         service_name: str = "unknown-service",
         tenant_id: str = "null",
         api_key: Optional[str] = None,
-        timeout: float = 1.0,
+        timeout: float = 2.0,            # HTTP timeout (like Node configTimeout)
+        config_ttl: float = 30.0,        # re-sync every 30s
+        flush_interval: float = 5.0,     # flush every 5s
+        max_queue_size: int = 500,       # safety cap
     ):
         """
         Initialize the SDK.
-
-        Args:
-            control_plane_url: Base URL of the running Control Plane API.
-            service_name:      Your service's name, used to namespace signals.
-            tenant_id:         A unique ID for your tenant / user. Generate one with:
-                                   python -c "import uuid; print(uuid.uuid4().hex)"
-                               Store it in your .env and never change it.
-            api_key:           API key from the Control Plane dashboard.
-                               All requests will include it as: Authorization: Bearer <key>
-            timeout:           HTTP timeout in seconds (default 1s — fast fail so your
-                               service never hangs waiting for the Control Plane).
         """
         self.control_plane_url = control_plane_url.rstrip("/")  # normalize trailing slash
         self.service_name = service_name
         self.tenant_id = tenant_id
         self.api_key = api_key
         self.timeout = timeout
+
+        # ── Local config cache (the key to zero-latency decisions) ──────────────
+        self._config_cache: Dict[str, dict] = {}
+        self._config_ttl = config_ttl
+        
+        # ── Signal batching (1 HTTP call per flush, not per request) ────────────
+        self._signal_queue: list[dict] = []
+        self._flush_interval = flush_interval
+        self._max_queue_size = max_queue_size
+        
+        # ── Local Sliding Window Tracker (For Rate Limiting Edge-Side) ──────────
+        self._customer_rate_limits: Dict[str, dict] = {}
+        
+        # ── Background Tasks ────────────────────────────────────────────────────
+        self._sync_tasks: Dict[str, asyncio.Task] = {}
+        self._flush_task: Optional[asyncio.Task] = None
+        self._cleanup_task: Optional[asyncio.Task] = None
 
         # Warn early if no API key — helps devs catch config mistakes at startup
         if not self.api_key:
@@ -89,81 +101,67 @@ class ControlPlaneSDK:
                 stacklevel=2,
             )
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Internal helpers
-    # ─────────────────────────────────────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PUBLIC: initialize(endpoints)
+    # Call once at app startup to pre-warm config for known endpoints.
+    # ═══════════════════════════════════════════════════════════════════════════
 
-    def _headers(self) -> dict:
+    async def initialize(self, endpoints: list[str] = None) -> None:
         """
-        Build HTTP headers for every request.
-
-        Always includes Content-Type. Adds Authorization header only when
-        an API key is provided — so the SDK degrades gracefully without one.
+        Pre-warm config for known endpoints and start background flush loops.
         """
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
+        if not endpoints:
+            endpoints = []
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Public API
-    # ─────────────────────────────────────────────────────────────────────────
+        # Start the signal flush loop immediately
+        if not self._flush_task:
+            self._flush_task = asyncio.create_task(self._run_flush_loop())
 
-    async def track(
-        self,
-        endpoint: str,
-        latency_ms: float,
-        status: str = "success",
-        priority: str = "medium",
-        customer_identifier: Optional[str] = None,
-    ) -> None:
-        """
-        Send a performance signal to the Control Plane.
+        # Start background cleanup task
+        if not self._cleanup_task:
+            self._cleanup_task = asyncio.create_task(self._run_cleanup_loop())
 
-        Call this after every request completes so the AI engine can learn
-        your service's latency and error patterns over time.
+        if not endpoints:
+            warnings.warn('[ControlPlane] initialize() called with no endpoints — nothing to pre-warm.')
+            return
 
-        Args:
-            endpoint:            The API path that was hit (e.g. "/products").
-            latency_ms:          How long the request took in milliseconds.
-            status:              "success" or "error".
-            priority:            Request priority tier: "critical", "high", "medium", "low".
-                                 Used by the AI to decide load-shedding / queue-deferral.
-            customer_identifier: Optional end-user IP or session ID for per-customer
-                                 rate limiting. Pass request.client.host in FastAPI,
-                                 or request.remote_addr in Flask.
+        print(f"[ControlPlane] Pre-warming config for {len(endpoints)} endpoint(s)...")
 
-        The call is fire-and-forget:
-            - If the Control Plane is down, the error is logged but your service keeps running.
-            - Responses from this endpoint are intentionally ignored.
-        """
-        payload = {
-            "service_name": self.service_name,
-            "endpoint": endpoint,
-            "latency_ms": latency_ms,
-            "status": status,
-            "tenant_id": self.tenant_id,
-            "priority": priority,
-            "customer_identifier": customer_identifier,
-        }
+        # Fetch initial configs concurrently
+        fetch_tasks = [self._sync_config(ep) for ep in endpoints]
+        if fetch_tasks:
+            await asyncio.gather(*fetch_tasks, return_exceptions=True)
 
-        try:
-            # httpx.AsyncClient is used here instead of requests because it
-            # supports async/await and doesn't block the event loop.
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    f"{self.control_plane_url}/api/signals",
-                    json=payload,
-                    headers=self._headers(),
-                )
+        # Start periodic background refresh for each endpoint
+        for ep in endpoints:
+            self._start_sync_loop(ep)
 
-                # Surface invalid API key errors clearly
-                if response.status_code == 401:
-                    print("[ControlPlane] ❌ track() failed: Invalid API key")
+        print("[ControlPlane] ✅ Config ready. Decisions will be made locally (0ms network overhead).")
 
-        except Exception as e:
-            # Fail silently — never let the Control Plane take down your service
-            print(f"[ControlPlane] ⚠️  track() could not reach Control Plane: {e}")
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PUBLIC: destroy()
+    # Clean shutdown
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def destroy(self) -> None:
+        """Clean shutdown — flush remaining signals and cancel loops."""
+        print("[ControlPlane] Shutting down — flushing remaining signals...")
+        
+        if self._flush_task:
+            self._flush_task.cancel()
+        if self._cleanup_task:
+            self._cleanup_task.cancel()
+            
+        for task in self._sync_tasks.values():
+            task.cancel()
+            
+        await self._flush_signals()
+        print("[ControlPlane] ✅ Shutdown complete.")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PUBLIC: get_config(...)
+    # NOW: reads from local memory — NO HTTP call — takes < 0.1ms
+    # ═══════════════════════════════════════════════════════════════════════════
 
     async def get_config(
         self,
@@ -173,68 +171,199 @@ class ControlPlaneSDK:
     ) -> dict:
         """
         Fetch the AI-driven runtime config for a given endpoint.
-
-        The Control Plane's AI engine analyses your service's signal history and
-        returns a set of feature flags that tell your code what to do right now.
-
-        Args:
-            endpoint:            The API path you're about to handle (e.g. "/products").
-            priority:            The request's priority tier (affects queue-deferral /
-                                 load-shedding decisions).
-            customer_identifier: End-user IP or session ID for per-customer rate limiting.
-
-        Returns a dict like:
-            {
-                "cache_enabled":          True,   # Should this response be cached?
-                "circuit_breaker":        False,  # Should we skip the upstream call?
-                "rate_limited_customer":  False,  # Is this specific customer rate-limited?
-                "queue_deferral":         False,  # Should this request be deferred?
-                "load_shedding":          False,  # Should this request be dropped?
-                "status_code":            200,
-                "reason":                 "High latency detected — caching enabled",
-            }
-
-        If the Control Plane is unreachable, returns _SAFE_DEFAULTS (all features off).
-        Your service continues to work normally — it just won't have AI-tuning.
+        Returns from cache if available.
         """
-        try:
-            return await self._fetch_config(endpoint, priority, customer_identifier)
-        except Exception as e:
-            print(f"[ControlPlane] ⚠️  get_config() fell back to safe defaults: {e}")
-            return dict(_SAFE_DEFAULTS)  # return a fresh copy so callers can mutate it safely
+        cached = self._config_cache.get(endpoint)
+        if cached:
+            # ✅ Cache hit — return immediately, zero network I/O
+            return self._apply_customer_rules(cached, customer_identifier)
 
-    async def _fetch_config(
+        # ⚠️ Cache miss (first time seeing this endpoint) — fetch synchronously
+        print(f"[ControlPlane] Cache miss for \"{endpoint}\" — fetching now (first request only)")
+        await self._sync_config(endpoint)
+        self._start_sync_loop(endpoint)
+
+        # After syncing, it should be in cache
+        cached_after_sync = self._config_cache.get(endpoint)
+        if cached_after_sync:
+            return self._apply_customer_rules(cached_after_sync, customer_identifier)
+
+        return dict(_SAFE_DEFAULTS)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PUBLIC: track(...)
+    # NOW: queues signal locally — NO immediate HTTP call
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    async def track(
         self,
         endpoint: str,
+        latency_ms: float,
+        status: str = "success",
         priority: str = "medium",
         customer_identifier: Optional[str] = None,
-    ) -> dict:
+        action_taken: str = "none",
+    ) -> None:
         """
-        Internal: performs the actual HTTP GET to the Control Plane config endpoint.
+        Queue a performance signal to be sent to the Control Plane.
+        """
+        if len(self._signal_queue) >= self._max_queue_size:
+            # Queue is full — drop oldest signal (ring buffer behavior)
+            self._signal_queue.pop(0)
 
-        URL format: /api/config/{service_name}{endpoint}?tenant_id=...&priority=...
+        self._signal_queue.append({
+            "service_name": self.service_name,
+            "endpoint": endpoint,
+            "latency_ms": round(latency_ms),
+            "status": status,
+            "tenant_id": self.tenant_id,
+            "priority": priority,
+            "customer_identifier": customer_identifier,
+            "action_taken": action_taken,
+            "recorded_at": datetime.now(timezone.utc).isoformat() + "Z", # to match node behavior somewhat
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Internal helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _headers(self) -> dict:
+        """Build HTTP headers for every request."""
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def _apply_customer_rules(self, config: dict, customer_identifier: Optional[str]) -> dict:
         """
-        # Build the URL — matches the Node SDK exactly
+        Apply per-customer overrides to cached config.
+        Runs locally in memory using a Sliding Window Counter.
+        """
+        clone = dict(config)
+        
+        limit_rpm = config.get("rate_limit_rule_rpm")
+        if limit_rpm is not None and customer_identifier:
+            clone["rate_limited_customer"] = self._is_customer_rate_limited(customer_identifier, limit_rpm)
+            if clone["rate_limited_customer"]:
+                clone["reason"] = "Customer rate limited locally by edge SDK"
+        else:
+            clone["rate_limited_customer"] = False
+            
+        return clone
+
+    def _is_customer_rate_limited(self, customer_identifier: str, limit_rpm: int) -> bool:
+        """Evaluate local sliding window rate limit counter."""
+        now_ms = int(time.time() * 1000)
+        current_minute_str = str(now_ms // 60000)
+        previous_minute_str = str((now_ms // 60000) - 1)
+        
+        tracker = self._customer_rate_limits.get(customer_identifier)
+        if not tracker:
+            tracker = {"currentMinute": current_minute_str, "currentCount": 0, "previousCount": 0}
+            self._customer_rate_limits[customer_identifier] = tracker
+
+        # Slide the window forward if a new minute started
+        if tracker["currentMinute"] != current_minute_str:
+            tracker["previousCount"] = tracker["currentCount"] if tracker["currentMinute"] == previous_minute_str else 0
+            tracker["currentMinute"] = current_minute_str
+            tracker["currentCount"] = 0
+
+        # Add this new request to the current minute
+        tracker["currentCount"] += 1
+
+        # Calculate the weighted sliding window score
+        seconds_into_minute = (now_ms // 1000) % 60
+        weight_of_previous_minute = (60 - seconds_into_minute) / 60.0
+        
+        estimated_rpm = int((tracker["previousCount"] * weight_of_previous_minute) + tracker["currentCount"])
+
+        return estimated_rpm > limit_rpm
+
+    def _build_config_url(self, endpoint: str) -> str:
+        """Build the URL for fetching config."""
         url = f"{self.control_plane_url}/api/config/{self.service_name}{endpoint}"
+        return url
 
-        # Build query params only for values that are actually set
-        params: dict = {}
+    async def _sync_config(self, endpoint: str) -> None:
+        """Fetch config from the Control Plane and update cache."""
+        url = self._build_config_url(endpoint)
+        params = {}
         if self.tenant_id:
             params["tenant_id"] = self.tenant_id
-        if priority:
-            params["priority"] = priority
-        if customer_identifier:
-            params["customer_identifier"] = customer_identifier
 
-        print(f"[ControlPlane] Fetching config from {url} params={params}")
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, params=params, headers=self._headers())
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(url, params=params, headers=self._headers())
+            if response.status_code == 401:
+                print("[ControlPlane] ❌ Invalid API key — check your configuration")
+                return
 
-        # Surface auth errors clearly, then return safe defaults
-        if response.status_code == 401:
-            print("[ControlPlane] ❌ get_config() failed: Invalid API key")
-            return dict(_SAFE_DEFAULTS)
+            if not response.is_success:
+                return
 
-        # Parse and return the JSON payload from the Control Plane
-        return response.json()
+            config = response.json()
+            config["_fetchedAt"] = int(time.time() * 1000)
+            self._config_cache[endpoint] = config
+
+        except Exception:
+            # Keep existing cache if available — stale config is better than no config
+            pass
+
+    def _start_sync_loop(self, endpoint: str) -> None:
+        """Start a background task to refresh the config for an endpoint."""
+        if endpoint in self._sync_tasks and not self._sync_tasks[endpoint].done():
+            return
+            
+        async def loop():
+            while True:
+                await asyncio.sleep(self._config_ttl)
+                await self._sync_config(endpoint)
+                
+        self._sync_tasks[endpoint] = asyncio.create_task(loop())
+
+    async def _run_flush_loop(self) -> None:
+        """Background task loop that periodically flushes standard signals."""
+        while True:
+            await asyncio.sleep(self._flush_interval)
+            if self._signal_queue:
+                await self._flush_signals()
+
+    async def _flush_signals(self) -> None:
+        """Drain the queue and send signals to backend."""
+        if not self._signal_queue:
+            return
+
+        # Drain the queue atomically
+        batch = self._signal_queue[:self._max_queue_size]
+        del self._signal_queue[:len(batch)]
+        
+        requeued = False
+
+        try:
+            url = f"{self.control_plane_url}/api/signals/batch"
+            payload = {"signals": batch}
+            
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                response = await client.post(url, json=payload, headers=self._headers())
+
+            if not response.is_success and response.status_code != 401:
+                print(f"[ControlPlane] Batch flush failed ({response.status_code}) — {len(batch)} signals re-queued")
+                # Prepend back to queue, keeping under max size
+                space_left = self._max_queue_size - len(self._signal_queue)
+                if space_left > 0:
+                    self._signal_queue = batch[:space_left] + self._signal_queue
+                requeued = True
+
+        except Exception as e:
+            if not requeued:
+                space_left = self._max_queue_size - len(self._signal_queue)
+                if space_left > 0:
+                    self._signal_queue = batch[:space_left] + self._signal_queue
+
+    async def _run_cleanup_loop(self) -> None:
+        """Background task to clear memory periodically."""
+        while True:
+            await asyncio.sleep(3600)  # Verify memory every hour
+            self._customer_rate_limits.clear()
+

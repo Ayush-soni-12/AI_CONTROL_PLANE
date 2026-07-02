@@ -66,6 +66,32 @@ sdk = ControlPlaneSDK(
 )
 ```
 
+**Note on FastAPI / Starlette `lifespan` events:**
+We highly recommend initializing the SDK to pre-warm the cache for zero-latency config fetching, and gracefully destroying it to flush remaining tracking signals:
+
+```python
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+import os
+from ai_control_plane import ControlPlaneSDK
+
+sdk = ControlPlaneSDK(
+    api_key=os.getenv("CONTROL_PLANE_API_KEY"),
+    tenant_id=os.getenv("TENANT_ID"),
+    service_name="my-service",
+)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Pre-warm config for important endpoints to get 0ms network overhead!
+    await sdk.initialize(["/products", "/checkout"])
+    yield
+    # Clean shutdown -- flush remaining tracking signals
+    await sdk.destroy()
+
+app = FastAPI(lifespan=lifespan)
+```
+
 **.env file:**
 
 ```bash
@@ -273,7 +299,18 @@ All patterns expose the same fields:
 | `service_name`      | `"unknown-service"`       | Your service name       |
 | `tenant_id`         | `"null"`                  | Your tenant ID          |
 | `api_key`           | `None`                    | API key from dashboard  |
-| `timeout`           | `1.0`                     | HTTP timeout in seconds |
+| `timeout`           | `2.0`                     | HTTP timeout in seconds |
+| `config_ttl`        | `30.0`                    | Seconds to keep cache   |
+| `flush_interval`    | `5.0`                     | Seconds between flushes |
+| `max_queue_size`    | `500`                     | Max events in memory    |
+
+### `await sdk.initialize(endpoints: list[str])`
+
+Pre-warm configurations for known endpoints, enabling zero-latency `get_config` resolution and starting background synchronization operations.
+
+### `await sdk.destroy()`
+
+Clean up background tasks and immediately fire off any remaining signals pending a batch flush to the Control Plane.
 
 ### `await sdk.track(endpoint, latency_ms, status, priority, customer_identifier)`
 

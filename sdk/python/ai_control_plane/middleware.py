@@ -157,9 +157,11 @@ class FastAPIMiddleware(BaseHTTPMiddleware):
         traffic_mgmt = {202, 429, 503}
         status = "success" if (response.status_code < 400 or response.status_code in traffic_mgmt) else "error"
 
+        action = "rate_limited" if cp.get("is_rate_limited_customer") else "none"
+
         # create_task = fire-and-forget; response is returned immediately
         asyncio.create_task(
-            self.sdk.track(endpoint, latency_ms, status, self.priority, customer_identifier)
+            self.sdk.track(endpoint, latency_ms, status, self.priority, customer_identifier, action)
         )
 
         return response
@@ -249,8 +251,10 @@ def control_plane_dep(sdk, endpoint: str, priority: str = "medium"):
         status_code = cp.get("status_code", 200)
         status = "success" if (status_code < 400 or status_code in traffic_mgmt) else "error"
 
+        action = "rate_limited" if cp.get("is_rate_limited_customer") else "none"
+
         asyncio.create_task(
-            sdk.track(endpoint, latency_ms, status, priority, customer_identifier)
+            sdk.track(endpoint, latency_ms, status, priority, customer_identifier, action)
         )
 
     return dependency
