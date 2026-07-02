@@ -15,6 +15,7 @@ class SignalSend(BaseModel):
     tenant_id: str
     priority: Optional[str] = 'medium'  
     customer_identifier: Optional[str] = None  
+    is_agent: Optional[bool] = False
     
     @classmethod
     def validate_priority(cls, v):

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     # ── Agentic Payments ──────────────────────────────────────────────────────
     ERC8004_CONTRACT_ADDRESS: str | None = None
 
+    NEURALCONTROL_ADMIN_PRIVATE_KEY: str | None = None
+
     class Config:
         env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
         env_file_encoding = 'utf-8'

@@ -23,6 +23,9 @@ class Signal(Base):
     # NEW: Customer identifier (IP, session ID) for per-customer rate limiting
     customer_identifier = Column(String, nullable=True, index=True)
     
+    # NEW: Is this an AI Agent? True if customer_identifier came from x-agent-id header
+    is_agent = Column(Boolean, nullable=False, server_default=text("false"), index=True)
+    
     # NEW: Edge SDK Action Taken locally without hitting control plane decision
     action_taken = Column(String, nullable=True, server_default=text("'none'"))
     
@@ -627,6 +630,13 @@ class UserAgentSettings(Base):
     agentic_payments_enabled = Column(Boolean, nullable=False,
                                       server_default=text("false"))
 
+    # ── Pay-Per-Request Monetization (Standalone mode) ──
+    # If a developer wants to charge for every single request instead of 
+    # just rate-limit bypasses, they use these settings.
+    pay_per_request_enabled = Column(Boolean, nullable=False, server_default=text("false"))
+    pay_per_request_amount_wei = Column(String(30), nullable=True)
+    pay_per_request_duration_minutes = Column(Integer, nullable=True)
+
     created_at = Column(TIMESTAMP(timezone=True), nullable=False,
                         server_default=text("now()"))
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False,
@@ -671,6 +681,10 @@ class AgentPayment(Base):
     # Which of the customer's API endpoints was the agent trying to access?
     service_name = Column(String(255), nullable=False)
     endpoint     = Column(String(255), nullable=False)
+    
+    # What business model triggered this invoice? 
+    # 'rate_limit' (burst access) or 'pay_per_request' (strict monetization)
+    payment_mode = Column(String(50), nullable=False, server_default=text("'rate_limit'"))
 
     # The Avalanche transaction hash provided by the agent as proof of payment.
     # Example: "0xabc123def456..."
