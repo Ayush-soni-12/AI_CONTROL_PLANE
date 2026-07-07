@@ -1,6 +1,6 @@
 {
   "name": "neuralcontrol-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Model Context Protocol (MCP) server for autonomous AI agent payments on the Avalanche Fuji testnet.",
   "main": "index.js",
   "bin": {
