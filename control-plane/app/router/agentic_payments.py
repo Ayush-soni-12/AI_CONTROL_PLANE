@@ -116,7 +116,10 @@ async def get_or_create_invoice(
         "invoice_id": str(payment.id),
         "pay_to_wallet": settings.avalanche_wallet,
         "amount_wei": required_amount_wei,
-        "reputation": format_reputation_for_response(reputation)
+        "reputation": format_reputation_for_response(reputation),
+        "confidential_eerc_enabled": settings.confidential_eerc_enabled,
+        "eerc_token_address": settings.eerc_token_address,
+        "eerc_payment_amount": settings.eerc_payment_amount
     }
 
 
@@ -161,10 +164,18 @@ async def verify_agent_payment(
         min_amount = settings.payment_amount_wei
         access_duration = settings.access_duration_minutes
 
+    if settings.confidential_eerc_enabled:
+        expected_recipient = settings.eerc_token_address
+        is_eerc = True
+    else:
+        expected_recipient = settings.avalanche_wallet
+        is_eerc = False
+
     verify_result = verify_payment(
         tx_hash=payload.tx_hash,
-        expected_recipient=settings.avalanche_wallet,
-        min_amount_wei=int(min_amount)
+        expected_recipient=expected_recipient,
+        min_amount_wei=int(min_amount),
+        is_eerc=is_eerc
     )
 
     if not verify_result["verified"]:
@@ -177,7 +188,10 @@ async def verify_agent_payment(
     now = datetime.now(timezone.utc)
     payment.status = "verified"
     payment.tx_hash = payload.tx_hash
-    payment.amount_paid_wei = str(verify_result["amount_avax"] * 10**18) # convert back to wei
+    if is_eerc:
+        payment.amount_paid_wei = "eERC"
+    else:
+        payment.amount_paid_wei = str(verify_result["amount_avax"] * 10**18) # convert back to wei
     payment.verified_at = now
     payment.access_granted_until = now + timedelta(minutes=access_duration)
 
@@ -207,6 +221,9 @@ class AgentSettingsUpdate(BaseModel):
     pay_per_request_enabled: Optional[bool] = None
     pay_per_request_amount_wei: Optional[str] = None
     pay_per_request_duration_minutes: Optional[int] = None
+    confidential_eerc_enabled: Optional[bool] = None
+    eerc_token_address: Optional[str] = None
+    eerc_payment_amount: Optional[str] = None
 
 
 @router.get("/settings")
@@ -243,6 +260,9 @@ async def get_agent_settings(
         "pay_per_request_enabled": settings.pay_per_request_enabled,
         "pay_per_request_amount_wei": settings.pay_per_request_amount_wei,
         "pay_per_request_duration_minutes": settings.pay_per_request_duration_minutes,
+        "confidential_eerc_enabled": settings.confidential_eerc_enabled,
+        "eerc_token_address": settings.eerc_token_address,
+        "eerc_payment_amount": settings.eerc_payment_amount,
     }
 
 
@@ -284,6 +304,12 @@ async def update_agent_settings(
         settings.pay_per_request_amount_wei = payload.pay_per_request_amount_wei
     if payload.pay_per_request_duration_minutes is not None:
         settings.pay_per_request_duration_minutes = payload.pay_per_request_duration_minutes
+    if payload.confidential_eerc_enabled is not None:
+        settings.confidential_eerc_enabled = payload.confidential_eerc_enabled
+    if payload.eerc_token_address is not None:
+        settings.eerc_token_address = payload.eerc_token_address
+    if payload.eerc_payment_amount is not None:
+        settings.eerc_payment_amount = payload.eerc_payment_amount
 
     settings.updated_at = datetime.now(timezone.utc)
     await db.commit()
@@ -328,8 +354,9 @@ async def get_payment_history(
                 # Convert wei to AVAX for display (1 AVAX = 10^18 wei)
                 "amount_avax": (
                     round(float(p.amount_paid_wei) / 10**18, 6)
-                    if p.amount_paid_wei else None
+                    if p.amount_paid_wei and p.amount_paid_wei != "eERC" else None
                 ),
+                "is_eerc": p.amount_paid_wei == "eERC",
                 "access_granted_until": (
                     p.access_granted_until.isoformat()
                     if p.access_granted_until else None
