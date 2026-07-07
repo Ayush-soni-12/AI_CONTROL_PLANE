@@ -637,6 +637,13 @@ class UserAgentSettings(Base):
     pay_per_request_amount_wei = Column(String(30), nullable=True)
     pay_per_request_duration_minutes = Column(Integer, nullable=True)
 
+    # ── Confidential Settlements (eERC Hackathon Feature) ──
+    # If true, the backend will issue invoices demanding the Encrypted Token
+    # instead of public AVAX, shielding transaction volumes from competitors.
+    confidential_eerc_enabled = Column(Boolean, nullable=False, server_default=text("false"))
+    eerc_token_address = Column(String(42), nullable=True) # e.g. the cAGT token address
+    eerc_payment_amount = Column(String(30), nullable=True) # Token amount (units)
+
     created_at = Column(TIMESTAMP(timezone=True), nullable=False,
                         server_default=text("now()"))
     updated_at = Column(TIMESTAMP(timezone=True), nullable=False,
