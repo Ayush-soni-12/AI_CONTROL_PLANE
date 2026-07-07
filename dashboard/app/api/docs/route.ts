@@ -101,6 +101,13 @@ export const docsList = [
     icon: "🔍",
   },
   {
+    slug: "AGENTIC_PAYMENTS",
+    title: "Agentic Payments",
+    description: "Autonomous agent paywalls and trust",
+    category: "features",
+    icon: "💸",
+  },
+  {
     slug: "CONTRIBUTOR_WORKFLOW",
     title: "Contributing",
     description: "How to contribute to this project",

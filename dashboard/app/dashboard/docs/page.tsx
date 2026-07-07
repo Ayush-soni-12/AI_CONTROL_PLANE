@@ -113,6 +113,13 @@ const docsList = [
     emoji: "🔍",
   },
   {
+    slug: "AGENTIC_PAYMENTS",
+    title: "Agentic Payments",
+    description: "Autonomous agent paywalls and trust",
+    category: "Features",
+    emoji: "💸",
+  },
+  {
     slug: "CONTRIBUTOR_WORKFLOW",
     title: "Contributing",
     description: "How to contribute to this project",

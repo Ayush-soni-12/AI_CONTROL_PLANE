@@ -29,6 +29,20 @@ The agent is now permanently etched onto the blockchain with a baseline trust sc
 
 ---
 
+## 🛠️ Feature 1.5: Confidential Payments (Hackathon Build 🔒)
+
+**Note: This feature was built specifically for this hackathon submission to demonstrate the future of private B2B Agent settlements!**
+
+Currently, standard AVAX payments are fully public. Any competitor can analyze a public ledger to see exactly how many API requests an agent is making, what they are paying, and who their customers are.
+
+To solve this, we integrated **Encrypted ERC-20 (eERC) Tokens** into NeuralControl. 
+
+By toggling **Confidential eERC Settlements** ON in the dashboard, the API will issue invoices in `cAGT` (Confidential Agent Tokens). When the AI agent pays the invoice, it uses **Zero-Knowledge Proofs (ZKPs)** to shield the transfer amount and the exact sender/receiver relationship. 
+
+The NeuralControl backend seamlessly verifies these confidential settlements on-chain and grants the agent access without exposing the B2B transaction volume to the public!
+
+---
+
 ## 🛠️ Feature 2: Full NeuralControl Integration
 
 If you are using the full NeuralControl Cloud Platform, payments and trust scoring are completely automated.
@@ -135,7 +149,7 @@ app.get('/api/pay-per-request',
 ### The Autonomous Agent Experience
 The AI Agent doesn't need a human to type in a credit card. It uses the `mcp_neuralcontrol_payments_pay_402_invoice` tool. 
 
-When the LLM sees the `402 Payment Required` JSON response, it autonomously executes the tool, pays the exact `amount_wei` to your `pay_to_wallet`, gets the `x-payment-hash`, and effortlessly retries the request!
+When the LLM sees the `402 Payment Required` JSON response, it autonomously executes the tool, pays the exact `amount_wei` in AVAX (or `cAGT` if Confidential Mode is enabled) to your `pay_to_wallet`, gets the `tx_hash`, and effortlessly retries the request!
 
 ---
 
