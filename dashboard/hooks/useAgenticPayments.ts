@@ -25,7 +25,7 @@ export interface AgentPayment {
   agent_reputation_score: number | null;
   service_name: string;
   endpoint: string;
-  status: 'pending' | 'verified' | 'failed' | 'expired';
+  status: 'pending' | 'verified' | 'failed' | 'expired' | 'consumed';
   tx_hash: string | null;
   amount_avax: number | null;
   is_eerc: boolean;
