@@ -1309,10 +1309,14 @@ app.get('/api/agent-data',
               network: 'Avalanche Fuji Testnet (C-Chain)',
               verify_url: `${CONTROL_PLANE_URL}/api/agentic/verify`,
               agent_reputation: invoice.reputation,
+              confidential_eerc_enabled: invoice.confidential_eerc_enabled,
+              eerc_token_address: invoice.eerc_token_address,
+              eerc_payment_amount: invoice.eerc_payment_amount,
               instructions: [
-                '1. Send the amount_wei in AVAX to pay_to_wallet on Avalanche Fuji C-Chain',
-                '2. POST your tx_hash to verify_url with your invoice_id',
-                '3. Retry this endpoint — your burst window will be active'
+                '1. If confidential_eerc_enabled is true, use ZK proofs to send eERC tokens to the eerc_token_address.',
+                '2. Otherwise, send the amount_wei in AVAX to pay_to_wallet on Avalanche Fuji C-Chain.',
+                '3. POST your tx_hash to verify_url with your invoice_id',
+                '4. Retry this endpoint — your burst window will be active'
               ]
             });
           }
@@ -1399,10 +1403,14 @@ app.get('/api/pay-per-request',
       network: 'Avalanche Fuji Testnet (C-Chain)',
       verify_url: `${CONTROL_PLANE_URL}/api/agentic/verify`,
       agent_reputation: invoice.reputation,
+      confidential_eerc_enabled: invoice.confidential_eerc_enabled,
+      eerc_token_address: invoice.eerc_token_address,
+      eerc_payment_amount: invoice.eerc_payment_amount,
       instructions: [
-        "1. Send the amount_wei in AVAX to pay_to_wallet on Avalanche Fuji C-Chain",
-        "2. POST your tx_hash to verify_url with your invoice_id",
-        "3. Retry this endpoint"
+        "1. If confidential_eerc_enabled is true, use ZK proofs to send eERC tokens to the eerc_token_address.",
+        "2. Otherwise, send the amount_wei in AVAX to pay_to_wallet on Avalanche Fuji C-Chain.",
+        "3. POST your tx_hash to verify_url with your invoice_id",
+        "4. Retry this endpoint"
       ]
     });
 
@@ -1486,6 +1494,9 @@ app.get('/api/lite-generate', async (req, res) => {
     agent_score: score 
   });
 });
+
+
+
 
 
 // ── Start the server ─────────────────────────────────────────────────────────
