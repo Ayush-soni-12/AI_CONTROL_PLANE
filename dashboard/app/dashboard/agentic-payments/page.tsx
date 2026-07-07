@@ -37,12 +37,14 @@ function StatusBadge({ status }: { status: AgentPayment["status"] }) {
     pending:  "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
     failed:   "bg-red-500/15 text-red-400 border-red-500/30",
     expired:  "bg-gray-500/15 text-gray-400 border-gray-500/30",
+    consumed: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   };
   const icons = {
     verified: <CheckCircle2 className="w-3 h-3" />,
     pending:  <Loader2 className="w-3 h-3 animate-spin" />,
     failed:   <XCircle className="w-3 h-3" />,
     expired:  <Clock className="w-3 h-3" />,
+    consumed: <Zap className="w-3 h-3" />,
   };
   return (
     <span
