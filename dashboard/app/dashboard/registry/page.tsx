@@ -2,7 +2,11 @@
 
 import React, { useState } from "react";
 import { ethers } from "ethers";
-import { Wallet, Shield, CheckCircle, PlusCircle, AlertCircle } from "lucide-react";
+import { Wallet, Shield, CheckCircle, PlusCircle, AlertCircle, LogIn } from "lucide-react";
+import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { useCheckAuth } from "@/hooks/useSignals";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 // Placeholder Address: We will update this after deploying Phase 1
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_REGISTRY_CONTRACT_ADDRESS || "0x29243AD8082F5f0CEdCa89ED85db662975E5d96A";
@@ -25,6 +29,15 @@ export default function AgentRegistryPage() {
   // Lookup state
   const [lookupId, setLookupId] = useState("");
   const [agentData, setAgentData] = useState<any>(null);
+
+  const { data: user, isLoading: isAuthLoading } = useCheckAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthLoading && !user) {
+      router.push("/auth/login");
+    }
+  }, [user, isAuthLoading, router]);
 
   const connectWallet = async () => {
     setError(null);
@@ -110,38 +123,61 @@ export default function AgentRegistryPage() {
     }
   };
 
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-purple-950/5 to-background">
+        <div className="text-center">
+          <div className="inline-block p-4 rounded-2xl bg-purple-500/10 mb-4">
+            <LogIn className="w-12 h-12 text-purple-400 animate-pulse" />
+          </div>
+          <p className="text-gray-400 text-lg">Verifying authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Shield className="text-blue-500" />
-              Global Agent Registry
-            </h1>
-            <p className="text-gray-400 mt-2">
-              The "DMV for AI" — Register your autonomous agent, fund its wallet, and build a Trust Score.
-            </p>
+    <>
+      <DashboardSidebar />
+      <div className="2xl:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
+        <div className="max-w-7xl mx-auto space-y-8">
+          
+          {/* Header */}
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-4 sm:py-0 mb-4">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-bold flex items-center gap-2 bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  <Shield className="w-8 h-8 text-purple-400" />
+                  Global Agent Registry
+                </h1>
+                <p className="text-gray-400 mt-2">
+                  The "DMV for AI" — Register your autonomous agent, fund its wallet, and build a Trust Score.
+                </p>
+              </div>
+              
+              <button
+                onClick={connectWallet}
+                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
+                  walletAddress 
+                    ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20"
+                    : "bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white"
+                }`}
+              >
+                <Wallet size={20} />
+                {walletAddress 
+                  ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`
+                  : "Connect Wallet"}
+              </button>
+            </div>
           </div>
           
-          <button
-            onClick={connectWallet}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-colors ${
-              walletAddress 
-                ? "bg-green-500/10 text-green-500 border border-green-500/20"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
-          >
-            <Wallet size={20} />
-            {walletAddress 
-              ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`
-              : "Connect Wallet"}
-          </button>
-        </div>
+          <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
           {/* Registration Form */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
@@ -261,8 +297,10 @@ export default function AgentRegistryPage() {
             </div>
           </div>
 
+          </div>
+
         </div>
       </div>
-    </div>
+    </>
   );
 }
