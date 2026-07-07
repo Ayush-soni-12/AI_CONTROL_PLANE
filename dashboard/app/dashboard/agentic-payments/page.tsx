@@ -90,6 +90,11 @@ export default function AgenticPaymentsPage() {
   const [pprAmountAvax, setPprAmountAvax] = useState("0.01");
   const [pprDuration, setPprDuration] = useState(0);
 
+  // eERC Confidential Mode State
+  const [eercEnabled, setEercEnabled] = useState(false);
+  const [eercAddress, setEercAddress] = useState("");
+  const [eercAmount, setEercAmount] = useState("10");
+
   // Sync form with loaded settings
   useEffect(() => {
     if (!settings) return;
@@ -110,6 +115,10 @@ export default function AgenticPaymentsPage() {
         : "0.01"
     );
     setPprDuration(settings.pay_per_request_duration_minutes);
+
+    setEercEnabled(settings.confidential_eerc_enabled ?? false);
+    setEercAddress(settings.eerc_token_address ?? "");
+    setEercAmount(settings.eerc_payment_amount ?? "10");
   }, [settings]);
 
   const handleSave = () => {
@@ -121,12 +130,17 @@ export default function AgenticPaymentsPage() {
       pay_per_request_enabled: pprEnabled,
       pay_per_request_amount_wei: Math.round(Number(pprAmountAvax) * 1e18).toString(),
       pay_per_request_duration_minutes: pprDuration,
+      confidential_eerc_enabled: eercEnabled,
+      eerc_token_address: eercAddress || null,
+      eerc_payment_amount: eercAmount || null,
     });
   };
 
   // Derive summary stats
-  const verifiedPayments = history?.payments.filter((p) => p.status === "verified") ?? [];
-  const totalEarned = verifiedPayments.reduce((sum, p) => sum + (p.amount_avax ?? 0), 0);
+  const successfulPayments = history?.payments.filter((p) => p.status === "verified" || p.status === "consumed") ?? [];
+  const verifiedCount = successfulPayments.length;
+  const totalEarnedAvax = successfulPayments.reduce((sum, p) => sum + (p.amount_avax ?? 0), 0);
+  const totalEarnedEerc = successfulPayments.filter(p => p.is_eerc).length * Number(eercAmount || "10");
   const activeWindows = history?.payments.filter(
     (p) => p.status === "verified" && p.access_granted_until && new Date(p.access_granted_until) > new Date()
   ).length ?? 0;
@@ -153,25 +167,30 @@ export default function AgenticPaymentsPage() {
         <div className="max-w-5xl mx-auto space-y-8">
 
           {/* ── Page Header ──────────────────────────────────────────────── */}
-          <div>
-            <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-              <Bot className="w-6 h-6 text-purple-400" />
-              Agentic Payments & Trust
-            </h2>
-            <p className="text-sm text-gray-400 mt-1">
-              Let AI agents autonomously pay to bypass rate limits — money goes directly to your Avalanche wallet.
-            </p>
-            <div className="flex gap-4 mt-4">
-              <a href="/registry" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-sm font-semibold transition-colors border border-purple-500/20">
-                <ShieldCheck className="w-4 h-4" />
-                View Global Agent Registry
-              </a>
-              <a href="https://github.com/Ayush-soni-12/ai-control-plane/blob/main/docs/AGENTIC_PAYMENTS.md" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800/50 text-gray-300 hover:bg-gray-800 text-sm font-semibold transition-colors border border-gray-700">
-                <ExternalLink className="w-4 h-4" />
-                Read Full Documentation
-              </a>
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-4 sm:py-0 mb-4">
+              <div>
+                <h1 className="text-3xl sm:text-4xl font-bold flex items-center gap-2 bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  <Bot className="w-8 h-8 text-purple-400" />
+                  Agentic Payments & Trust
+                </h1>
+                <p className="text-gray-400 mt-2">
+                  Let AI agents autonomously pay to bypass rate limits — money goes directly to your Avalanche wallet.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <a href="/dashboard/registry" className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-sm font-semibold transition-colors border border-purple-500/20">
+                  <ShieldCheck className="w-4 h-4" />
+                  Global Agent Registry
+                </a>
+                <a href="https://github.com/Ayush-soni-12/AI_CONTROL_PLANE/blob/main/docs/AGENTIC_PAYMENTS.md" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-800/50 text-gray-300 hover:bg-gray-800 text-sm font-semibold transition-colors border border-gray-700">
+                  <ExternalLink className="w-4 h-4" />
+                  Documentation
+                </a>
+              </div>
             </div>
           </div>
+          <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
 
           {/* ── Stats Row ────────────────────────────────────────────────── */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -182,9 +201,16 @@ export default function AgenticPaymentsPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-500 font-medium">Total Earned</p>
-                <p className="text-xl font-bold text-white">
-                  {totalEarned.toFixed(4)} <span className="text-sm text-gray-400">AVAX</span>
-                </p>
+                <div className="flex flex-col">
+                  <p className="text-xl font-bold text-white">
+                    {totalEarnedAvax.toFixed(4)} <span className="text-sm text-gray-400">AVAX</span>
+                  </p>
+                  {totalEarnedEerc > 0 && (
+                    <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                      + {totalEarnedEerc} <span className="text-xs text-emerald-400/80">cAGT (Confidential)</span>
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -195,7 +221,7 @@ export default function AgenticPaymentsPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-500 font-medium">Verified Payments</p>
-                <p className="text-xl font-bold text-white">{verifiedPayments.length}</p>
+                <p className="text-xl font-bold text-white">{verifiedCount}</p>
               </div>
             </div>
 
@@ -390,6 +416,75 @@ export default function AgenticPaymentsPage() {
                     </div>
                   </div>
 
+                  {/* ── Confidential Settlements (eERC) ── */}
+                  <div className="pt-6 border-t border-gray-800">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                          Confidential eERC Settlements
+                        </h4>
+                        <p className="text-xs text-gray-500 mt-1 max-w-xl">
+                          Allow agents to pay using Encrypted ERC tokens (eERC) via Zero-Knowledge proofs. This shields B2B transaction volumes and operational costs from public blockchain analysis.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setEercEnabled((v) => !v)}
+                        className="flex items-center gap-2 text-sm font-medium transition-colors"
+                      >
+                        {eercEnabled ? (
+                          <>
+                            <ToggleRight className="w-6 h-6 text-emerald-400" />
+                            <span className="text-emerald-400">Enabled</span>
+                          </>
+                        ) : (
+                          <>
+                            <ToggleLeft className="w-6 h-6 text-gray-500" />
+                            <span className="text-gray-500">Disabled</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 transition-all duration-300 ${eercEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                      {/* eERC Address */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          eERC Token Contract Address
+                        </label>
+                        <input
+                          type="text"
+                          value={eercAddress}
+                          onChange={(e) => setEercAddress(e.target.value)}
+                          placeholder="0x5C533Cf0..."
+                          className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-gray-700 text-white placeholder-gray-600 text-sm font-mono focus:outline-none focus:border-purple-500 transition-colors"
+                        />
+                        <p className="text-xs text-gray-500">
+                          The smart contract address of the Encrypted Token (e.g. cAGT) on Avalanche.
+                        </p>
+                      </div>
+
+                      {/* eERC Amount */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          Price (Token Units)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="1"
+                            value={eercAmount}
+                            onChange={(e) => setEercAmount(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl bg-gray-800/60 border border-gray-700 text-white text-sm focus:outline-none focus:border-purple-500 transition-colors"
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-500 font-medium">
+                            Tokens
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* How it works info banner */}
                   <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 p-4">
                     <div className="flex gap-3">
@@ -501,7 +596,16 @@ export default function AgenticPaymentsPage() {
                         </td>
                         {/* Amount */}
                         <td className="px-6 py-4 text-white font-semibold">
-                          {p.amount_avax !== null ? `${p.amount_avax.toFixed(4)} AVAX` : "—"}
+                          {p.is_eerc ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-[11px] font-bold border border-emerald-500/20">
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                              Confidential cAGT
+                            </span>
+                          ) : p.amount_avax !== null ? (
+                            `${p.amount_avax.toFixed(4)} AVAX`
+                          ) : (
+                            "—"
+                          )}
                         </td>
                         {/* TX link */}
                         <td className="px-6 py-4">

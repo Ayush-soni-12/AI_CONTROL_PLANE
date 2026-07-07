@@ -14,6 +14,9 @@ export interface AgentSettings {
   pay_per_request_enabled: boolean;
   pay_per_request_amount_wei: string;
   pay_per_request_duration_minutes: number;
+  confidential_eerc_enabled: boolean;
+  eerc_token_address: string | null;
+  eerc_payment_amount: string | null;
 }
 
 export interface AgentPayment {
@@ -25,6 +28,7 @@ export interface AgentPayment {
   status: 'pending' | 'verified' | 'failed' | 'expired';
   tx_hash: string | null;
   amount_avax: number | null;
+  is_eerc: boolean;
   access_granted_until: string | null;
   created_at: string;
   explorer_url: string | null;
