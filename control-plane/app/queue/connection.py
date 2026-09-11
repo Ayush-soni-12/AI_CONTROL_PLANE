@@ -11,7 +11,7 @@ Provides:
 
 import aio_pika
 import asyncio
-from ..config import settings
+from app.config import settings
 
 # Module-level singletons
 _connection: aio_pika.abc.AbstractRobustConnection | None = None

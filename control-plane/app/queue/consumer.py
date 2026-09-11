@@ -12,18 +12,18 @@ import asyncio
 import random
 import aio_pika
 from datetime import datetime
-from ..config import settings
-from ..queue.connection import (
+from app.config import settings
+from app.queue.connection import (
     get_rabbitmq_channel,
     SIGNALS_METRICS_QUEUE_NAME,
     SIGNALS_STORAGE_QUEUE_NAME,
     DEAD_LETTER_EXCHANGE_NAME,
     SIGNALS_QUEUE_NAME
 )
-from ..realtime_aggregates import update_realtime_aggregate
+from app.realtime_aggregates import update_realtime_aggregate
 from app.redis.cache import invalidate_user_cache
-from ..database.database import AsyncSessionLocal
-from ..database import models
+from app.database.database import AsyncSessionLocal
+from app.database import models
 
 MAX_RETRIES = 3
 
