@@ -28,7 +28,7 @@ from app.database.database import get_async_db
 from app.dependencies import verify_api_key
 from app.blockchain.erc8004 import check_agent_reputation_async, format_reputation_for_response
 from app.blockchain.avalanche import verify_payment_async
-from app.redis.cache import redis_client
+from app.redis.cache import redis_client, get_tenant_key
 from web3 import Web3
 from .auth import get_current_user
 
@@ -76,9 +76,12 @@ async def get_or_create_invoice(
         raise HTTPException(status_code=403, detail=reputation["description"])
 
     # 3. Fast Redis Burst Access Check (< 1ms)
-    burst_cache_key = f"agent:burst:{current_user.id}:{payload.agent_id}:{service_name}:{endpoint}"
+    burst_cache_key = get_tenant_key(current_user.id, service_name, "agent", "burst", payload.agent_id, endpoint)
     try:
         cached_burst = await redis_client.get(burst_cache_key)
+        if not cached_burst:
+            legacy_burst_key = f"agent:burst:{current_user.id}:{payload.agent_id}:{service_name}:{endpoint}"
+            cached_burst = await redis_client.get(legacy_burst_key)
         if cached_burst and mode != "pay_per_request":
             return {"status": "authorized", "message": "Active burst window (Redis fast-path)."}
     except Exception as e:
@@ -220,7 +223,7 @@ async def verify_agent_payment(
     await db.commit()
 
     # Fast-path Redis burst token
-    burst_cache_key = f"agent:burst:{payment.user_id}:{payment.agent_id}:{payment.service_name}:{payment.endpoint}"
+    burst_cache_key = get_tenant_key(payment.user_id, payment.service_name, "agent", "burst", payment.agent_id, payment.endpoint)
     try:
         await redis_client.setex(burst_cache_key, access_duration * 60, "active")
     except Exception as e:

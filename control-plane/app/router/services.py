@@ -191,14 +191,16 @@ async def delete_service(
     await db.commit()
 
     # ── 9. Flush Redis real-time aggregate keys ──────────────────────────────
-    redis_pattern = f"rt_agg:user:{uid}:service:{service_name}:*"
-    await cache_delete_pattern(redis_pattern)
+    await cache_delete_pattern(f"nc:tenant:{uid}:service:{service_name}:*")
+    await cache_delete_pattern(f"rt_agg:user:{uid}:service:{service_name}:*")
 
     # ── 10. Flush 24h decision logs and alerts for this service ──────────────
+    await cache_delete_pattern(f"nc:tenant:{uid}:decision_log:{service_name}:*")
     await cache_delete_pattern(f"decision_log:{uid}:{service_name}:*")
     await cache_delete_pattern(f"alert_sent:{uid}:{service_name}:*")
     
     # Revalidate the dashboard's service list cache
+    await cache_delete(f"nc:tenant:{uid}:services")
     await cache_delete(f"user:{uid}:services")
 
     total_deleted = sum(deleted_counts.values())

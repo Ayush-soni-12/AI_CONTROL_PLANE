@@ -1,39 +1,40 @@
 """
 Real-Time Aggregate Tracking for Signals
-
-This module provides Redis-based real-time metric aggregation for ALL incoming signals.
-It solves the problem of accurate metrics calculation when using signal sampling.
-
-WHY THIS IS NEEDED:
-- Without this: If we sample 10% of signals for storage, metrics would be inaccurate
-- With this: We track 100% of signals in Redis (accurate) while storing only 10% (efficient)
+Provides Redis-based real-time metric aggregation for ALL incoming signals
+with multi-tenant key namespacing and outage resilience.
 
 ARCHITECTURE:
 1. ALL signals update Redis counters (100% coverage)
 2. SAMPLED signals get stored in PostgreSQL (10% success, 100% errors)
-3. Metrics for decisions come from Redis (accurate)
-4. Historical analysis uses PostgreSQL (efficient)
-
-TIME WINDOWS:
-- 1 minute: Used for real-time rate limiting and traffic spike detection
-- 1 hour: Used for caching decisions and circuit breaker logic
-- 24 hours: Used for dashboard metrics and trends
+3. Metrics for decisions come from Redis (accurate) with snapshot and DB fallback
+4. Keys are strictly namespaced by tenant: nc:tenant:{tenant_id}:service:{service_name}:...
 """
 
 import json
+import logging
 import statistics
-from typing import Optional, Dict, List
-from datetime import datetime, timedelta
-from app.redis.cache import redis_client
-# from sqlalchemy.orm import Session
+import time
+import uuid
+from typing import Optional, Dict, List, Union
+from datetime import datetime, timezone
+from app.redis.cache import redis_client, get_tenant_key
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
+
+logger = logging.getLogger(__name__)
 
 
+def _get_aggregate_key(
+    user_id: int,
+    service_name: str,
+    endpoint: str,
+    window: str,
+    tenant_id: Optional[Union[str, int]] = None
+) -> str:
+    """Generate standardized multi-tenant Redis key for aggregate storage."""
+    tid = tenant_id if tenant_id is not None else user_id
+    return get_tenant_key(tid, service_name, "endpoint", endpoint, window)
 
-def _get_aggregate_key(user_id: int, service_name: str, endpoint: str, window: str) -> str:
-    """Generate Redis key for aggregate storage."""
-    return f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:{window}"
-    
 
 def _percentile(sorted_data: List[float], p: int) -> float:
     """Compute the p-th percentile from a sorted list of values."""
@@ -53,20 +54,14 @@ async def update_realtime_aggregate(
     endpoint: str,
     latency_ms: float,
     status: str,
-    customer_identifier: str = None,  # NEW: For per-customer rate limiting
-    priority: str = 'medium',  # NEW: For queue/shed decisions
-    action_taken: str = 'none', # NEW
-    flag_name: str = None # NEW: For feature flag performance tracking
+    customer_identifier: str = None,
+    priority: str = 'medium',
+    action_taken: str = 'none',
+    flag_name: str = None,
+    tenant_id: Optional[Union[str, int]] = None
 ):
     """
     Update real-time aggregates for ALL signals (100% coverage).
-    
-    TWO-TIER TRACKING:
-    1. Global aggregates: All customers combined (for queue/shed decisions)
-    2. Per-customer aggregates: Individual customer tracking (for rate limiting)
-    
-    This function is called for EVERY signal, regardless of whether it's
-    stored in the database or not. This ensures accurate metrics.
     
     Args:
         user_id: User ID who owns this signal
@@ -76,47 +71,36 @@ async def update_realtime_aggregate(
         status: Status of the request ('success' or 'error')
         customer_identifier: IP or session ID (optional, for per-customer limiting)
         priority: Request priority (critical/high/medium/low)
+        action_taken: Action taken by control plane
+        flag_name: Optional feature flag name
+        tenant_id: Optional tenant ID override (defaults to user_id)
     """
-    # Update aggregates with different strategies based on window
-    # 1m: Time-bucketed (one key per minute)
-    # 1h, 24h: Accumulating with TTL
-    
-    import time
+    tid = tenant_id if tenant_id is not None else user_id
     current_timestamp = int(time.time())
     
     for window in ['1m', '1h', '24h']:
-        # Get current aggregate or initialize
         try:
-            # For 1-minute window, use time-bucketed key to ensure true 60s window
             if window == '1m':
-                # Create a key that includes the current minute timestamp
-                # This ensures each minute gets its own bucket
-                current_minute = current_timestamp // 60  # Unix timestamp divided by 60
-                key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:{window}:{current_minute}"
+                current_minute = current_timestamp // 60
+                key = get_tenant_key(tid, service_name, "endpoint", endpoint, f"1m:{current_minute}")
                 ttl = 120  # Keep for 2 minutes to allow reads from previous minute
             else:
-                # For 1h and 24h, use the standard key
-                key = _get_aggregate_key(user_id, service_name, endpoint, window)
+                key = _get_aggregate_key(user_id, service_name, endpoint, window, tenant_id=tid)
                 ttl = 3600 if window == '1h' else 86400
-            
-            data = await redis_client.get(key)  # await async call
+
+            data = await redis_client.get(key)
             if data:
                 agg = json.loads(data)
             else:
-                # Always start fresh from zero when the Redis key is missing/expired.
-                # The snapshot is only a READ fallback in get_realtime_metrics — it must
-                # never be pre-seeded here, or every new signal would be counted as
-                # snapshot_count + 1 instead of just 1, inflating all metrics.
                 agg = {
                     'count': 0,
-                    'sum_latency': 0,
+                    'sum_latency': 0.0,
                     'errors': 0,
                     'rate_limit_enabled': False,
                     'last_updated': None,
                     'window_start': current_timestamp if window == '1m' else None
                 }
-            
-            # Update counters
+
             agg['count'] += 1
             agg['sum_latency'] += latency_ms
             if status == 'error':
@@ -125,73 +109,60 @@ async def update_realtime_aggregate(
                 agg['rate_limit_enabled'] = True
             else:
                 agg['rate_limit_enabled'] = False
-            agg['last_updated'] = datetime.now().isoformat()
-            
-            # Save back to Redis with appropriate TTL
-            await redis_client.setex(key, ttl, json.dumps(agg))  # await async call
-            
-            # --- NEW: Flag-specific tracking ---
+            agg['last_updated'] = datetime.now(timezone.utc).isoformat()
+
+            await redis_client.setex(key, ttl, json.dumps(agg))
+
+            # Feature flag tracking
             if flag_name:
-                flag_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:flag:{flag_name}:{window}"
-                # Store the name of the active flag so it can be listed later
-                flag_list_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:active_flags"
+                flag_key = get_tenant_key(tid, service_name, "endpoint", endpoint, "flag", flag_name, window)
+                flag_list_key = get_tenant_key(tid, service_name, "endpoint", endpoint, "active_flags")
                 await redis_client.sadd(flag_list_key, flag_name)
-                await redis_client.expire(flag_list_key, 3600) # Expire after 1h of inactivity
+                await redis_client.expire(flag_list_key, 3600)
 
                 flag_data = await redis_client.get(flag_key)
                 f_agg = json.loads(flag_data) if flag_data else {
-                    'count': 0, 'sum_latency': 0, 'errors': 0, 'last_updated': None
+                    'count': 0, 'sum_latency': 0.0, 'errors': 0, 'last_updated': None
                 }
                 f_agg['count'] += 1
                 f_agg['sum_latency'] += latency_ms
-                if status == 'error': f_agg['errors'] += 1
-                f_agg['last_updated'] = datetime.now().isoformat()
+                if status == 'error':
+                    f_agg['errors'] += 1
+                f_agg['last_updated'] = datetime.now(timezone.utc).isoformat()
                 await redis_client.setex(flag_key, ttl, json.dumps(f_agg))
-            # --- End Flag-specific tracking ---
 
-            # Track individual latency in sorted set for percentile calculation
-            # Use timestamp+random as member to allow duplicate latencies
-            import uuid
+            # Track latency in sorted set for percentiles
             latency_key = f"{key}:latencies"
             unique_id = uuid.uuid4().hex[:8]
             member = f"{current_timestamp}:{unique_id}:{latency_ms}"
             await redis_client.zadd(latency_key, {member: latency_ms})
-            # Cap at 1000 samples (remove oldest)
             count = await redis_client.zcard(latency_key)
             if count > 1000:
                 await redis_client.zremrangebyrank(latency_key, 0, count - 1001)
             await redis_client.expire(latency_key, ttl)
-            
+
         except Exception as e:
-            # Log error but don't fail the signal processing
-            print(f"❌ Error updating real-time aggregate: {e}")
-    
-    # NEW: Per-customer tracking (1-minute window only, for rate limiting)
+            # Redis failure should not crash signal processing
+            logger.debug(f"Redis aggregate update failed gracefully: {e}")
+
+    # Per-customer tracking (1-minute window only)
     if customer_identifier:
         try:
-            import time
-            current_timestamp = int(time.time())
             current_minute = current_timestamp // 60
-            
-            # Create per-customer key
-            customer_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:customer:{customer_identifier}:1m:{current_minute}"
-            
-            # Get or initialize per-customer aggregate
+            customer_key = get_tenant_key(
+                tid, service_name, "endpoint", endpoint, "customer", customer_identifier, f"1m:{current_minute}"
+            )
             customer_data = await redis_client.get(customer_key)
             if customer_data:
                 customer_agg = json.loads(customer_data)
             else:
                 customer_agg = {'count': 0, 'last_updated': None}
-            
-            # Update customer counter
+
             customer_agg['count'] += 1
-            customer_agg['last_updated'] = datetime.now().isoformat()
-            
-            # Save with 2-minute TTL
+            customer_agg['last_updated'] = datetime.now(timezone.utc).isoformat()
             await redis_client.setex(customer_key, 120, json.dumps(customer_agg))
-            
         except Exception as e:
-            print(f"❌ Error updating per-customer aggregate: {e}")
+            logger.debug(f"Per-customer aggregate update failed gracefully: {e}")
 
 
 async def get_realtime_metrics(
@@ -200,94 +171,86 @@ async def get_realtime_metrics(
     endpoint: str,
     window: str = '1h',
     db: AsyncSession = None,
-    flag_name: str = None # NEW: Fetch metrics for a specific flag
+    flag_name: str = None,
+    tenant_id: Optional[Union[str, int]] = None
 ) -> Optional[Dict]:
     """
-    Get real-time metrics with THREE-TIER FALLBACK:
-    
-    1. PRIMARY: Redis real-time aggregates (accurate, fast)
-    2. FALLBACK: PostgreSQL snapshots (accurate, slightly stale)
-    3. LAST RESORT: None (caller uses sampled database signals)
-    
-    Returns accurate metrics calculated from ALL signals (100% coverage),
-    not just the sampled signals in the database.
-    
-    Args:
-        user_id: User ID
-        service_name: Name of the service
-        endpoint: API endpoint path
-        window: Time window ('1h' or '24h')
-        db: Database session (optional, for snapshot fallback)
-    
-    Returns:
-        Dict with keys: count, sum_latency, errors, avg_latency, error_rate, requests_per_minute
-        Returns None if no data exists in Redis or snapshots
+    Get real-time metrics with three-tier fallback:
+    1. PRIMARY: Redis real-time aggregates
+    2. FALLBACK: PostgreSQL snapshots
+    3. LAST RESORT: Raw sampled DB signals
     """
+    tid = tenant_id if tenant_id is not None else user_id
     if flag_name:
-        key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:flag:{flag_name}:{window}"
+        key = get_tenant_key(tid, service_name, "endpoint", endpoint, "flag", flag_name, window)
+        legacy_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:flag:{flag_name}:{window}"
     else:
-        key = _get_aggregate_key(user_id, service_name, endpoint, window)
-    
+        key = _get_aggregate_key(user_id, service_name, endpoint, window, tenant_id=tid)
+        legacy_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:{window}"
+
     try:
-        # TIER 1: Try Redis first (most up-to-date)
-        data = await redis_client.get(key)  # await async call
+        # TIER 1: Try Redis first
+        data = await redis_client.get(key)
+        if not data:
+            # Check legacy key during migration
+            data = await redis_client.get(legacy_key)
+
         if data:
             agg = json.loads(data)
-            
-            # Calculate derived metrics
             avg_latency = agg['sum_latency'] / agg['count'] if agg['count'] > 0 else 0
             error_rate = agg['errors'] / agg['count'] if agg['count'] > 0 else 0
-            
-            # TIER 1.5: Actual 60s traffic rate (from the current 1m bucket)
+
+            # Traffic rate from current minute bucket
             requests_per_minute = 0
             try:
-                import time
                 current_timestamp = int(time.time())
                 current_minute = current_timestamp // 60
-                
-                # Try current minute bucket first
-                one_min_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:1m:{current_minute}"
+                one_min_key = get_tenant_key(tid, service_name, "endpoint", endpoint, f"1m:{current_minute}")
                 one_min_data = await redis_client.get(one_min_key)
-                
+                if not one_min_data:
+                    # Check legacy minute bucket
+                    one_min_data = await redis_client.get(
+                        f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:1m:{current_minute}"
+                    )
+
                 if one_min_data:
                     one_min_agg = json.loads(one_min_data)
                     requests_per_minute = one_min_agg.get('count', 0)
                 else:
-                    # Fallback: if current minute is empty (just started), try previous minute
-                    prev_min_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:1m:{current_minute - 1}"
+                    prev_min_key = get_tenant_key(tid, service_name, "endpoint", endpoint, f"1m:{current_minute - 1}")
                     prev_min_data = await redis_client.get(prev_min_key)
                     if prev_min_data:
                         prev_min_agg = json.loads(prev_min_data)
                         requests_per_minute = prev_min_agg.get('count', 0)
                     else:
-                        # Fallback: use window-based calculation
                         window_minutes = 60 if window == '1h' else 1440
                         requests_per_minute = agg['count'] / window_minutes
             except Exception:
-                # Fallback: use window-based calculation
                 window_minutes = 60 if window == '1h' else 1440
                 requests_per_minute = agg['count'] / window_minutes
-            
-            # Calculate p50/p95/p99 from latency sorted set
-            p50, p95, p99 = 0, 0, 0
+
+            # Calculate p50/p95/p99 from sorted set
+            p50, p95, p99 = 0.0, 0.0, 0.0
             try:
                 latency_key = f"{key}:latencies"
                 raw_scores = await redis_client.zrange(latency_key, 0, -1, withscores=True)
+                if not raw_scores:
+                    raw_scores = await redis_client.zrange(f"{legacy_key}:latencies", 0, -1, withscores=True)
                 if raw_scores:
                     latencies = sorted([score for _, score in raw_scores])
                     p50 = _percentile(latencies, 50)
                     p95 = _percentile(latencies, 95)
                     p99 = _percentile(latencies, 99)
             except Exception as e:
-                print(f"⚠️ Error computing percentiles: {e}")
-            
+                logger.debug(f"Could not compute percentiles from Redis: {e}")
+
             return {
                 'count': agg['count'],
                 'sum_latency': agg['sum_latency'],
                 'errors': agg['errors'],
                 'avg_latency': avg_latency,
                 'error_rate': error_rate,
-                'requests_per_minute': requests_per_minute,  # NEW: actual 60s rate
+                'requests_per_minute': requests_per_minute,
                 'rate_limit_enabled': agg.get('rate_limit_enabled', False),
                 'p50': round(p50, 2),
                 'p95': round(p95, 2),
@@ -295,11 +258,14 @@ async def get_realtime_metrics(
                 'last_updated': agg.get('last_updated'),
                 'source': 'redis'
             }
-        
-        # TIER 2: Fallback to PostgreSQL snapshots (accurate but slightly stale)
-        if db is not None:
+
+    except Exception as e:
+        logger.debug(f"Redis get_realtime_metrics error: {e}")
+
+    # TIER 2: Fallback to PostgreSQL snapshots
+    if db is not None:
+        try:
             from app.redis.aggregate_persistence import get_snapshot_metrics
-            
             snapshot_metrics = await get_snapshot_metrics(
                 user_id=user_id,
                 service_name=service_name,
@@ -307,22 +273,20 @@ async def get_realtime_metrics(
                 window=window,
                 db=db
             )
-            
             if snapshot_metrics:
-                # For snapshots, use 1-hour average since we don't have rate limiter data
                 window_minutes = 60 if window == '1h' else 1440
                 snapshot_metrics['requests_per_minute'] = (
                     snapshot_metrics.get('count', 0) / window_minutes if window_minutes > 0 else 0
                 )
                 snapshot_metrics['source'] = 'snapshot'
                 return snapshot_metrics
-        
-        # TIER 3: Fallback to evaluating raw sampled DB signals
-        # TIER 3: Fallback to evaluating raw sampled DB signals
-        if db is not None:
+        except Exception as e:
+            logger.debug(f"Snapshot fallback error: {e}")
+
+    # TIER 3: Fallback to evaluating raw sampled DB signals
+    if db is not None:
+        try:
             from app.database import models
-            from sqlalchemy import select, and_
-            
             stmt = select(models.Signal).filter(
                 and_(
                     models.Signal.user_id == user_id,
@@ -330,24 +294,20 @@ async def get_realtime_metrics(
                     models.Signal.endpoint == endpoint
                 )
             ).order_by(models.Signal.timestamp.desc())
-            
+
             result = await db.execute(stmt)
             signals = result.scalars().all()
-            
+
             if signals:
                 count = len(signals)
                 sum_latency = sum(s.latency_ms for s in signals)
                 errors = sum(1 for s in signals if s.status == 'error')
-                
                 avg_latency = sum_latency / count if count > 0 else 0
                 error_rate = errors / count if count > 0 else 0
-                
-                # Accurately compute percentiles from DB signals
                 latencies = sorted([s.latency_ms for s in signals])
                 p50 = _percentile(latencies, 50)
                 p95 = _percentile(latencies, 95)
                 p99 = _percentile(latencies, 99)
-                import datetime
 
                 return {
                     'count': count,
@@ -360,25 +320,29 @@ async def get_realtime_metrics(
                     'p50': p50,
                     'p95': p95,
                     'p99': p99,
-                    'last_updated': datetime.datetime.now().isoformat(),
+                    'last_updated': datetime.now(timezone.utc).isoformat(),
                     'source': 'database'
                 }
-        
-        return None
-        
-    except Exception as e:
-        print(f"❌ Error getting real-time metrics: {e}")
-        return None
+        except Exception as e:
+            logger.debug(f"Database fallback error: {e}")
+
+    return None
 
 
-async def get_active_flags_for_endpoint(user_id: int, service_name: str, endpoint: str) -> List[str]:
+async def get_active_flags_for_endpoint(
+    user_id: int,
+    service_name: str,
+    endpoint: str,
+    tenant_id: Optional[Union[str, int]] = None
+) -> List[str]:
     """Get list of feature flags that have sent signals in the last hour."""
-    key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:active_flags"
+    tid = tenant_id if tenant_id is not None else user_id
+    key = get_tenant_key(tid, service_name, "endpoint", endpoint, "active_flags")
     try:
         flags = await redis_client.smembers(key)
-        return [f.decode('utf-8') if isinstance(f, bytes) else f for f in flags]
+        if not flags:
+            legacy_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:active_flags"
+            flags = await redis_client.smembers(legacy_key)
+        return [f.decode('utf-8') if isinstance(f, bytes) else str(f) for f in flags]
     except Exception:
         return []
-
-
-

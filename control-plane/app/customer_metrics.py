@@ -1,22 +1,23 @@
 """
 Helper function to get per-customer request rate for rate limiting.
-
-This is separate from the main get_realtime_metrics function because:
-1. Rate limiting checks only need customer-specific data (not global metrics)
-2. It's more efficient to query just the customer key
-3. Keeps the code separation clean
+Standardized with multi-tenant key namespacing and outage resilience.
 """
 
 import json
-from typing import Optional
-from app.redis.cache import redis_client
+import logging
+import time
+from typing import Optional, Union
+from app.redis.cache import redis_client, get_tenant_key
+
+logger = logging.getLogger(__name__)
 
 
 async def get_customer_metrics(
     user_id: int,
     service_name: str,
     endpoint: str,
-    customer_identifier: str
+    customer_identifier: str,
+    tenant_id: Optional[Union[str, int]] = None
 ) -> Optional[dict]:
     """
     Get per-customer request rate for rate limiting checks.
@@ -29,28 +30,35 @@ async def get_customer_metrics(
         service_name: Service name
         endpoint: Endpoint path
         customer_identifier: IP address or session ID
+        tenant_id: Optional tenant ID override
     
     Returns:
-        Dict with 'requests_per_minute' and 'count', or None if no data
+        Dict with 'requests_per_minute' and 'count'
     """
     try:
-        import time
+        tid = tenant_id if tenant_id is not None else user_id
         current_timestamp = int(time.time())
         current_minute = current_timestamp // 60
         
-        # Get current minute bucket for this customer
-        key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:customer:{customer_identifier}:1m:{current_minute}"
+        # Standard namespaced customer key
+        key = get_tenant_key(
+            tid, service_name, "endpoint", endpoint, "customer", customer_identifier, f"1m:{current_minute}"
+        )
         
         data = await redis_client.get(key)
+        if not data:
+            # Fallback to legacy key
+            legacy_key = f"rt_agg:user:{user_id}:service:{service_name}:endpoint:{endpoint}:customer:{customer_identifier}:1m:{current_minute}"
+            data = await redis_client.get(legacy_key)
+
         if data:
             agg = json.loads(data)
             return {
                 'count': agg.get('count', 0),
-                'requests_per_minute': agg.get('count', 0),  # Direct count = req/min
+                'requests_per_minute': agg.get('count', 0),
                 'last_updated': agg.get('last_updated')
             }
         
-        # No data = no requests from this customer in last minute
         return {
             'count': 0,
             'requests_per_minute': 0,
@@ -58,5 +66,5 @@ async def get_customer_metrics(
         }
         
     except Exception as e:
-        print(f"❌ Error getting customer metrics: {e}")
-        return {'count': 0, 'requests_per_minute': 0}
+        logger.debug(f"Graceful degradation getting customer metrics: {e}")
+        return {'count': 0, 'requests_per_minute': 0, 'last_updated': None}

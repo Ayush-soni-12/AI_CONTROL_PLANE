@@ -69,113 +69,123 @@ async def snapshot_redis_aggregates(db: AsyncSession = None):
         )
         
         # STEP 1: Scan Redis for all aggregate keys
-        # Pattern: rt_agg:user:{user_id}:service:{service}:endpoint:{endpoint}:{window}
-        pattern = "rt_agg:*"
-        
-        try:
-            # Scan all keys matching pattern
+        # Standard: nc:tenant:{tenant_id}:service:{service}:endpoint:{endpoint}:{window}
+        # Legacy: rt_agg:user:{user_id}:service:{service}:endpoint:{endpoint}:{window}
+        keys = []
+        for pattern in ["nc:tenant:*:service:*:endpoint:*", "rt_agg:*"]:
             cursor = 0
-            keys = []
-            
-            # Use SCAN to avoid blocking Redis
             while True:
                 cursor, partial_keys = await redis_job_client.scan(cursor, match=pattern, count=100)
                 keys.extend(partial_keys)
                 if cursor == 0:
                     break
-            
-            print(f"📊 Found {len(keys)} Redis aggregate keys")
-            
-            if not keys:
-                print("⚠️  No Redis aggregates found to snapshot")
-                if should_close:
-                    await async_session.close()
-                return
-            
-            # STEP 2: Process each key and save to database
-            snapshots_created = 0
-            snapshots_skipped = 0
-            
-            for key in keys:
-                try:
-                    # Parse key to extract metadata
-                    # Format: rt_agg:user:{user_id}:service:{service}:endpoint:{endpoint}:{window}
-                    key_str = key.decode('utf-8') if isinstance(key, bytes) else key
-                    
-                    # Skip latency sorted set keys, per-customer rate-limiting counters, and feature flag keys
-                    if key_str.endswith(':latencies') or ':customer:' in key_str or ':flag:' in key_str or key_str.endswith(':active_flags'):
-                        snapshots_skipped += 1
-                        continue
-                    
-                    parts = key_str.split(':')
-                    
-                    if len(parts) < 8:
-                        print(f"⚠️  Skipping malformed key: {key_str}")
-                        snapshots_skipped += 1
-                        continue
-                    
-                    user_id = int(parts[2])
-                    service_name = parts[4]
-                    # Endpoint might contain colons, so join remaining parts except window
-                    window = parts[-1]
-                    endpoint = ':'.join(parts[6:-1])
-                    
-                    # Get aggregate data from Redis
-                    data = await redis_job_client.get(key_str)
-                    if not data:
-                        snapshots_skipped += 1
-                        continue
-                    
-                    agg = json.loads(data)
-                    
-                    # Calculate derived metrics
-                    avg_latency = agg['sum_latency'] / agg['count'] if agg['count'] > 0 else 0
-                    error_rate = agg['errors'] / agg['count'] if agg['count'] > 0 else 0
-                    
-                    # Calculate percentiles from latency sorted set
-                    p50, p95, p99 = 0.0, 0.0, 0.0
-                    try:
-                        latency_key = f"{key_str}:latencies"
-                        raw_scores = await redis_job_client.zrange(latency_key, 0, -1, withscores=True)
-                        if raw_scores:
-                            from app.realtime_aggregates import _percentile
-                            latencies = sorted([score for _, score in raw_scores])
-                            p50 = _percentile(latencies, 50)
-                            p95 = _percentile(latencies, 95)
-                            p99 = _percentile(latencies, 99)
-                    except Exception as e:
-                        print(f"⚠️  Could not compute percentiles for {key_str}: {e}")
-                    
-                    # STEP 3: Save snapshot to database
-                    snapshot = models.AggregateSnapshot(
-                        user_id=user_id,
-                        service_name=service_name,
-                        endpoint=endpoint,
-                        window=window,
-                        snapshot_at=datetime.now(timezone.utc),
-                        count=agg['count'],
-                        sum_latency=agg['sum_latency'],
-                        errors=agg['errors'],
-                        avg_latency=avg_latency,
-                        error_rate=error_rate,
-                        p50=p50,
-                        p95=p95,
-                        p99=p99,
-                        last_updated=agg.get('last_updated')
-                    )
-                    
-                    async_session.add(snapshot)
-                    snapshots_created += 1
-                    
-                    # Commit in batches of 50 to avoid memory issues
-                    if snapshots_created % 50 == 0:
-                        await async_session.commit()
-                        print(f"   💾 Committed {snapshots_created} snapshots so far...")
-                    
-                except Exception as e:
-                    print(f"❌ Error processing key {key}: {e}")
+        
+        # Deduplicate keys
+        keys = list(set(keys))
+        print(f"📊 Found {len(keys)} Redis aggregate keys")
+        
+        if not keys:
+            print("⚠️  No Redis aggregates found to snapshot")
+            if should_close:
+                await async_session.close()
+            return
+        
+        # STEP 2: Process each key and save to database
+        snapshots_created = 0
+        snapshots_skipped = 0
+        
+        for key in keys:
+            try:
+                key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+                
+                # Skip latency sorted set keys, per-customer rate-limiting counters, and feature flag keys
+                if (key_str.endswith(':latencies') or ':customer:' in key_str or 
+                    ':flag:' in key_str or key_str.endswith(':active_flags') or
+                    ':1m:' in key_str or key_str.endswith(':1m')):
                     snapshots_skipped += 1
                     continue
+                
+                parts = key_str.split(':')
+                
+                if key_str.startswith("nc:tenant:"):
+                    if len(parts) < 8:
+                        snapshots_skipped += 1
+                        continue
+                    try:
+                        user_id = int(parts[2]) if parts[2].isdigit() else 1
+                    except Exception:
+                        user_id = 1
+                    service_name = parts[4]
+                    window = parts[-1]
+                    endpoint = ':'.join(parts[6:-1])
+                elif key_str.startswith("rt_agg:user:"):
+                    if len(parts) < 8:
+                        snapshots_skipped += 1
+                        continue
+                    user_id = int(parts[2]) if parts[2].isdigit() else 1
+                    service_name = parts[4]
+                    window = parts[-1]
+                    endpoint = ':'.join(parts[6:-1])
+                else:
+                    snapshots_skipped += 1
+                    continue
+                
+                # Get aggregate data from Redis
+                data = await redis_job_client.get(key_str)
+                if not data:
+                    snapshots_skipped += 1
+                    continue
+                
+                agg = json.loads(data)
+                
+                # Calculate derived metrics
+                avg_latency = agg['sum_latency'] / agg['count'] if agg['count'] > 0 else 0
+                error_rate = agg['errors'] / agg['count'] if agg['count'] > 0 else 0
+                
+                # Calculate percentiles from latency sorted set
+                p50, p95, p99 = 0.0, 0.0, 0.0
+                try:
+                    latency_key = f"{key_str}:latencies"
+                    raw_scores = await redis_job_client.zrange(latency_key, 0, -1, withscores=True)
+                    if raw_scores:
+                        from app.realtime_aggregates import _percentile
+                        latencies = sorted([score for _, score in raw_scores])
+                        p50 = _percentile(latencies, 50)
+                        p95 = _percentile(latencies, 95)
+                        p99 = _percentile(latencies, 99)
+                except Exception as e:
+                    print(f"⚠️  Could not compute percentiles for {key_str}: {e}")
+                
+                # STEP 3: Save snapshot to database
+                snapshot = models.AggregateSnapshot(
+                    user_id=user_id,
+                    service_name=service_name,
+                    endpoint=endpoint,
+                    window=window,
+                    snapshot_at=datetime.now(timezone.utc),
+                    count=agg['count'],
+                    sum_latency=agg['sum_latency'],
+                    errors=agg['errors'],
+                    avg_latency=avg_latency,
+                    error_rate=error_rate,
+                    p50=p50,
+                    p95=p95,
+                    p99=p99,
+                    last_updated=agg.get('last_updated')
+                )
+                
+                async_session.add(snapshot)
+                snapshots_created += 1
+                
+                # Commit in batches of 50 to avoid memory issues
+                if snapshots_created % 50 == 0:
+                    await async_session.commit()
+                    print(f"   💾 Committed {snapshots_created} snapshots so far...")
+                
+            except Exception as e:
+                print(f"❌ Error processing key {key}: {e}")
+                snapshots_skipped += 1
+                continue
             
             # Final commit
             await async_session.commit()
@@ -203,10 +213,6 @@ async def snapshot_redis_aggregates(db: AsyncSession = None):
             print(f"   - Old snapshots cleaned: {deleted}")
             print("="*60 + "\n")
             
-        except Exception as e:
-            print(f"❌ Error scanning Redis keys: {e}")
-            raise
-        
     except Exception as e:
         print(f"❌ Fatal error in snapshot job: {e}")
         await async_session.rollback()

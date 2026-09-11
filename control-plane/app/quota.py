@@ -15,7 +15,7 @@ from app.database import models
 from app.database.database import get_async_db
 from app.dependencies import verify_api_key
 from app.config import settings
-from app.redis.cache import redis_client
+from app.redis.cache import redis_client, get_tenant_key
 
 # ── Plan quota constants (mirrors billing.py) ─────────────────────────────────
 
@@ -28,7 +28,7 @@ PLAN_QUOTAS = {
 
 async def _get_services_count(user_id: int, db: AsyncSession) -> int:
     """Count distinct service_name values for a user (cached in Redis for 60s)."""
-    cache_key = f"quota:services_count:{user_id}"
+    cache_key = get_tenant_key(user_id, None, "quota", "services_count")
 
     try:
         cached = await redis_client.get(cache_key)
@@ -57,7 +57,7 @@ async def _increment_signal_counter(user_id: int, count: int, db: AsyncSession):
     We use a Redis counter as a fast path and sync to DB every N signals
     to avoid a DB write on every single request.
     """
-    redis_key = f"quota:signals_used:{user_id}"
+    redis_key = get_tenant_key(user_id, None, "quota", "signals_used")
 
     try:
         new_total = await redis_client.incrby(redis_key, count)
@@ -106,9 +106,12 @@ async def check_quota(
     signals_quota = quotas["signals"]
     if signals_quota is not None:
         # Fast path: check Redis counter first
-        redis_key = f"quota:signals_used:{current_user.id}"
+        redis_key = get_tenant_key(current_user.id, None, "quota", "signals_used")
         try:
             redis_val = await redis_client.get(redis_key)
+            if not redis_val:
+                legacy_key = f"quota:signals_used:{current_user.id}"
+                redis_val = await redis_client.get(legacy_key)
             signals_used = int(redis_val) if redis_val else current_user.signals_used_month
         except Exception:
             signals_used = current_user.signals_used_month
@@ -153,8 +156,6 @@ async def check_quota(
             new_services = incoming_services - existing_services
             # ONLY block if they are trying to add a NEW service AND that addition
             # puts them over their allowed service quota.
-            # If they already have 10 existing services on the Free plan (quota 2),
-            # let them keep using those 10. Just block the 11th.
             if new_services and (len(existing_services) + len(new_services)) > services_quota:
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
