@@ -394,7 +394,8 @@ async def make_decision(
                                      name=ai_decision['flag_to_disable'],
                                      reason=ai_decision['reasoning'],
                                      trace_id=trace_id,
-                                     db=session
+                                     db=session,
+                                     tenant_id=str(user_id) if user_id else "default",
                                  )
                                  print(f"✅ [RollbackTask] Result: {result.get('status', 'Success' if result else 'Failed')}")
                         except Exception as inner_e:

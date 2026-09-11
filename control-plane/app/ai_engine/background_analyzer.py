@@ -1,29 +1,22 @@
 """
-Background AI Analyzer — Enhanced with Feedback Loop & Trend Context
+Background AI Analyzer — Enhanced with Feedback Loop, Trend Context & Anomaly Pre-Filtering
 
-IMPROVEMENTS over v1:
-1. Passes recent decision history to Gemini (feedback loop)
-2. Passes trend directions (rising/falling/stable) for smarter threshold tuning
-3. Fixed: scheduler is now uncommented in main.py (see note below)
-4. Fetches both 1h and 24h windows to compute trends
-
-NOTE: Remember to uncomment in main.py:
-    scheduler.add_job(
-        analyze_all_services,
-        trigger=CronTrigger(minute='*/5'),
-        id="ai_background_analysis",
-        ...
-    )
+IMPROVEMENTS:
+1. Anomaly Pre-Filtering Gate (AC-1): Skips expensive Gemini LLM invocations when endpoints are healthy.
+2. 1h vs 24h Trend Context (AC-2): Proactively detects rising latency/error/traffic trends before outages.
+3. Feature Flag Auto-Rollback: Integrates proactive protection checks to disable faulty flags.
+4. Span Aggregation: Passes trace telemetry to Gemini for granular root cause analysis.
 """
 
 import logging
+from typing import Optional, Dict
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.database import AsyncSessionLocal
 from app.realtime_aggregates import get_realtime_metrics
 from app.ai_engine.llm_analyzer import analyze_service_thresholds, analyze_service_patterns
-from app.ai_engine.threshold_manager import get_all_thresholds, update_thresholds
+from app.ai_engine.threshold_manager import get_all_thresholds, update_thresholds, DEFAULTS
 from app.database import models
 from app.config import settings
 
@@ -34,7 +27,7 @@ def _confidence_to_float(confidence: str) -> float:
     return {'low': 0.5, 'medium': 0.7, 'high': 1.0}.get(confidence, 0.5)
 
 
-def _compute_trends_from_windows(metrics_1h: dict, metrics_24h: dict) -> dict:
+def _compute_trends_from_windows(metrics_1h: dict, metrics_24h: Optional[dict]) -> dict:
     """
     Compare 1h window to 24h window to compute trend directions.
     Returns dict with latency_trend, error_trend, rpm_trend.
@@ -63,25 +56,59 @@ def _compute_trends_from_windows(metrics_1h: dict, metrics_24h: dict) -> dict:
     }
 
 
+def is_endpoint_anomalous_or_trending(
+    metrics_1h: dict,
+    trends: dict,
+    current_thresholds: dict
+) -> bool:
+    """
+    Multi-signal anomaly pre-filtering gate (AC-1).
+    Returns True if an anomaly or rising trend is present and requires Gemini LLM analysis.
+    Returns False if the endpoint is running normally and can skip expensive LLM calls.
+    """
+    error_rate = metrics_1h.get('error_rate', 0.0)
+    avg_latency = metrics_1h.get('avg_latency', 0.0)
+    p95_latency = metrics_1h.get('p95', 0.0) or avg_latency
+    rpm = metrics_1h.get('requests_per_minute', 0.0)
+
+    cb_error_rate = current_thresholds.get('circuit_breaker_error_rate', DEFAULTS['circuit_breaker_error_rate'])
+    cache_latency = current_thresholds.get('cache_latency_ms', DEFAULTS['cache_latency_ms'])
+    queue_rpm = current_thresholds.get('queue_deferral_rpm', DEFAULTS['queue_deferral_rpm'])
+
+    # 1. Error rate check: > 3% or > 30% of circuit breaker threshold
+    if error_rate >= 0.03 or error_rate >= (cb_error_rate * 0.3):
+        return True
+
+    # 2. Latency check: average > 60% of cache threshold or p95 > threshold
+    if avg_latency >= (cache_latency * 0.6) or p95_latency >= cache_latency:
+        return True
+
+    # 3. Traffic surge check: > 70% of queue deferral threshold
+    if rpm >= (queue_rpm * 0.7):
+        return True
+
+    # 4. Proactive trend check: rising latency, error, or traffic
+    if (
+        trends.get('latency_trend') == 'rising'
+        or trends.get('error_trend') == 'rising'
+        or trends.get('rpm_trend') == 'rising'
+    ):
+        return True
+
+    return False
+
+
 async def analyze_all_services():
     """
     Background job: Analyze all services and update AI thresholds.
-    
-    Runs every 5 minutes via APScheduler. For each user's service/endpoint:
-    1. Fetch 1h + 24h real-time metrics from Redis
-    2. Compute trend directions (latency/error/rpm)
-    3. Fetch recent decision history from Redis (feedback loop)
-    4. Call Gemini for threshold recommendations (WITH trends + decision history)
-    5. Update thresholds if confidence >= medium
-    6. Call Gemini for pattern analysis (WITH trends + decision history)
-    7. Store insights for dashboard
+    Runs every 5 minutes via APScheduler.
     """
     if not settings.GEMINI_API_KEY:
         print("⚠️  GEMINI_API_KEY not set — skipping AI analysis")
         return
 
     print("\n" + "=" * 60)
-    print("🤖 Starting AI background analysis job (v2 — with feedback loop)...")
+    print("🤖 Starting AI background analysis job (v2 — optimized with anomaly pre-filter)...")
     print("=" * 60)
 
     async_session = AsyncSessionLocal()
@@ -91,6 +118,7 @@ async def analyze_all_services():
         users = users_result.scalars().all()
 
         total_analyzed = 0
+        total_skipped_healthy = 0
         total_updated = 0
         total_insights = 0
 
@@ -117,7 +145,7 @@ async def analyze_all_services():
                     )
 
                     if not metrics_1h or metrics_1h.get('count', 0) < 10:
-                        continue  # Not enough data
+                        continue  # Not enough data for meaningful analysis
 
                     total_analyzed += 1
 
@@ -134,7 +162,7 @@ async def analyze_all_services():
                     except Exception:
                         pass
 
-                    # 3. Compute trends
+                    # 3. Compute 1h vs 24h trends (AC-2)
                     trends = _compute_trends_from_windows(metrics_1h, metrics_24h)
                     latency_trend = trends['latency_trend']
                     error_trend = trends['error_trend']
@@ -146,12 +174,9 @@ async def analyze_all_services():
                             f"latency:{latency_trend} errors:{error_trend} rpm:{rpm_trend}"
                         )
 
-                    # 4. Proactive Protection Check (NEW)
-                    # This triggers the 'Kill Switch' logic if a flag is causing a spike,
-                    # even if the client hasn't requested a new config yet.
+                    # 4. Proactive Protection & Feature Flag Rollback Check
                     try:
                         from app.functions.decisionFunction import make_decision
-                        print(f"🛡️  [Proactive] Checking protections for {service_name}{endpoint}...")
                         await make_decision(
                             service_name=service_name,
                             endpoint=endpoint,
@@ -159,27 +184,40 @@ async def analyze_all_services():
                             user_id=user.id
                         )
                     except Exception as e:
-                        print(f"⚠️  Proactive check failed for {service_name}{endpoint}: {e}")
+                        print(f"⚠️  Proactive check error for {service_name}{endpoint}: {e}")
 
-                    # 5. Fetch recent decision history (feedback loop)
+                    # 5. Fetch current thresholds
+                    current = await get_all_thresholds(
+                        async_session, user.id, service_name, endpoint
+                    )
+
+                    # 6. Anomaly Pre-Filtering Gate (AC-1)
+                    # Skip expensive Gemini calls if endpoint is completely healthy
+                    if not is_endpoint_anomalous_or_trending(metrics_1h, trends, current):
+                        total_skipped_healthy += 1
+                        print(
+                            f"⚡ [AnomalyGate] {service_name}{endpoint} is healthy "
+                            f"(lat={metrics_1h.get('avg_latency', 0):.0f}ms, "
+                            f"errors={metrics_1h.get('error_rate', 0)*100:.1f}%, trends stable) "
+                            f"— skipping Gemini LLM analysis."
+                        )
+                        continue
+
+                    # 7. Fetch recent decision history for feedback loop
                     from app.functions.decisionFunction import get_recent_decisions
                     recent_decisions = await get_recent_decisions(
                         user.id, service_name, endpoint
                     )
 
-                    # 6. Get current thresholds
-                    current = await get_all_thresholds(
-                        async_session, user.id, service_name, endpoint
-                    )
-
-                    # 6. Call Gemini for threshold recommendations (WITH trends + history)
+                    # 8. Call Gemini for threshold recommendations (WITH trends + history)
+                    print(f"🧠 [Gemini] Anomaly detected on {service_name}{endpoint} — invoking AI threshold analysis...")
                     recommendation = await analyze_service_thresholds(
                         service_name,
                         endpoint,
                         metrics_1h,
                         current,
-                        recent_decisions=recent_decisions,   # NEW
-                        trends=trends,                        # NEW
+                        recent_decisions=recent_decisions,
+                        trends=trends,
                     )
 
                     if recommendation and recommendation.confidence in ['medium', 'high']:
@@ -206,19 +244,10 @@ async def analyze_all_services():
                             f"✅ Updated thresholds for {service_name}{endpoint} "
                             f"(confidence: {recommendation.confidence}, trends: {trend_summary})"
                         )
-                        print(
-                            f"   Cache: {recommendation.cache_latency_ms}ms | "
-                            f"CB: {recommendation.circuit_breaker_error_rate:.0%} | "
-                            f"Queue: {recommendation.queue_deferral_rpm} rpm | "
-                            f"Shed: {recommendation.load_shedding_rpm} rpm | "
-                            f"Rate: {recommendation.rate_limit_customer_rpm} rpm/customer"
-                        )
-                        print(f"   Reasoning: {recommendation.reasoning}")
                     elif recommendation:
                         print(f"⏭️  Low confidence for {service_name}{endpoint}, skipping update")
 
-                    # 7. Span aggregation: find which operations are consistently slow
-                    # This gives Gemini real evidence instead of guessing from aggregate numbers.
+                    # 9. Span aggregation
                     span_stats = []
                     try:
                         from sqlalchemy import text as sql_text
@@ -247,23 +276,16 @@ async def analyze_all_services():
                             }
                             for row in span_query_result
                         ]
-                        if span_stats:
-                            print(
-                                f"   🕧 Span stats for {service_name}: "
-                                f"{len(span_stats)} operations, slowest: "
-                                f"{span_stats[0]['operation']} ({span_stats[0]['avg_ms']:.0f}ms avg)"
-                            )
                     except Exception as span_err:
-                        # Spans table may not exist yet (before migration) — degrade gracefully
-                        print(f"   ⚠️  Span aggregation skipped for {service_name}: {span_err}")
+                        pass
 
-                    # 8. Pattern detection + store insights (WITH trends, history, and span data)
+                    # 10. Pattern detection + store insights
                     patterns = await analyze_service_patterns(
                         service_name,
                         metrics_1h,
                         recent_decisions=recent_decisions,
                         trends=trends,
-                        span_stats=span_stats or None,  # None if no span data yet
+                        span_stats=span_stats or None,
                     )
 
                     if patterns:
@@ -328,7 +350,8 @@ async def analyze_all_services():
 
         print("=" * 60)
         print(f"🤖 AI analysis job complete!")
-        print(f"   - Services analyzed: {total_analyzed}")
+        print(f"   - Endpoints evaluated: {total_analyzed}")
+        print(f"   - Healthy (LLM skipped): {total_skipped_healthy}")
         print(f"   - Thresholds updated: {total_updated}")
         print(f"   - Insights generated: {total_insights}")
         print("=" * 60 + "\n")

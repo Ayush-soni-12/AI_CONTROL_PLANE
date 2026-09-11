@@ -17,12 +17,12 @@ _These are recommendations to keep your build orderly, not requirements. Skip an
 | D | Demo microservice & load tests | Existing | existing |
 | E | Hardhat smart contracts | Existing | existing |
 | 1 | Coding standards, alembic migrations & env config cleanup | Foundation | planned |
-| 2 | Node.js SDK memory leak fix, thundering herd protection & fail-open mode | Slice 1 | planned |
-| 3 | FastAPI microservices separation & worker isolation | Slice 2 | planned |
-| 4 | Decoupled agentic payments & Web3 billing gateway | Slice 2 | planned |
-| 5 | RabbitMQ fanout exchange, dual queue pipeline & dead-letter queue | Slice 3 | planned |
-| 6 | Redis multi-tenant key namespacing & outage resilience | Slice 3 | planned |
-| 7 | AI decision engine optimization & feature flag auto-rollback | Slice 3 | planned |
+| 2 | Node.js SDK memory leak fix, thundering herd protection & fail-open mode | Slice 1 | done |
+| 3 | FastAPI microservices separation & worker isolation | Slice 2 | done |
+| 4 | Decoupled agentic payments & Web3 billing gateway | Slice 2 | done |
+| 5 | RabbitMQ fanout exchange, dual queue pipeline & dead-letter queue | Slice 3 | in-progress |
+| 6 | Redis multi-tenant key namespacing & outage resilience | Slice 3 | in-progress |
+| 7 | AI decision engine optimization & feature flag auto-rollback | Slice 3 | in-progress |
 | 8 | Sidecar reverse proxy | Slice 4 | planned |
 
 ## Existing features
@@ -52,39 +52,77 @@ Clean up hardcoded localhost/CORS configurations, replace `Base.metadata.create_
 
 ## Slice 1: SDK Reliability & Fail-Open Hardening
 
-### 2. Node.js SDK memory leak fix, thundering herd protection & fail-open mode · needs a decision
+### 2. Node.js SDK memory leak fix, thundering herd protection & fail-open mode · done
 Unify config sync timers into a single background loop, parameterize dynamic route keys (`/users/:id`), fix sliding window customer rate limit resets, implement single-flight request coalescing on cache misses (thundering herd protection), and add local fail-open fallback rules when control plane is offline.
 **Done when:** SDK memory usage remains flat under dynamic route paths, concurrent cache misses execute only a single network fetch, customer rate limit maps expire per-key smoothly, and SDK gracefully degrades to local fallback rules when control plane backend is unreachable.
-- [ ] Design it (spec): `/architect node.js SDK memory leak fix, thundering herd protection & fail-open mode`
+- [x] Design it (spec): `/architect node.js SDK memory leak fix, thundering herd protection & fail-open mode`
+- [x] Build it: `/develop node.js SDK memory leak fix, thundering herd protection & fail-open mode`
+   - [x] Route normalization and endpoint tracking (AC-1)
+   - [x] Unified background sync ticker and clean destroy (AC-2, AC-6)
+   - [x] Cached stale fail-open and rate limit expiration cleanup (AC-3, AC-4, AC-5)
+- [x] Verify it: `/check verify node.js SDK memory leak fix, thundering herd protection & fail-open mode`
+- [x] Test it: `/test node.js SDK memory leak fix, thundering herd protection & fail-open mode`
+Spec 0001 (docs/specs/0001-node-sdk-reliability-and-fail-open.md) · code in `sdk/nodejs/`
 
 ## Slice 2: Microservices Separation & Decoupled Billing
 
-### 3. FastAPI microservices separation & worker isolation · needs a decision
+### 3. FastAPI microservices separation & worker isolation · in-progress
 Separate the monolithic FastAPI `main.py` entrypoint into independent microservice containers (`signals-service`, `ingestion-worker`, `ai-worker`, `billing-service`).
 **Done when:** background scheduler and RabbitMQ consumers run in isolated worker processes, keeping `signals-service` web API latency under 5ms.
-- [ ] Design it (spec): `/architect fastapi microservices separation & worker isolation`
+- [x] Design it (spec): `/architect fastapi microservices separation & worker isolation`
+- [x] Build it: `/develop fastapi microservices separation & worker isolation`
+   - [x] Create isolated entrypoints (api.py, worker.py, scheduler.py) (AC-1, AC-3)
+   - [x] Update docker-compose.yml with multi-container services (AC-2)
+   - [x] Verify independent service startup and dev-mode fallback (AC-4)
+- [x] Verify it: `/check verify fastapi microservices separation & worker isolation`
+- [ ] Test it: `/test fastapi microservices separation & worker isolation`
+Spec 0002 (docs/specs/0002-fastapi-microservices-separation.md) · code in `control-plane/app/`
 
-### 4. Decoupled agentic payments & Web3 billing gateway · needs a decision
-Isolate x402 payment protocols, AVAX billing, eERC confidential token verifications, and Razorpay webhooks into a dedicated `billing-service` microservice.
-**Done when:** Web3 token verifications and invoice payments operate in an independent service boundary, ensuring billing operations never interfere with live traffic signal latency.
-- [ ] Design it (spec): `/architect decoupled agentic payments & Web3 billing gateway`
+### 4. Decoupled agentic payments & Web3 billing gateway · in-progress
+Isolate x402 payment protocols, AVAX billing, eERC confidential token verifications, and Razorpay webhooks into an asynchronous execution model with Redis receipt caching.
+**Done when:** Web3 token verifications and invoice payments operate with Redis receipt caching and async RPC execution, ensuring billing operations respond in <50ms and never interfere with live traffic signal latency.
+- [x] Design it (spec): `/architect decoupled agentic payments & Web3 billing gateway`
+- [x] Build it: `/develop decoupled agentic payments & Web3 billing gateway`
+   - [x] Asynchronous Web3 RPC calls and Redis receipt caching (AC-1, AC-2)
+   - [x] Fast optimistic burst access and route error boundaries (AC-3, AC-4)
+- [ ] Verify it: `/check verify decoupled agentic payments & Web3 billing gateway`
+- [ ] Test it: `/test decoupled agentic payments & Web3 billing gateway`
+Spec 0003 (docs/specs/0003-decoupled-agentic-payments-and-web3-billing.md) · code in `control-plane/app/router/`
 
 ## Slice 3: High Throughput Ingestion Pipeline & AI Engine Optimization
 
-### 5. RabbitMQ fanout exchange, dual queue pipeline & dead-letter queue · needs a decision
+### 5. RabbitMQ fanout exchange, dual queue pipeline & dead-letter queue · in-progress
 Upgrade RabbitMQ queue processing to a fanout exchange with independent queues for real time Redis metrics (`<2ms`) and sampled PostgreSQL database logs, plus a Dead-Letter Queue (`signals_dlq`) for poison payload isolation.
 **Done when:** Redis real time metrics update instantly without waiting for PostgreSQL disk writes, malformed messages are safely isolated to DLQ without clogging queues, and database downtime does not disrupt live protection logic.
-- [ ] Design it (spec): `/architect rabbitmq fanout exchange, dual queue pipeline & dead-letter queue`
+- [x] Design it (spec): `/architect rabbitmq fanout exchange, dual queue pipeline & dead-letter queue`
+- [x] Build it: `/develop rabbitmq fanout exchange, dual queue pipeline & dead-letter queue`
+   - [x] Fanout exchange and dual queue topology in connection.py (AC-1, AC-3)
+   - [x] Dual metrics and storage consumers with DLQ retry handling (AC-2, AC-4)
+- [ ] Verify it: `/check verify rabbitmq fanout exchange, dual queue pipeline & dead-letter queue`
+- [ ] Test it: `/test rabbitmq fanout exchange, dual queue pipeline & dead-letter queue`
+Spec 0004 (docs/specs/0004-rabbitmq-fanout-exchange-and-dlq.md) · code in `control-plane/app/queue/`
 
-### 6. Redis multi-tenant key namespacing & outage resilience · needs a decision
-Implement strict multi-tenant key namespacing (`tenant_id:service_id:...`) across all Redis modules, connection auto reconnection pools, in-memory fallback caches, and secondary disk buffering when Redis or RabbitMQ goes offline.
+### 6. Redis multi-tenant key namespacing & outage resilience · in-progress
+Implement strict multi-tenant key namespacing (`nc:tenant:{tenant_id}:service:{service_name}:...`) across all Redis modules, connection auto reconnection pools, in-memory fallback caches, and secondary disk buffering when Redis or RabbitMQ goes offline.
 **Done when:** Redis keys strictly isolate cross-tenant metrics without key collisions, and control plane continues functioning seamlessly during Redis connection dropouts.
-- [ ] Design it (spec): `/architect redis multi-tenant key namespacing & outage resilience`
+- [x] Design it (spec): `/architect redis multi-tenant key namespacing & outage resilience`
+- [x] Build it: `/develop redis multi-tenant key namespacing & outage resilience`
+   - [x] In-memory fallback cache and connection resilience in cache.py (AC-2, AC-3)
+   - [x] Standardize multi-tenant keys and SCAN invalidation (AC-1, AC-4)
+- [x] Verify it: `/check verify redis multi-tenant key namespacing & outage resilience`
+- [ ] Test it: `/test redis multi-tenant key namespacing & outage resilience`
+Spec 0005 (docs/specs/0005-redis-multitenant-namespacing-and-resilience/index.md) · code in `control-plane/app/redis/`
 
-### 7. AI decision engine optimization & feature flag auto-rollback · needs a decision
+### 7. AI decision engine optimization & feature flag auto-rollback · in-progress
 Add anomaly pre-filtering to skip expensive LLM calls on healthy endpoints, compute 1h vs 24h trend metrics, and automatically rollback feature flags if a flag causes latency or error rate spikes.
 **Done when:** Gemini LLM calls are executed only when anomalies or rising trends are detected, and bad feature rollout flags auto-disable cleanly.
-- [ ] Design it (spec): `/architect AI decision engine optimization & feature flag auto-rollback`
+- [x] Design it (spec): `/architect AI decision engine optimization & feature flag auto-rollback`
+- [x] Build it: `/develop AI decision engine optimization & feature flag auto-rollback`
+   - [x] Anomaly pre-filtering gate and 1h vs 24h trend detection (AC-1, AC-2)
+   - [x] Feature flag anomaly attribution and auto-rollback in Redis (AC-3, AC-4)
+- [x] Verify it: `/check verify AI decision engine optimization & feature flag auto-rollback`
+- [ ] Test it: `/test AI decision engine optimization & feature flag auto-rollback`
+Spec 0006 (docs/specs/0006-ai-decision-engine-and-flag-auto-rollback/index.md) · code in `control-plane/app/ai_engine/`
 
 ## Slice 4: Out of Process Sidecar Proxy
 

@@ -256,7 +256,8 @@ async def service_auto_disable_flag(
     name: str, 
     reason: str, 
     trace_id: Optional[str], 
-    db: AsyncSession
+    db: AsyncSession,
+    tenant_id: Optional[str] = None
 ) -> Optional[dict]:
     """Core logic to disable a flag, used by both API and AI engine."""
     stmt = select(models.FeatureFlag).where(
@@ -289,6 +290,33 @@ async def service_auto_disable_flag(
     db.add(audit)
     await db.commit()
     await db.refresh(flag)
+
+    # Persist flag override in Redis with tenant namespacing (AC-4)
+    try:
+        from app.redis.cache import cache_set, cache_get, get_tenant_key
+        effective_tid = tenant_id or flag.tenant_id or "default"
+        
+        # 1. Direct flag disable key
+        flag_key = get_tenant_key(effective_tid, service_name, "flag:disabled", name)
+        await cache_set(
+            flag_key,
+            {
+                "disabled": True,
+                "reason": reason,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            },
+            ttl=86400
+        )
+        
+        # 2. Service overrides map (nc:tenant:{tenant_id}:service:{service_name}:overrides)
+        overrides_key = get_tenant_key(effective_tid, service_name, "overrides")
+        existing_overrides = await cache_get(overrides_key) or {}
+        flags_override = existing_overrides.get("flags", {})
+        flags_override[name] = False
+        existing_overrides["flags"] = flags_override
+        await cache_set(overrides_key, existing_overrides, ttl=86400)
+    except Exception as redis_err:
+        pass
     
     flag_dict = {k: v for k, v in flag.__dict__.items() if k != '_sa_instance_state'}
     if "updated_at" in flag_dict and flag_dict["updated_at"]: flag_dict['updated_at'] = flag_dict['updated_at'].isoformat()
