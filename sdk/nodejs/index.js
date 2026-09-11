@@ -8,17 +8,21 @@ class ControlPlaneSDK {
     this.apiKey          = config.apiKey          || null;
 
     // ── Local config cache (the key to zero-latency decisions) ──────────────
-    // Structure: { [endpoint]: { cache_enabled, circuit_breaker, ... , fetchedAt } }
+    // Structure: { [endpoint]: { cache_enabled, circuit_breaker, ... , _fetchedAt } }
     this._configCache    = {};
     this._configTTL      = config.configTTL   || 30_000;   // re-sync every 30s
     this._configTimeout  = config.configTimeout || 2_000;  // give up fetching after 2s
+
+    // ── Unified background config sync (single timer ticker) ────────────────
+    this._trackedEndpoints   = new Set();
+    this._unifiedSyncTimer   = null;
+    this._outageLoggedRoutes = new Set(); // Prevent console spam during outages
 
     // ── Signal batching (1 HTTP call per flush, not per request) ────────────
     this._signalQueue    = [];
     this._flushInterval  = config.flushInterval || 5_000;  // flush every 5s
     this._maxQueueSize   = config.maxQueueSize  || 500;    // safety cap
     this._flushTimer     = null;
-    this._syncTimers     = {};  // one refresh timer per endpoint
 
     // ── Distributed Tracing (disabled by default — zero overhead unless enabled) ──
     this._tracingEnabled = config.tracing || false;
@@ -62,13 +66,15 @@ class ControlPlaneSDK {
       console.warn('[ControlPlane] ⚠️  No API key provided. Requests will be unauthenticated.');
     }
 
-    // Start the signal flush loop immediately
+    // Start background sync and flush loops
+    this._startUnifiedSyncLoop();
     this._startFlushLoop();
 
-    // Periodically clean up old IPs from memory to prevent leaks
+    // Periodically clean up stale customer rate limit entries (rolling window expiration)
     this._memoryCleanupTimer = setInterval(() => {
-        this._customerRateLimits.clear();
-    }, 3600000); // Clear counter map every 1 hour
+      this._cleanupCustomerRateLimits();
+    }, 60_000); // Check every minute
+    this._memoryCleanupTimer.unref?.();
 
     console.log(`[ControlPlane] SDK initialized for service "${this.serviceName}"`);
   }
@@ -86,18 +92,42 @@ class ControlPlaneSDK {
 
     console.log(`[ControlPlane] Pre-warming config for ${endpoints.length} endpoint(s)...`);
 
-    await Promise.allSettled(
-      endpoints.map(ep => this._syncConfig(ep))
-    );
-
-    // Start periodic background refresh for each endpoint
-    for (const ep of endpoints) {
-      this._startSyncLoop(ep);
+    const normalizedList = endpoints.map(ep => this._normalizeEndpoint(ep));
+    for (const ep of normalizedList) {
+      this._trackedEndpoints.add(ep);
     }
+
+    await Promise.allSettled(
+      normalizedList.map(ep => this._syncConfig(ep))
+    );
 
     console.log(`[ControlPlane] ✅ Config ready. Decisions will be made locally (0ms network overhead).`);
   }
 
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRIVATE: _normalizeEndpoint(endpoint)
+  // Replaces numeric IDs, UUIDs, and hex hashes with :id tokens to avoid memory leaks
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _normalizeEndpoint(endpoint) {
+    if (!endpoint || typeof endpoint !== 'string') return '/';
+    let path = endpoint.split('?')[0].trim();
+    if (!path.startsWith('/')) path = `/${path}`;
+
+    // Replace UUIDs: 8-4-4-4-12 hex characters
+    path = path.replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g, ':id');
+    // Replace hex hashes / MongoDB ObjectIDs: 24 to 64 hex characters
+    path = path.replace(/\b[0-9a-fA-F]{24,64}\b/g, ':id');
+    // Replace numeric IDs inside path segments: /123/ or /123 at end
+    path = path.replace(/\/\d+(?=\/|$)/g, '/:id');
+    // Collapse duplicate slashes and remove trailing slash (unless root /)
+    path = path.replace(/\/+/g, '/');
+    if (path.length > 1 && path.endsWith('/')) {
+      path = path.slice(0, -1);
+    }
+    return path;
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PUBLIC: getConfig(endpoint, priority, customer_identifier)
@@ -105,18 +135,19 @@ class ControlPlaneSDK {
   // ═══════════════════════════════════════════════════════════════════════════
 
   getConfig(endpoint, priority = 'medium', customer_identifier = null) {
-    const cached = this._configCache[endpoint];
+    const normalized = this._normalizeEndpoint(endpoint);
+    const cached = this._configCache[normalized];
 
     if (cached) {
-      // ✅ Cache hit — return immediately, zero network I/O
+      // ✅ Cache hit (or cached stale during outage) — return immediately, zero network I/O
       return this._applyCustomerRules(cached, customer_identifier);
     }
 
-    // ⚠️  Cache miss (first time seeing this endpoint) — fetch synchronously
-    console.warn(`[ControlPlane] Cache miss for "${endpoint}" — fetching now (first request only)`);
-    this._syncConfig(endpoint).then(() => {
-      this._startSyncLoop(endpoint);
-    });
+    // Register endpoint in tracked set for the unified background sync ticker
+    this._trackedEndpoints.add(normalized);
+
+    // ⚠️ Cache miss (first time seeing this endpoint) — trigger deduplicated background sync
+    this._syncConfig(normalized).catch(() => {});
 
     return this._safeDefaults;
   }
@@ -142,6 +173,8 @@ class ControlPlaneSDK {
   // ═══════════════════════════════════════════════════════════════════════════
 
   track(endpoint, latencyMs, status = 'success', priority = 'medium', customer_identifier = null, action_taken = 'none', trace_id = null, flagName = null, is_agent = false) {
+    const normalized = this._normalizeEndpoint(endpoint);
+
     if (this._signalQueue.length >= this._maxQueueSize) {
       // Queue is full — drop oldest signal (ring buffer behavior)
       this._signalQueue.shift();
@@ -149,7 +182,7 @@ class ControlPlaneSDK {
 
     const signal = {
       service_name:         this.serviceName,
-      endpoint,
+      endpoint:             normalized,
       latency_ms:           Math.round(latencyMs),
       status,
       tenant_id:            this.tenantId,
@@ -290,10 +323,12 @@ class ControlPlaneSDK {
     const priority = options.priority || 'medium';
     const flagName = options.flagName || null;   // NEW: Feature flag telemetry link
     const coalesceEnabled = options.coalesce !== false;
+    const normalizedEndpoint = this._normalizeEndpoint(endpoint);
 
-    // Ensure this endpoint is being synced in the background
-    if (!this._syncTimers[endpoint]) {
-      this._syncConfig(endpoint).then(() => sdk._startSyncLoop(endpoint));
+    // Register this endpoint with unified sync tracker
+    this._trackedEndpoints.add(normalizedEndpoint);
+    if (!this._configCache[normalizedEndpoint]) {
+      this._syncConfig(normalizedEndpoint).catch(() => {});
     }
 
     return (req, res, next) => {
@@ -619,18 +654,17 @@ class ControlPlaneSDK {
     };
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PUBLIC: destroy()
-  // Clean shutdown
-  // ═══════════════════════════════════════════════════════════════════════════
-
   async destroy() {
     console.log('[ControlPlane] Shutting down — flushing remaining signals...');
     clearInterval(this._flushTimer);
     clearInterval(this._memoryCleanupTimer);
-    for (const timer of Object.values(this._syncTimers)) {
-      clearInterval(timer);
+    clearInterval(this._flagRefreshTimer);
+    if (this._unifiedSyncTimer) {
+      clearInterval(this._unifiedSyncTimer);
+      this._unifiedSyncTimer = null;
     }
+    this._trackedEndpoints.clear();
+    this._outageLoggedRoutes.clear();
     await this._flushSignals();
     console.log('[ControlPlane] ✅ Shutdown complete.');
   }
@@ -852,11 +886,26 @@ class ControlPlaneSDK {
     return estimatedRpm > limit_rpm;
   }
 
+  _cleanupCustomerRateLimits() {
+    const now = Date.now();
+    const currentMinuteStr = Math.floor(now / 60000).toString();
+    const previousMinuteStr = (Math.floor(now / 60000) - 1).toString();
+
+    // Remove any trackers older than 2 minutes
+    for (const [key, tracker] of this._customerRateLimits.entries()) {
+      if (tracker.currentMinute !== currentMinuteStr && tracker.currentMinute !== previousMinuteStr) {
+        this._customerRateLimits.delete(key);
+      }
+    }
+  }
+
   async _syncConfig(endpoint) {
-    const key = `_syncConfig:${endpoint}`;
+    const normalized = this._normalizeEndpoint(endpoint);
+    const key = `_syncConfig:${normalized}`;
+
     return this._coalesce(key, async () => {
       try {
-        const url = this._buildConfigUrl(endpoint);
+        const url = this._buildConfigUrl(normalized);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this._configTimeout);
 
@@ -873,17 +922,31 @@ class ControlPlaneSDK {
           return;
         }
 
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (!this._outageLoggedRoutes.has(normalized)) {
+            console.warn(`[ControlPlane] ⚠️ Failed to refresh config for "${normalized}" (${response.status}) — using cached rules (fail-open)`);
+            this._outageLoggedRoutes.add(normalized);
+          }
+          return;
+        }
 
         const config = await response.json();
 
-        this._configCache[endpoint] = {
+        // Successfully updated — clear outage warning flag
+        this._outageLoggedRoutes.delete(normalized);
+
+        this._configCache[normalized] = {
           ...config,
           _fetchedAt: Date.now(),
         };
 
       } catch (error) {
-        // Keep existing cache if available — stale config is better than no config
+        // Outage / network partition / timeout — fail-open resilience:
+        // Keep existing cached config indefinitely so user app never hangs or crashes.
+        if (!this._outageLoggedRoutes.has(normalized)) {
+          console.warn(`[ControlPlane] ⚠️ Control plane unreachable for "${normalized}" (${error.message}) — serving cached stale rules (fail-open)`);
+          this._outageLoggedRoutes.add(normalized);
+        }
       }
     });
   }
@@ -905,11 +968,25 @@ class ControlPlaneSDK {
     return promise;
   }
 
-  _startSyncLoop(endpoint) {
-    if (this._syncTimers[endpoint]) return;
-    this._syncTimers[endpoint] = setInterval(() => {
-      this._syncConfig(endpoint).catch(() => {});
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRIVATE: _startUnifiedSyncLoop()
+  // Single background loop for all endpoints — eliminates timer and memory leaks
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _startUnifiedSyncLoop() {
+    if (this._unifiedSyncTimer) return;
+
+    this._unifiedSyncTimer = setInterval(async () => {
+      if (this._trackedEndpoints.size === 0) return;
+
+      for (const endpoint of this._trackedEndpoints) {
+        try {
+          await this._syncConfig(endpoint);
+        } catch {}
+      }
     }, this._configTTL);
+
+    this._unifiedSyncTimer.unref?.();
   }
 
   _startFlushLoop() {
