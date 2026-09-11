@@ -13,20 +13,13 @@ Usage:
 
 import json
 import aio_pika
-from .connection import get_rabbitmq_channel, SIGNALS_QUEUE_NAME
+from .connection import get_rabbitmq_channel, SIGNALS_EXCHANGE_NAME
 
 
 async def publish_signal(signal_data: dict) -> None:
     """
-    Publish a signal to the signals_queue.
-
-    Args:
-        signal_data: dict containing all signal fields including user_id.
-                     Must be JSON-serialisable.
-
-    Raises:
-        Exception: propagated if RabbitMQ publish fails so the caller
-                   can return a 503 to the SDK and let it retry.
+    Publish a signal to the signals_exchange fanout exchange.
+    RabbitMQ automatically duplicates to both signals_metrics_queue and signals_storage_queue.
     """
     channel = await get_rabbitmq_channel()
 
@@ -36,13 +29,14 @@ async def publish_signal(signal_data: dict) -> None:
         content_type="application/json",
     )
 
-    await channel.default_exchange.publish(
+    exchange = await channel.get_exchange(SIGNALS_EXCHANGE_NAME)
+    await exchange.publish(
         message,
-        routing_key=SIGNALS_QUEUE_NAME,
+        routing_key="",  # Ignored by fanout exchanges
     )
 
     print(
-        f"📤 Signal published to queue | "
+        f"📤 Signal published to exchange '{SIGNALS_EXCHANGE_NAME}' | "
         f"service={signal_data.get('service_name')} "
         f"endpoint={signal_data.get('endpoint')} "
         f"user_id={signal_data.get('user_id')}"

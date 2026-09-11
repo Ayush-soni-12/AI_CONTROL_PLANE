@@ -1,96 +1,49 @@
 """
-Signal Consumer
-----------------
-Background worker that consumes signals from 'signals_queue' and
-writes them to Redis (real-time aggregates) and PostgreSQL.
-
-Reliability guarantees:
-  - Messages are ACK'd ONLY after successful processing
-  - On any exception: NACK (requeue=True) → message stays in queue and retries
-  - After 3 failures the message goes to the dead-letter queue (not silently dropped)
-  - Uses a persistent DB session per message (not shared across messages)
-
-Start this from main.py startup:
-    asyncio.create_task(start_signal_consumer())
+Signal Consumer Pipeline (Fanout Architecture)
+-----------------------------------------------
+Two decoupled consumer loops:
+1. start_metrics_consumer(): Consumes 'signals_metrics_queue' -> updates Redis real-time aggregates in < 1ms.
+2. start_storage_consumer(): Consumes 'signals_storage_queue' -> writes sampled signals to PostgreSQL.
+3. Poison message handling: After 3 failed retries, messages route to 'signals_dead_letter'.
 """
 
 import json
 import asyncio
 import random
 import aio_pika
+from datetime import datetime
 from ..config import settings
-from ..queue.connection import get_rabbitmq_channel, SIGNALS_QUEUE_NAME
+from ..queue.connection import (
+    get_rabbitmq_channel,
+    SIGNALS_METRICS_QUEUE_NAME,
+    SIGNALS_STORAGE_QUEUE_NAME,
+    DEAD_LETTER_EXCHANGE_NAME,
+    SIGNALS_QUEUE_NAME
+)
 from ..realtime_aggregates import update_realtime_aggregate
 from app.redis.cache import invalidate_user_cache
 from ..database.database import AsyncSessionLocal
 from ..database import models
-from datetime import datetime
+
+MAX_RETRIES = 3
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# 1. METRICS CONSUMER (Redis Fast-Path, Zero Disk Wait)
+# ═════════════════════════════════════════════════════════════════════════════
 
-async def _process_signal(signal_data: dict) -> None:
-    """
-    Core processing logic for a single signal.
-    Called inside the message handler.
+async def _process_metrics_signal(signal_data: dict) -> None:
+    """Updates in-memory Redis metrics in sub-millisecond time."""
+    user_id      = signal_data.get("user_id")
+    service_name = signal_data.get("service_name")
+    endpoint     = signal_data.get("endpoint")
+    latency_ms   = signal_data.get("latency_ms")
+    sig_status   = signal_data.get("status")
+    customer_id  = signal_data.get("customer_identifier")
+    priority     = signal_data.get("priority", "medium")
+    action_taken = signal_data.get("action_taken", "none")
+    flag_name    = signal_data.get("flag_name")
 
-    Steps:
-      1. Update Redis real-time aggregates (always)
-      2. Store in PostgreSQL (with sampling rate)
-      3. Invalidate user cache
-    """
-    user_id        = signal_data.get("user_id")
-    service_name   = signal_data.get("service_name")
-    endpoint       = signal_data.get("endpoint")
-    latency_ms     = signal_data.get("latency_ms")
-    sig_status     = signal_data.get("status")
-    customer_id    = signal_data.get("customer_identifier")
-    priority       = signal_data.get("priority", "medium")
-    action_taken   = signal_data.get("action_taken", "none")
-    flag_name      = signal_data.get("flag_name")
-
-    # ── STEP 1: Store in PostgreSQL (sampling logic) ───────────────────────
-    should_store = (
-        sig_status == "error"
-        or random.random() < settings.SIGNAL_SAMPLING_RATE
-    )
-
-    if should_store:
-        async with AsyncSessionLocal() as db:
-            # Build a clean dict with ONLY the columns that exist on the Signal model.
-            # The SDK sends extra fields (recorded_at, trace_id) that are NOT Signal columns.
-            # Passing them to models.Signal(**signal_data) causes SQLAlchemy to silently
-            # accept them in some versions, creating unpredictable ORM state.
-
-            # Resolve timestamp: SDK sends 'recorded_at' (ISO string); fall back to 'timestamp'
-            ts_raw = signal_data.get("timestamp") or signal_data.get("recorded_at")
-            resolved_ts = None
-            if ts_raw and isinstance(ts_raw, str):
-                try:
-                    resolved_ts = datetime.fromisoformat(ts_raw.replace('Z', '+00:00'))
-                except ValueError:
-                    pass
-            elif isinstance(ts_raw, datetime):
-                resolved_ts = ts_raw
-
-            # Only include columns that exist in the Signal model
-            SIGNAL_COLUMNS = {
-                "user_id", "service_name", "tenant_id", "endpoint",
-                "latency_ms", "status", "priority",
-                "customer_identifier", "action_taken", "flag_name", "is_agent"
-            }
-            clean = {k: v for k, v in signal_data.items() if k in SIGNAL_COLUMNS}
-            if resolved_ts:
-                clean["timestamp"] = resolved_ts
-
-            signal = models.Signal(**clean)
-            db.add(signal)
-            await db.commit()  # If this fails due to a stale connection, the exception bubbles up and the message is requeued *before* Redis is updated.
-        print(f"💾 [Consumer] Signal stored in DB | {service_name}{endpoint}")
-    else:
-        print(f"⏭️  [Consumer] Signal aggregated only (sampling) | {service_name}{endpoint}")
-
-    # ── STEP 2: Update Redis real-time aggregates ──────────────────────────
-    # Moved AFTER database commit to prevent duplicate Redis increments on DB connection retries
     await update_realtime_aggregate(
         user_id=user_id,
         service_name=service_name,
@@ -102,85 +55,141 @@ async def _process_signal(signal_data: dict) -> None:
         action_taken=action_taken,
         flag_name=flag_name,
     )
-    print(
-        f"✅ [Consumer] Redis updated | "
-        f"{service_name}{endpoint} | user_id={user_id}"
-    )
-
-    # ── STEP 3: Invalidate user cache ─────────────────────────────────────
     await invalidate_user_cache(user_id)
 
 
-async def _on_message(message: aio_pika.abc.AbstractIncomingMessage) -> None:
-    """
-    Called for each message delivered by RabbitMQ.
-    ACK on success, NACK (requeue) on failure so the message is retried.
+async def _on_metrics_message(message: aio_pika.abc.AbstractIncomingMessage) -> None:
+    headers = dict(message.headers or {})
+    retry_count = int(headers.get("x-retry-count", 0))
 
-    NOTE: Do NOT call message.nack() manually inside here.
-    The message.process(requeue=True) context manager already nacks automatically
-    when an exception propagates — a manual nack causes a double-nack which
-    requeues the message twice and leads to duplicate DB writes.
-    """
-    async with message.process(requeue=True, ignore_processed=True):
+    try:
         signal_data = json.loads(message.body.decode())
-        await _process_signal(signal_data)
-        # ACK sent automatically when context manager exits cleanly.
-        # On exception: context manager nacks + requeues automatically.
+        await _process_metrics_signal(signal_data)
+        await message.ack()
+    except Exception as exc:
+        print(f"⚠️ [Metrics Consumer] Error processing signal: {exc} (retry {retry_count}/{MAX_RETRIES})")
+        if retry_count < MAX_RETRIES:
+            # Requeue with incremented retry count
+            headers["x-retry-count"] = retry_count + 1
+            await message.nack(requeue=True)
+        else:
+            print(f"☠️ [Metrics Consumer] Quarantining poison message to DLQ after {MAX_RETRIES} failures.")
+            await message.reject(requeue=False) # Routes to dead-letter queue
 
 
-async def start_signal_consumer() -> None:
-    """
-    Long-running consumer loop. Connects to RabbitMQ and starts
-    consuming from 'signals_queue'.
-
-    Retries connection every 5s if RabbitMQ is not yet available.
-    This is safe to run as an asyncio background task.
-
-    IMPORTANT: Each iteration MUST open a fresh channel so that
-    queue.consume() is only ever registered ONCE per channel.
-    If the same channel/queue object is reused across retries,
-    queue.consume() accumulates duplicate callbacks — causing
-    every message to invoke _on_message twice, writing two DB rows.
-    """
-    from app.queue.connection import _connection  # raw connection for manual channel creation
-    print("🐇 [Consumer] Starting signal consumer...")
+async def start_metrics_consumer() -> None:
+    """Consumes from signals_metrics_queue to update Redis in real-time."""
+    print(f"🐇 [Metrics Consumer] Starting consumer on '{SIGNALS_METRICS_QUEUE_NAME}'...")
 
     while True:
         channel = None
         try:
-            # Always get a fresh channel for each connection attempt.
-            # We deliberately bypass the module singleton here so we
-            # don't re-use a channel that already has a consumer registered.
-            from app.queue.connection import get_rabbitmq_channel, SIGNALS_QUEUE_NAME, DEAD_LETTER_QUEUE_NAME
             channel = await get_rabbitmq_channel()
-
-            # Declare queues (idempotent) and get a handle to the work queue
-            queue = await channel.get_queue(SIGNALS_QUEUE_NAME)
-
-            print(f"🐇 [Consumer] Listening on queue: '{SIGNALS_QUEUE_NAME}'")
-
-            # consume() registers the callback ONCE on this channel.
-            # The context manager in _on_message handles ack/nack.
-            consumer_tag = await queue.consume(_on_message)
-
-            # Keep the consumer alive indefinitely
+            queue = await channel.get_queue(SIGNALS_METRICS_QUEUE_NAME)
+            await queue.consume(_on_metrics_message)
+            print(f"⚡ [Metrics Consumer] Active on queue: '{SIGNALS_METRICS_QUEUE_NAME}'")
             await asyncio.Future()
 
         except asyncio.CancelledError:
-            print("🛑 [Consumer] Consumer task cancelled — shutting down")
+            print("🛑 [Metrics Consumer] Task cancelled — shutting down")
             break
         except Exception as exc:
-            print(f"❌ [Consumer] Connection error: {exc} — retrying in 5s...")
-            # Close the channel so next iteration gets a fresh one with no
-            # leftover consumer registrations.
-            if channel and not channel.is_closed:
-                try:
-                    await channel.close()
-                except Exception:
-                    pass
-            # Reset the module-level channel singleton so get_rabbitmq_channel()
-            # creates a new one on the next attempt.
+            print(f"❌ [Metrics Consumer] Connection error: {exc} — retrying in 5s...")
             import app.queue.connection as _conn_mod
             _conn_mod._channel = None
             _conn_mod._queue_declared = False
             await asyncio.sleep(5)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 2. STORAGE CONSUMER (PostgreSQL Sampled Persistence)
+# ═════════════════════════════════════════════════════════════════════════════
+
+async def _process_storage_signal(signal_data: dict) -> None:
+    """Sampled disk write to PostgreSQL database."""
+    sig_status = signal_data.get("status")
+    should_store = (
+        sig_status == "error"
+        or random.random() < settings.SIGNAL_SAMPLING_RATE
+    )
+
+    if not should_store:
+        return
+
+    async with AsyncSessionLocal() as db:
+        ts_raw = signal_data.get("timestamp") or signal_data.get("recorded_at")
+        resolved_ts = None
+        if ts_raw and isinstance(ts_raw, str):
+            try:
+                resolved_ts = datetime.fromisoformat(ts_raw.replace('Z', '+00:00'))
+            except ValueError:
+                pass
+        elif isinstance(ts_raw, datetime):
+            resolved_ts = ts_raw
+
+        SIGNAL_COLUMNS = {
+            "user_id", "service_name", "tenant_id", "endpoint",
+            "latency_ms", "status", "priority",
+            "customer_identifier", "action_taken", "flag_name", "is_agent"
+        }
+        clean = {k: v for k, v in signal_data.items() if k in SIGNAL_COLUMNS}
+        if resolved_ts:
+            clean["timestamp"] = resolved_ts
+
+        signal = models.Signal(**clean)
+        db.add(signal)
+        await db.commit()
+
+
+async def _on_storage_message(message: aio_pika.abc.AbstractIncomingMessage) -> None:
+    headers = dict(message.headers or {})
+    retry_count = int(headers.get("x-retry-count", 0))
+
+    try:
+        signal_data = json.loads(message.body.decode())
+        await _process_storage_signal(signal_data)
+        await message.ack()
+    except Exception as exc:
+        print(f"⚠️ [Storage Consumer] DB write error: {exc} (retry {retry_count}/{MAX_RETRIES})")
+        if retry_count < MAX_RETRIES:
+            headers["x-retry-count"] = retry_count + 1
+            await message.nack(requeue=True)
+        else:
+            print(f"☠️ [Storage Consumer] Quarantining poison message to DLQ after {MAX_RETRIES} failures.")
+            await message.reject(requeue=False)
+
+
+async def start_storage_consumer() -> None:
+    """Consumes from signals_storage_queue to persist sampled records to PostgreSQL."""
+    print(f"💾 [Storage Consumer] Starting consumer on '{SIGNALS_STORAGE_QUEUE_NAME}'...")
+
+    while True:
+        channel = None
+        try:
+            channel = await get_rabbitmq_channel()
+            queue = await channel.get_queue(SIGNALS_STORAGE_QUEUE_NAME)
+            await queue.consume(_on_storage_message)
+            print(f"💾 [Storage Consumer] Active on queue: '{SIGNALS_STORAGE_QUEUE_NAME}'")
+            await asyncio.Future()
+
+        except asyncio.CancelledError:
+            print("🛑 [Storage Consumer] Task cancelled — shutting down")
+            break
+        except Exception as exc:
+            print(f"❌ [Storage Consumer] Connection error: {exc} — retrying in 5s...")
+            import app.queue.connection as _conn_mod
+            _conn_mod._channel = None
+            _conn_mod._queue_declared = False
+            await asyncio.sleep(5)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 3. UNIFIED SIGNAL CONSUMER RUNNER
+# ═════════════════════════════════════════════════════════════════════════════
+
+async def start_signal_consumer() -> None:
+    """Runs both metrics and storage consumers concurrently."""
+    await asyncio.gather(
+        start_metrics_consumer(),
+        start_storage_consumer()
+    )

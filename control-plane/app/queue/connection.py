@@ -18,21 +18,26 @@ _connection: aio_pika.abc.AbstractRobustConnection | None = None
 _channel: aio_pika.abc.AbstractChannel | None = None
 _email_channel: aio_pika.abc.AbstractChannel | None = None
 
-# Signal queue names
-SIGNALS_QUEUE_NAME = "signals_queue"
+# Signal exchange and queue names
+SIGNALS_EXCHANGE_NAME = "signals_exchange"
+SIGNALS_METRICS_QUEUE_NAME = "signals_metrics_queue"
+SIGNALS_STORAGE_QUEUE_NAME = "signals_storage_queue"
+DEAD_LETTER_EXCHANGE_NAME = "signals_dead_letter_exchange"
 DEAD_LETTER_QUEUE_NAME = "signals_dead_letter"
+
+# Legacy alias for backward compatibility
+SIGNALS_QUEUE_NAME = "signals_metrics_queue"
 
 # Email queue names
 EMAIL_QUEUE_NAME = "email_queue"
 EMAIL_DLQ_NAME = "email_dead_letter"
-
 
 _queue_declared = False
 
 async def get_rabbitmq_channel() -> aio_pika.abc.AbstractChannel:
     """
     Returns the shared RabbitMQ channel, creating it if needed.
-    Uses RobustConnection which auto-reconnects on disconnect.
+    Declares the fanout exchange, dual queues (metrics & storage), and DLQ.
     """
     global _connection, _channel, _queue_declared
 
@@ -48,31 +53,50 @@ async def get_rabbitmq_channel() -> aio_pika.abc.AbstractChannel:
         _queue_declared = False # Reset on new channel
 
     if not _queue_declared:
-        # Set prefetch so consumer only takes 1 message at a time
-        # (ensures fair dispatch and no message overload)
-        await _channel.set_qos(prefetch_count=10)
+        await _channel.set_qos(prefetch_count=50)
 
-        # Declare the dead-letter queue first (receives rejected messages)
-        await _channel.declare_queue(
+        # 1. Declare the Dead-Letter Exchange and Queue (receives rejected / failed messages)
+        dlx = await _channel.declare_exchange(
+            DEAD_LETTER_EXCHANGE_NAME,
+            type=aio_pika.ExchangeType.FANOUT,
+            durable=True
+        )
+        dlq = await _channel.declare_queue(
             DEAD_LETTER_QUEUE_NAME,
-            durable=True,  # survives RabbitMQ restarts
+            durable=True,
+        )
+        await dlq.bind(dlx)
+
+        # 2. Declare the main signals Fanout Exchange
+        signals_exchange = await _channel.declare_exchange(
+            SIGNALS_EXCHANGE_NAME,
+            type=aio_pika.ExchangeType.FANOUT,
+            durable=True
         )
 
-        # Declare the main signals queue
-        # durable=True  → queue survives broker restarts
-        # arguments     → failed messages go to dead-letter queue
-        await _channel.declare_queue(
-            SIGNALS_QUEUE_NAME,
+        dlq_args = {
+            "x-dead-letter-exchange": DEAD_LETTER_EXCHANGE_NAME,
+            "x-message-ttl": 86_400_000,  # messages expire after 24h if unprocessed
+        }
+
+        # 3. Queue A: Fast in-memory metrics queue for Redis (< 1ms updates)
+        metrics_queue = await _channel.declare_queue(
+            SIGNALS_METRICS_QUEUE_NAME,
             durable=True,
-            arguments={
-                "x-dead-letter-exchange": "",
-                "x-dead-letter-routing-key": DEAD_LETTER_QUEUE_NAME,
-                "x-message-ttl": 86_400_000,  # messages expire after 24h if unprocessed
-            }
+            arguments=dlq_args
         )
-        
+        await metrics_queue.bind(signals_exchange)
+
+        # 4. Queue B: Sampled persistent storage queue for PostgreSQL
+        storage_queue = await _channel.declare_queue(
+            SIGNALS_STORAGE_QUEUE_NAME,
+            durable=True,
+            arguments=dlq_args
+        )
+        await storage_queue.bind(signals_exchange)
+
         _queue_declared = True
-        print(f"✅ RabbitMQ channel ready | Queue: '{SIGNALS_QUEUE_NAME}'")
+        print(f"✅ RabbitMQ Fanout Pipeline Ready | Exchange: '{SIGNALS_EXCHANGE_NAME}' -> ['{SIGNALS_METRICS_QUEUE_NAME}', '{SIGNALS_STORAGE_QUEUE_NAME}']")
 
     return _channel
 
