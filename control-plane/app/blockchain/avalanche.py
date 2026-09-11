@@ -24,17 +24,17 @@ HOW IT FITS IN THE FLOW:
 
 from web3 import Web3
 import logging
+import asyncio
+import json
+from app.redis.cache import redis_client
 
 logger = logging.getLogger(__name__)
 
 # ─── Avalanche Fuji C-Chain RPC endpoint ─────────────────────────────────────
-# This is a free, public RPC node provided by Avalanche. No API key needed.
-# C-Chain = "Contract Chain" — the EVM-compatible chain where payments happen.
 FUJI_RPC_URL = "https://api.avax-test.network/ext/bc/C/rpc"
-
-# Create the Web3 connection to Fuji. This is like opening a phone line to
-# the blockchain. It is lazy — no actual network call happens until we use it.
 w3 = Web3(Web3.HTTPProvider(FUJI_RPC_URL))
+
+RECEIPT_CACHE_TTL = 86400  # 24 hours in seconds
 
 
 def is_connected() -> bool:
@@ -55,33 +55,8 @@ def verify_payment(
     is_eerc: bool = False
 ) -> dict:
     """
-    Verify that a payment transaction on Avalanche Fuji is valid.
-
-    Parameters
-    ----------
-    tx_hash : str
-        The 0x-prefixed transaction hash the agent provided after paying.
-        e.g. "0xabc123..."
-
-    expected_recipient : str
-        The customer's Avalanche wallet address that SHOULD have received
-        the payment. e.g. "0xCustomerWallet..."
-
-    min_amount_wei : int
-        The minimum amount (in wei) that must have been sent.
-        1 AVAX = 1_000_000_000_000_000_000 wei (18 zeros).
-        Example: 0.1 AVAX = 100_000_000_000_000_000 wei.
-
-    Returns
-    -------
-    dict with keys:
-        - verified (bool): True only if ALL three checks pass.
-        - reason (str): Human-readable explanation of what passed/failed.
-        - amount_avax (float): How much AVAX was actually sent.
-        - from_address (str): The agent's wallet address.
+    Synchronous verification logic executed in a background worker thread.
     """
-
-    # ── Step 1: Check our connection to the blockchain ────────────────────────
     if not is_connected():
         logger.error("❌ Cannot connect to Avalanche Fuji RPC")
         return {
@@ -92,9 +67,6 @@ def verify_payment(
         }
 
     try:
-        # ── Step 2: Fetch the transaction from the blockchain ─────────────────
-        # This looks up the tx_hash and returns its details.
-        # If the hash doesn't exist, it raises an exception.
         tx = w3.eth.get_transaction(tx_hash)
 
         if tx is None:
@@ -105,10 +77,6 @@ def verify_payment(
                 "from_address": None,
             }
 
-        # ── Step 3: Fetch the receipt (proof it was confirmed) ────────────────
-        # A transaction can exist but still be PENDING (not yet included in a block).
-        # The receipt only exists AFTER the transaction is confirmed.
-        # receipt.status == 1 means SUCCESS. status == 0 means REVERTED (failed).
         receipt = w3.eth.get_transaction_receipt(tx_hash)
 
         if receipt is None:
@@ -127,12 +95,8 @@ def verify_payment(
                 "from_address": str(tx["from"]),
             }
 
-        # tx['to'] is who received the money.
-        # We compare in lowercase because Ethereum addresses are case-insensitive.
         actual_recipient = tx["to"]
         
-        # For the hackathon demo, if it's an eERC mock payment, we allow it to go to the pay_to 
-        # wallet to prevent CALL_EXCEPTIONs from strict token contracts.
         if is_eerc:
             pass # Bypass strict check for the ZK simulation
         elif actual_recipient.lower() != expected_recipient.lower():
@@ -146,9 +110,6 @@ def verify_payment(
                 "from_address": str(tx["from"]),
             }
 
-        # ── Step 5: Check the amount is enough ───────────────────────────────
-        # For standard AVAX payments, tx['value'] is the amount in wei.
-        # For eERC, the value is 0 AVAX because tokens are transferred via contract call.
         actual_value_wei = tx["value"]
         amount_avax = float(Web3.from_wei(actual_value_wei, "ether"))
 
@@ -164,13 +125,7 @@ def verify_payment(
                     "amount_avax": amount_avax,
                     "from_address": str(tx["from"]),
                 }
-        else:
-            # In a full integration, we would decode the tx logs to verify the
-            # ZK Proof transferred the correct encrypted amount to the customer.
-            # For the demo, we assume success if the tx to the eERC contract succeeded.
-            pass
 
-        # ── All checks passed! ────────────────────────────────────────────────
         logger.info(
             f"✅ Payment verified: {amount_avax:.6f} AVAX from {tx['from']} "
             f"→ {expected_recipient} | tx: {tx_hash}"
@@ -192,12 +147,76 @@ def verify_payment(
         }
 
 
+async def verify_payment_async(
+    tx_hash: str,
+    expected_recipient: str,
+    min_amount_wei: int,
+    is_eerc: bool = False,
+    timeout_seconds: float = 3.0
+) -> dict:
+    """
+    Non-blocking payment verification with Redis receipt caching and timeout guards.
+    """
+    cache_key = f"payment:verified:{tx_hash.lower()}"
+
+    # 1. Check Redis Cache First (< 1ms)
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            data = json.loads(cached)
+            logger.info(f"⚡ Instant Redis Cache Hit for tx {tx_hash}")
+            return data
+    except Exception as e:
+        logger.warning(f"Redis cache check failed for {tx_hash}: {e}")
+
+    # 2. Run RPC call in background thread pool with timeout guard
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                verify_payment,
+                tx_hash=tx_hash,
+                expected_recipient=expected_recipient,
+                min_amount_wei=min_amount_wei,
+                is_eerc=is_eerc
+            ),
+            timeout=timeout_seconds
+        )
+
+        # 3. If verified, cache receipt in Redis
+        if result.get("verified"):
+            try:
+                await redis_client.setex(
+                    cache_key,
+                    RECEIPT_CACHE_TTL,
+                    json.dumps(result)
+                )
+            except Exception as e:
+                logger.warning(f"Failed to cache verified payment in Redis: {e}")
+
+        return result
+
+    except asyncio.TimeoutError:
+        logger.error(f"⏱️ Avalanche Fuji RPC timed out after {timeout_seconds}s for tx {tx_hash}")
+        return {
+            "verified": False,
+            "reason": "Blockchain verification timed out. Please retry shortly.",
+            "amount_avax": 0,
+            "from_address": None,
+        }
+    except Exception as e:
+        logger.error(f"Async verification failed: {e}")
+        return {
+            "verified": False,
+            "reason": str(e),
+            "amount_avax": 0,
+            "from_address": None,
+        }
+
+
 def get_fuji_balance(wallet_address: str) -> float:
     """
     Utility: Get the AVAX balance of any wallet on Fuji testnet.
     Returns the balance in AVAX (not wei). Used for debugging.
-
-    Example: get_fuji_balance("0x1234...") → 2.5  (means 2.5 AVAX)
     """
     try:
         balance_wei = w3.eth.get_balance(wallet_address)

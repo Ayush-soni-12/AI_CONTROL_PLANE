@@ -233,6 +233,73 @@ def check_agent_reputation(agent_id: Optional[str]) -> dict:
     }
 
 
+async def check_agent_reputation_async(
+    agent_id: Optional[str],
+    timeout_seconds: float = 3.0
+) -> dict:
+    """
+    Asynchronous ERC-8004 reputation check with Redis caching and timeout guard.
+    """
+    import asyncio
+    import json
+    from app.redis.cache import redis_client
+
+    if not agent_id:
+        return {
+            "is_trusted": False,
+            "score": 0,
+            "tier": "unregistered",
+            "agent_id": None,
+            "description": "No agent ID provided. Regular 429 applies.",
+            "source": "no_id",
+        }
+
+    cache_key = f"agent:reputation:{agent_id.lower()}"
+
+    # 1. Check Redis Cache First (< 1ms)
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            data = json.loads(cached)
+            logger.info(f"⚡ Instant Redis Cache Hit for agent reputation: {agent_id}")
+            return data
+    except Exception as e:
+        logger.warning(f"Redis cache check failed for agent reputation {agent_id}: {e}")
+
+    # 2. Run RPC check in background thread
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(check_agent_reputation, agent_id),
+            timeout=timeout_seconds
+        )
+
+        # 3. Cache result in Redis for 1 hour
+        try:
+            await redis_client.setex(
+                cache_key,
+                3600,
+                json.dumps(result)
+            )
+        except Exception as e:
+            logger.warning(f"Failed to cache agent reputation in Redis: {e}")
+
+        return result
+
+    except asyncio.TimeoutError:
+        logger.error(f"⏱️ ERC-8004 lookup timed out after {timeout_seconds}s for {agent_id}")
+        return {
+            "is_trusted": False,
+            "score": 0,
+            "tier": "unregistered",
+            "agent_id": agent_id,
+            "description": "Reputation check timed out on blockchain.",
+            "source": "timeout_fallback",
+        }
+    except Exception as e:
+        logger.error(f"Async reputation check failed: {e}")
+        return check_agent_reputation(agent_id)
+
+
 def format_reputation_for_response(reputation: dict) -> dict:
     """Return only the fields we want to expose in the HTTP response."""
     return {
@@ -242,3 +309,4 @@ def format_reputation_for_response(reputation: dict) -> dict:
         "description": reputation["description"],
         "source":      reputation.get("source", "unknown"),
     }
+

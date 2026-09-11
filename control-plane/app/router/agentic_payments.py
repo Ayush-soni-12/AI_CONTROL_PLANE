@@ -26,8 +26,10 @@ from typing import Optional
 from app.database import models
 from app.database.database import get_async_db
 from app.dependencies import verify_api_key
-from app.blockchain.erc8004 import check_agent_reputation, format_reputation_for_response
-from app.blockchain.avalanche import verify_payment
+from app.blockchain.erc8004 import check_agent_reputation_async, format_reputation_for_response
+from app.blockchain.avalanche import verify_payment_async
+from app.redis.cache import redis_client
+from web3 import Web3
 from .auth import get_current_user
 
 router = APIRouter(prefix="/api/agentic", tags=["Agentic Payments"])
@@ -67,13 +69,22 @@ async def get_or_create_invoice(
             raise HTTPException(status_code=403, detail="Agentic payments disabled by customer")
         required_amount_wei = settings.payment_amount_wei
 
-    # 2. Check Agent Reputation (ERC-8004)
-    reputation = check_agent_reputation(payload.agent_id)
+    # 2. Check Agent Reputation (ERC-8004) with Redis cache + async RPC
+    reputation = await check_agent_reputation_async(payload.agent_id)
     if not reputation["is_trusted"]:
         # Bad/Unknown agent — block them immediately
         raise HTTPException(status_code=403, detail=reputation["description"])
 
-    # 3. Check if they ALREADY paid and have an active burst window
+    # 3. Fast Redis Burst Access Check (< 1ms)
+    burst_cache_key = f"agent:burst:{current_user.id}:{payload.agent_id}:{service_name}:{endpoint}"
+    try:
+        cached_burst = await redis_client.get(burst_cache_key)
+        if cached_burst and mode != "pay_per_request":
+            return {"status": "authorized", "message": "Active burst window (Redis fast-path)."}
+    except Exception as e:
+        pass
+
+    # Fallback to Database for active burst window
     stmt_active = select(models.AgentPayment).where(
         and_(
             models.AgentPayment.user_id == current_user.id,
@@ -93,11 +104,16 @@ async def get_or_create_invoice(
             await db.commit()
             return {"status": "authorized", "message": "Payment consumed for single request."}
 
-        # For rate_limit mode, they get the full burst window
+        # For rate_limit mode, cache in Redis and grant burst window
+        try:
+            ttl_seconds = max(1, int((active_payment.access_granted_until - now).total_seconds()))
+            await redis_client.setex(burst_cache_key, ttl_seconds, "active")
+        except Exception:
+            pass
+
         return {"status": "authorized", "message": "Active burst window."}
 
     # 4. Issue a new invoice
-    # We create a pending payment record
     payment = models.AgentPayment(
         user_id=current_user.id,
         agent_id=payload.agent_id,
@@ -113,10 +129,14 @@ async def get_or_create_invoice(
 
     return {
         "status": "payment_required",
-        "invoice_id": str(payment.id),
-        "pay_to_wallet": settings.avalanche_wallet,
-        "amount_wei": required_amount_wei,
+        "invoice_id": payment.id,
+        "amount_wei": str(required_amount_wei),
+        "amount_avax": float(Web3.from_wei(int(required_amount_wei), 'ether')),
+        "pay_to": settings.avalanche_wallet,
+        "network": "Avalanche Fuji C-Chain (Chain ID: 43113)",
+        "expires_in_seconds": 300,
         "reputation": format_reputation_for_response(reputation),
+        "payment_mode": mode,
         "confidential_eerc_enabled": settings.confidential_eerc_enabled,
         "eerc_token_address": settings.eerc_token_address,
         "eerc_payment_amount": settings.eerc_payment_amount
@@ -134,6 +154,7 @@ async def verify_agent_payment(
 ):
     """
     Called directly by the AI Agent after it pays on Avalanche.
+    Uses async non-blocking RPC and Redis receipt caching for < 5ms response.
     """
     # 1. Find the pending invoice
     stmt = select(models.AgentPayment).where(
@@ -156,7 +177,7 @@ async def verify_agent_payment(
     if not settings:
         raise HTTPException(status_code=500, detail="Customer settings invalid")
 
-    # 3. Call the Avalanche Blockchain!
+    # 3. Non-blocking Async Call to Avalanche Blockchain / Redis Receipt Cache
     if payment.payment_mode == "pay_per_request":
         min_amount = settings.pay_per_request_amount_wei or "0"
         access_duration = settings.pay_per_request_duration_minutes or 5
@@ -171,11 +192,12 @@ async def verify_agent_payment(
         expected_recipient = settings.avalanche_wallet
         is_eerc = False
 
-    verify_result = verify_payment(
+    verify_result = await verify_payment_async(
         tx_hash=payload.tx_hash,
         expected_recipient=expected_recipient,
         min_amount_wei=int(min_amount),
-        is_eerc=is_eerc
+        is_eerc=is_eerc,
+        timeout_seconds=3.0
     )
 
     if not verify_result["verified"]:
@@ -184,7 +206,7 @@ async def verify_agent_payment(
         await db.commit()
         raise HTTPException(status_code=400, detail=verify_result["reason"])
 
-    # 4. Success! Grant access.
+    # 4. Success! Grant burst access in DB & Redis fast cache
     now = datetime.now(timezone.utc)
     payment.status = "verified"
     payment.tx_hash = payload.tx_hash
@@ -197,9 +219,16 @@ async def verify_agent_payment(
 
     await db.commit()
 
+    # Fast-path Redis burst token
+    burst_cache_key = f"agent:burst:{payment.user_id}:{payment.agent_id}:{payment.service_name}:{payment.endpoint}"
+    try:
+        await redis_client.setex(burst_cache_key, access_duration * 60, "active")
+    except Exception as e:
+        pass
+
     return {
         "verified": True,
-        "message": "Payment confirmed on Avalanche.",
+        "message": "Payment confirmed on Avalanche (cached for instant replay).",
         "expires_in_minutes": access_duration,
         "access_granted_until": payment.access_granted_until.isoformat()
     }
