@@ -24,7 +24,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans bg-gray-950 text-white antialiased`}>
+      <body className={`${inter.variable} font-sans bg-[#070a13] text-foreground antialiased selection:bg-cyan-500/20 selection:text-cyan-200`}>
         <Providers>{children}</Providers>
         <Analytics />
         <SpeedInsights />
