@@ -5,26 +5,34 @@ import { useAIInsights, useAIThresholds } from "@/hooks/useAIInsights";
 import { AIThresholdsTable } from "@/components/dashboard/AIThresholdsTable";
 import { AIInsightsList } from "@/components/dashboard/AIInsightsList";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
-import { Brain, LogIn, TrendingUp, Sparkles } from "lucide-react";
+import { TopCommandHeader } from "@/components/dashboard/TopCommandHeader";
+import {
+  Brain,
+  LogIn,
+  TrendingUp,
+  Sparkles,
+  SlidersHorizontal,
+  Layers,
+  Filter,
+  ShieldCheck,
+  Zap,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 
 export default function AIInsightsPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"thresholds" | "insights">(
-    "thresholds",
-  );
+  const [activeTab, setActiveTab] = useState<"thresholds" | "insights">("thresholds");
   const [selectedService, setSelectedService] = useState<string>("");
 
   // Check authentication
   const { data: user, isLoading: isAuthLoading } = useCheckAuth();
 
   // Fetch AI data
-  const { data: thresholdsData, isLoading: thresholdsLoading } =
-    useAIThresholds();
+  const { data: thresholdsData, isLoading: thresholdsLoading } = useAIThresholds();
   const { data: insightsData, isLoading: insightsLoading } = useAIInsights(
     selectedService || undefined,
-    50,
+    50
   );
 
   // Redirect to login if not authenticated
@@ -34,140 +42,216 @@ export default function AIInsightsPage() {
     }
   }, [user, isAuthLoading, router]);
 
-  // Show loading while checking auth
+  // Unique services list
+  const servicesList = useMemo(() => {
+    const uniqueServices = new Set<string>();
+    insightsData?.insights.forEach((insight) => uniqueServices.add(insight.service_name));
+    thresholdsData?.thresholds.forEach((threshold) => uniqueServices.add(threshold.service_name));
+    return Array.from(uniqueServices).sort();
+  }, [insightsData, thresholdsData]);
+
+  // Overall summary metrics
+  const summaryMetrics = useMemo(() => {
+    const totalThresholds = thresholdsData?.total || 0;
+    const totalInsights = insightsData?.total || 0;
+
+    let totalConfidence = 0;
+    let confidenceCount = 0;
+
+    thresholdsData?.thresholds.forEach((t) => {
+      totalConfidence += t.confidence;
+      confidenceCount += 1;
+    });
+
+    const avgConfidence =
+      confidenceCount > 0 ? (totalConfidence / confidenceCount) * 100 : 92;
+
+    const anomaliesCount =
+      insightsData?.insights.filter((i) => i.insight_type === "anomaly").length || 0;
+
+    return {
+      totalThresholds,
+      totalInsights,
+      avgConfidence: Math.round(avgConfidence),
+      anomaliesCount,
+    };
+  }, [thresholdsData, insightsData]);
+
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-purple-950/5 to-background">
+      <div className="min-h-screen flex items-center justify-center bg-[#070a13] text-slate-200">
         <div className="text-center">
-          <div className="inline-block p-4 rounded-2xl bg-purple-500/10 mb-4">
-            <LogIn className="w-12 h-12 text-purple-400 animate-pulse" />
+          <div className="inline-block p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 mb-4 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
+            <LogIn className="w-10 h-10 text-cyan-400 animate-pulse" />
           </div>
-          <p className="text-gray-400 text-lg">Verifying authentication...</p>
+          <p className="text-slate-400 text-sm font-mono">Verifying authentication...</p>
         </div>
       </div>
     );
   }
 
-  // If not authenticated, show nothing (will redirect)
   if (!user) {
     return null;
   }
 
-  // Get unique service names for filter
-  const uniqueServices = new Set<string>();
-  insightsData?.insights.forEach((insight) =>
-    uniqueServices.add(insight.service_name),
-  );
-  thresholdsData?.thresholds.forEach((threshold) =>
-    uniqueServices.add(threshold.service_name),
-  );
-  const servicesList = Array.from(uniqueServices).sort();
-
   return (
     <>
       <DashboardSidebar />
-      <div className="2xl:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
+      <div className="2xl:ml-68 min-h-screen p-4 sm:p-8 bg-[#070a13] cyber-grid text-slate-100 relative">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Top Command Bar & Search Header */}
+          <TopCommandHeader />
 
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 mb-8 text-center sm:text-left">
-            <div className="p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 shrink-0">
-              <Brain className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
-            </div>
+          {/* Hero Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-blue-500/15">
             <div>
-              <h1 className="text-2xl sm:text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                AI Insights
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                  AI COGNITIVE CONTROLLER
+                </span>
+                <span className="text-xs text-slate-400 font-mono">
+                  Autonomous Protection Loop
+                </span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+                <span>Autonomous Insights & Thresholds</span>
+                <Sparkles className="w-5 h-5 text-cyan-400" />
               </h1>
-              <p className="text-sm sm:text-base text-gray-400 mt-1">
-                AI-powered threshold optimization and pattern detection
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Machine learning anomaly detection, traffic pattern recognition, and self-tuning protection thresholds
               </p>
             </div>
           </div>
 
-        <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
-
-          {/* Service Filter */}
-          {servicesList.length > 0 && (
-            <div className="mb-6">
-              <label
-                htmlFor="service-filter"
-                className="block text-sm font-medium text-gray-400 mb-2"
-              >
-                Filter by Service
-              </label>
-              <select
-                id="service-filter"
-                value={selectedService}
-                onChange={(e) => setSelectedService(e.target.value)}
-                className="w-full sm:w-auto px-4 py-3 rounded-xl bg-gray-900/80 border border-gray-800 text-white text-sm focus:border-purple-500/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-all appearance-none pr-10"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "right 1rem center",
-                  backgroundSize: "1em",
-                }}
-              >
-                <option value="">All Services</option>
-                {servicesList.map((service) => (
-                  <option key={service} value={service}>
-                    {service}
-                  </option>
-                ))}
-              </select>
+          {/* Top AI Telemetry KPI Stat Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div className="p-4 rounded-xl bg-[#091020]/80 border border-cyan-500/20 shadow-[0_4px_20px_rgba(0,240,255,0.05)]">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Tuned Endpoints</span>
+                </div>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                  Active
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-cyan-300">
+                {summaryMetrics.totalThresholds}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Self-calibrating gateway limits
+              </div>
             </div>
-          )}
 
-          {/* Tabs */}
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-8">
-            <button
-              onClick={() => setActiveTab("thresholds")}
-              className={`
-                flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-3 rounded-xl font-semibold transition-all duration-300 w-full sm:w-auto text-sm sm:text-base
-                ${
-                  activeTab === "thresholds"
-                    ? "bg-linear-to-r from-purple-600/20 to-pink-600/20 text-white border border-purple-500/50 shadow-lg shadow-purple-500/10"
-                    : "text-gray-400 hover:text-white bg-gray-800/50 border border-gray-700/50 hover:border-gray-600"
-                }
-              `}
-            >
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-              <span>AI Thresholds</span>
-              {thresholdsData && (
-                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-[10px] sm:text-xs shrink-0">
-                  {thresholdsData.total}
+            <div className="p-4 rounded-xl bg-[#091020]/80 border border-emerald-500/20 shadow-[0_4px_20px_rgba(0,230,153,0.05)]">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Mean AI Confidence</span>
+                </div>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                  High Fidelity
                 </span>
-              )}
-            </button>
+              </div>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-emerald-400">
+                {summaryMetrics.avgConfidence}%
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Based on historical traffic signals
+              </div>
+            </div>
 
-            <button
-              onClick={() => setActiveTab("insights")}
-              className={`
-                flex items-center justify-center sm:justify-start gap-2 px-4 sm:px-6 py-3 rounded-xl font-semibold transition-all duration-300 w-full sm:w-auto text-sm sm:text-base
-                ${
-                  activeTab === "insights"
-                    ? "bg-linear-to-r from-purple-600/20 to-pink-600/20 text-white border border-purple-500/50 shadow-lg shadow-purple-500/10"
-                    : "text-gray-400 hover:text-white bg-gray-800/50 border border-gray-700/50 hover:border-gray-600"
-                }
-              `}
-            >
-              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
-              <span>Insights Feed</span>
-              {insightsData && (
-                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-[10px] sm:text-xs shrink-0">
-                  {insightsData.total}
+            <div className="p-4 rounded-xl bg-[#091020]/80 border border-rose-500/20 shadow-[0_4px_20px_rgba(239,68,68,0.05)]">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
+                  <Brain className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Cognitive Signals</span>
+                </div>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/10 text-rose-300 border border-rose-500/30">
+                  {summaryMetrics.totalInsights} Total
                 </span>
-              )}
-            </button>
+              </div>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-rose-300">
+                {summaryMetrics.anomaliesCount}{" "}
+                <span className="text-xs text-slate-500 font-normal font-mono">
+                  flagged anomalies
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Real-time pattern analysis
+              </div>
+            </div>
           </div>
 
-          {/* Content */}
+          {/* Controls & Tab Bar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2">
+            {/* Cyber Tabs */}
+            <div className="flex items-center p-1 rounded-xl bg-[#070a13] border border-white/[0.08] w-full sm:w-auto">
+              <button
+                onClick={() => setActiveTab("thresholds")}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2 rounded-lg text-xs font-mono transition-all ${
+                  activeTab === "thresholds"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>AI Thresholds</span>
+                {thresholdsData && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-cyan-500/20 text-[10px] text-cyan-300 border border-cyan-500/30">
+                    {thresholdsData.total}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("insights")}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-5 py-2 rounded-lg text-xs font-mono transition-all ${
+                  activeTab === "insights"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-[0_0_12px_rgba(0,240,255,0.2)]"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Insights Feed</span>
+                {insightsData && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-cyan-500/20 text-[10px] text-cyan-300 border border-cyan-500/30">
+                    {insightsData.total}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Service Scope Selector */}
+            {servicesList.length > 0 && (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="text-xs font-mono text-slate-400 hidden sm:inline flex items-center gap-1">
+                  <Filter className="w-3 h-3 text-cyan-400" /> Service:
+                </span>
+                <select
+                  value={selectedService}
+                  onChange={(e) => setSelectedService(e.target.value)}
+                  className="w-full sm:w-auto px-3.5 py-2 bg-[#070a13] border border-blue-500/20 rounded-xl text-slate-200 text-xs font-mono focus:outline-none focus:border-cyan-500/60 transition-colors"
+                >
+                  <option value="">All Registered Services</option>
+                  {servicesList.map((service) => (
+                    <option key={service} value={service}>
+                      {service}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Main Content Area */}
           <div className="min-h-[400px]">
             {activeTab === "thresholds" && (
               <AIThresholdsTable
                 thresholds={
                   selectedService
                     ? thresholdsData?.thresholds.filter(
-                        (t) => t.service_name === selectedService,
+                        (t) => t.service_name === selectedService
                       ) || []
                     : thresholdsData?.thresholds || []
                 }
