@@ -10,10 +10,10 @@ import {
   Area,
   AreaChart,
 } from "recharts";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ShieldCheck } from "lucide-react";
 
 interface ErrorRateChartProps {
-  signals: {
+  signals?: {
     timestamp: string;
     latency_ms: number;
     status: "success" | "error";
@@ -23,90 +23,95 @@ interface ErrorRateChartProps {
 }
 
 export function ErrorRateChart({
-  signals,
-  limit = 20,
+  signals = [],
+  limit = 25,
   windowSize = 5,
 }: ErrorRateChartProps) {
-  // 1. Signals are already DESC (Newest First).
-  // We take the top 'limit' signals.
-  // Display order: Newest (Left) -> Oldest (Right)
+  const hasSignals = signals && signals.length > 0;
+  const now = new Date();
+
   const viewSignals = signals.slice(0, limit);
 
-  // 2. Calculate Moving Average Error Rate
-  const chartData = viewSignals.map((signal, idx, arr) => {
-    // Window: Look at the current signal and the next 'windowSize - 1' signals
-    // Since the array is Newest->Oldest, looking 'forward' in the array means looking back in time
-    // which effectively gives us the "Last N requests" relative to this point.
-    const endIdx = Math.min(idx + windowSize, arr.length);
-    const window = arr.slice(idx, endIdx);
+  const chartData = hasSignals
+    ? viewSignals.map((signal, idx, arr) => {
+        const endIdx = Math.min(idx + windowSize, arr.length);
+        const window = arr.slice(idx, endIdx);
+        const errorCount = window.filter((s) => s.status === "error").length;
+        const errorRate = window.length > 0 ? (errorCount / window.length) * 100 : 0;
+        const date = new Date(signal.timestamp);
 
-    const errorCount = window.filter((s) => s.status === "error").length;
-    // Prevent division by zero if window is empty (unlikely)
-    const errorRate =
-      window.length > 0 ? (errorCount / window.length) * 100 : 0;
-
-    const date = new Date(signal.timestamp);
-
-    return {
-      index: idx,
-      errorRate: errorRate,
-      status: signal.status,
-      // Format time
-      time: date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }),
-      fullTimestamp: date.toLocaleString("en-US"),
-    };
-  });
+        return {
+          index: idx,
+          errorRate: errorRate,
+          status: signal.status,
+          time: date.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }),
+          fullTimestamp: date.toLocaleString(),
+        };
+      })
+    : Array.from({ length: 12 }).map((_, i) => {
+        const d = new Date(now.getTime() - (12 - i) * 5000);
+        return {
+          index: i,
+          errorRate: 0,
+          status: "success" as const,
+          time: d.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }),
+          fullTimestamp: d.toLocaleString(),
+        };
+      });
 
   const xAxisInterval = Math.max(0, Math.floor(chartData.length / 6));
 
   return (
-    <Card className="border-red-500/20 bg-linear-to-br from-card to-red-950/10">
-      <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-6">
+    <Card className="border border-blue-500/15 bg-[#0d1527]/85 backdrop-blur-xl shadow-2xl shadow-black/40">
+      <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-4 border-b border-slate-800/60">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
-          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-            <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-400 shrink-0" />
-            <span className="truncate">Error Rate Trend</span>
+          <CardTitle className="flex items-center gap-2.5 text-base sm:text-lg text-white font-bold">
+            <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/25">
+              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            </div>
+            <span>Rolling Error Rate & Anomalies</span>
           </CardTitle>
-          <div className="text-xs sm:text-sm text-gray-400 shrink-0">
-            Moving avg (last {windowSize} req)
+          <div className="flex items-center gap-2 text-xs font-mono text-emerald-400">
+            <ShieldCheck className="w-4 h-4" />
+            <span>5-request sliding window</span>
           </div>
         </div>
+        <p className="text-[11px] text-slate-400 mt-1">
+          Moving average error rate detection triggering adaptive mitigation thresholds
+        </p>
       </CardHeader>
-      <CardContent className="px-2 sm:px-6">
-        <div className="overflow-x-auto overflow-y-hidden pb-4">
-          <div className="min-w-[600px] sm:min-w-0">
-            <ResponsiveContainer width="100%" height={350}>
+
+      <CardContent className="p-4 sm:p-6 pt-4">
+        <div className="overflow-x-auto overflow-y-hidden">
+          <div className="min-w-[550px] sm:min-w-0">
+            <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient
-                    id="errorGradient"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                  <linearGradient id="errorGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="#333"
-                  opacity={0.3}
+                  stroke="#1e293b"
+                  opacity={0.6}
                   vertical={false}
                 />
                 <XAxis
                   dataKey="index"
-                  stroke="#666"
-                  tick={{ fill: "#999", fontSize: 10 }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={60}
+                  stroke="#475569"
+                  tick={{ fill: "#64748b", fontSize: 11, fontFamily: "monospace" }}
                   interval={xAxisInterval}
                   tickFormatter={(index) => {
                     const dataPoint = chartData[index];
@@ -114,65 +119,54 @@ export function ErrorRateChart({
                   }}
                 />
                 <YAxis
-                  stroke="#666"
-                  tick={{ fill: "#999", fontSize: 10 }}
-                  tickFormatter={(value) => `${value.toFixed(0)}%`}
+                  stroke="#475569"
+                  tick={{ fill: "#64748b", fontSize: 11, fontFamily: "monospace" }}
+                  tickFormatter={(value) => `${value}%`}
                   domain={[0, 100]}
-                  width={40}
-                  label={{
-                    value: "Error Rate (%)",
-                    angle: -90,
-                    position: "insideLeft",
-                    style: { fill: "#999", fontSize: 10 },
-                    dx: -5,
-                  }}
+                  width={45}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#1a1a1a",
-                    border: "1px solid #ef4444",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.3)",
+                    backgroundColor: "#09101f",
+                    borderColor: "rgba(245, 158, 11, 0.4)",
+                    borderRadius: "12px",
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.8)",
+                    color: "#f8fafc",
+                    fontSize: "12px",
+                    fontFamily: "monospace",
                   }}
-                  labelStyle={{ color: "#fafafa", fontWeight: "bold" }}
                   formatter={(value: number | undefined) => [
-                    value !== undefined ? `${value.toFixed(1)}%` : "N/A",
+                    value !== undefined ? `${value.toFixed(1)}%` : "0%",
                     "Error Rate",
                   ]}
-                  labelFormatter={(label, payload) => {
-                    if (payload && payload[0]) {
-                      return payload[0].payload.fullTimestamp;
-                    }
-                    return label;
-                  }}
+                  labelFormatter={(_, payload) =>
+                    payload && payload[0] ? payload[0].payload.fullTimestamp : ""
+                  }
                   cursor={{
-                    stroke: "#ef4444",
-                    strokeWidth: 1,
-                    strokeDasharray: "5 5",
+                    stroke: "#f59e0b",
+                    strokeWidth: 1.5,
+                    strokeDasharray: "4 4",
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="errorRate"
-                  stroke="#ef4444"
-                  strokeWidth={3}
+                  stroke="#f59e0b"
+                  strokeWidth={2.5}
                   fill="url(#errorGradient)"
-                  isAnimationActive={false}
-                  dot={(props) => {
-                    // Only show dot if this specific point was an error
-                    const isError = props.payload.status === "error";
-                    if (!isError) return <></>;
-                    return (
-                      <circle
-                        cx={props.cx}
-                        cy={props.cy}
-                        r={4}
-                        fill="#ef4444"
-                        stroke="#1a1a1a"
-                        strokeWidth={2}
-                      />
-                    );
+                  dot={{
+                    fill: "#f59e0b",
+                    r: 3.5,
+                    strokeWidth: 2,
+                    stroke: "#070a13",
                   }}
+                  activeDot={{
+                    r: 6,
+                    fill: "#fcd34d",
+                    stroke: "#f59e0b",
+                    strokeWidth: 2.5,
+                  }}
+                  isAnimationActive={false}
                 />
               </AreaChart>
             </ResponsiveContainer>

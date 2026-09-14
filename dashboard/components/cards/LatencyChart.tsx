@@ -11,90 +11,97 @@ import {
   AreaChart,
 } from "recharts";
 import { formatLatency } from "@/lib/function";
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, Activity } from "lucide-react";
 
 interface LatencyChartProps {
-  signals: { timestamp: string; latency_ms: number; status?: string }[];
+  signals?: { timestamp: string; latency_ms: number; status?: string }[];
   limit?: number;
 }
 
-export function LatencyChart({ signals, limit = 20 }: LatencyChartProps) {
-  // Get specified number of signals and format with both date and time
-  const chartData = signals.slice(0, limit).map((signal, idx) => {
-    const date = new Date(signal.timestamp);
-    return {
-      index: idx,
-      latency: signal.latency_ms,
-      // Format as "HH:MM:SS" for better readability
-      time: date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      }),
-      // Full timestamp for tooltip
-      fullTimestamp: date.toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }),
-    };
-  });
-  // console.log("chartData", chartData);
+export function LatencyChart({ signals = [], limit = 25 }: LatencyChartProps) {
+  // If signals is empty, generate baseline dummy points for live visual readiness
+  const hasSignals = signals && signals.length > 0;
+  const now = new Date();
 
-  // Calculate smart interval to avoid label overlap
-  // Show ~5-7 labels max
+  const chartData = hasSignals
+    ? signals.slice(0, limit).map((signal, idx) => {
+        const date = new Date(signal.timestamp);
+        return {
+          index: idx,
+          latency: signal.latency_ms,
+          time: date.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }),
+          fullTimestamp: date.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+        };
+      })
+    : Array.from({ length: 12 }).map((_, i) => {
+        const d = new Date(now.getTime() - (12 - i) * 5000);
+        return {
+          index: i,
+          latency: 0,
+          time: d.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+          }),
+          fullTimestamp: d.toLocaleString(),
+        };
+      });
+
   const xAxisInterval = Math.max(0, Math.floor(chartData.length / 6));
 
   return (
-    <Card className="border-purple-500/20 bg-linear-to-br from-card to-purple-950/10">
-      <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-6">
+    <Card className="border border-blue-500/15 bg-[#0d1527]/85 backdrop-blur-xl shadow-2xl shadow-black/40">
+      <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-4 border-b border-slate-800/60">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
-          <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 shrink-0" />
-            <span className="truncate">Real-time Latency Monitoring</span>
+          <CardTitle className="flex items-center gap-2.5 text-base sm:text-lg text-white font-bold">
+            <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/25">
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+            </div>
+            <span>Real-time Latency Telemetry</span>
           </CardTitle>
-          <div className="text-xs sm:text-sm text-gray-400 shrink-0">
-            Last {chartData.length} signals
+          <div className="flex items-center gap-2 text-xs font-mono text-cyan-400">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+            <span>{hasSignals ? `Last ${chartData.length} signals` : "Listening for signals..."}</span>
           </div>
         </div>
-        <p className="text-[10px] sm:text-xs text-gray-500 mt-2">
-          💡 Graph shows sampled data (10% of success signals, 100% of errors).
-          Metrics are calculated from all signals.
+        <p className="text-[11px] text-slate-400 mt-1">
+          Sampled response times across microservice endpoints and AI routing channels
         </p>
       </CardHeader>
-      <CardContent className="px-2 sm:px-6">
-        <div className="overflow-x-auto overflow-y-hidden pb-4">
-          <div className="min-w-[600px] sm:min-w-0">
-            <ResponsiveContainer width="100%" height={350}>
+
+      <CardContent className="p-4 sm:p-6 pt-4">
+        <div className="overflow-x-auto overflow-y-hidden">
+          <div className="min-w-[550px] sm:min-w-0">
+            <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient
-                    id="latencyGradient"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                  <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
-                  stroke="#333"
-                  opacity={0.3}
+                  stroke="#1e293b"
+                  opacity={0.6}
                   vertical={false}
                 />
                 <XAxis
                   dataKey="index"
-                  stroke="#666"
-                  tick={{ fill: "#999", fontSize: 10 }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={60}
+                  stroke="#475569"
+                  tick={{ fill: "#64748b", fontSize: 11, fontFamily: "monospace" }}
                   interval={xAxisInterval}
                   tickFormatter={(index) => {
                     const dataPoint = chartData[index];
@@ -102,66 +109,53 @@ export function LatencyChart({ signals, limit = 20 }: LatencyChartProps) {
                   }}
                 />
                 <YAxis
-                  stroke="#666"
-                  tick={{ fill: "#999", fontSize: 10 }}
+                  stroke="#475569"
+                  tick={{ fill: "#64748b", fontSize: 11, fontFamily: "monospace" }}
                   tickFormatter={(value) => `${value}ms`}
-                  width={45}
-                  label={{
-                    value: "Latency (ms)",
-                    angle: -90,
-                    position: "insideLeft",
-                    style: { fill: "#999", fontSize: 10 },
-                    dx: -10,
-                  }}
+                  width={50}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#1a1a1a",
-                    border: "1px solid #8b5cf6",
-                    borderRadius: "8px",
-                    boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.3)",
+                    backgroundColor: "#09101f",
+                    borderColor: "rgba(6, 182, 212, 0.4)",
+                    borderRadius: "12px",
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.8)",
+                    color: "#f8fafc",
+                    fontSize: "12px",
+                    fontFamily: "monospace",
                   }}
-                  labelStyle={{ color: "#fafafa", fontWeight: "bold" }}
-                  formatter={(value: number | undefined) =>
-                    value !== undefined
-                      ? [formatLatency(value), "Latency"]
-                      : ["N/A", "Latency"]
+                  formatter={(value: number | undefined) => [
+                    value !== undefined ? `${formatLatency(value)}` : "0ms",
+                    "Latency",
+                  ]}
+                  labelFormatter={(_, payload) =>
+                    payload && payload[0] ? payload[0].payload.fullTimestamp : ""
                   }
-                  labelFormatter={(label, payload) => {
-                    if (payload && payload[0]) {
-                      return payload[0].payload.fullTimestamp;
-                    }
-                    return label;
-                  }}
                   cursor={{
-                    stroke: "#8b5cf6",
-                    strokeWidth: 1,
-                    strokeDasharray: "5 5",
+                    stroke: "#06b6d4",
+                    strokeWidth: 1.5,
+                    strokeDasharray: "4 4",
                   }}
-                  animationDuration={0}
-                  allowEscapeViewBox={{ x: false, y: true }}
-                  position={{ y: 0 }}
                 />
                 <Area
                   type="monotone"
                   dataKey="latency"
-                  stroke="#8b5cf6"
-                  strokeWidth={3}
+                  stroke="#06b6d4"
+                  strokeWidth={2.5}
                   fill="url(#latencyGradient)"
                   dot={{
-                    fill: "#8b5cf6",
-                    r: 4,
+                    fill: "#06b6d4",
+                    r: 3.5,
                     strokeWidth: 2,
-                    stroke: "#1a1a1a",
+                    stroke: "#070a13",
                   }}
                   activeDot={{
-                    r: 7,
-                    fill: "#a78bfa",
-                    stroke: "#8b5cf6",
-                    strokeWidth: 3,
+                    r: 6,
+                    fill: "#67e8f9",
+                    stroke: "#06b6d4",
+                    strokeWidth: 2.5,
                   }}
                   isAnimationActive={false}
-                  connectNulls
                 />
               </AreaChart>
             </ResponsiveContainer>
