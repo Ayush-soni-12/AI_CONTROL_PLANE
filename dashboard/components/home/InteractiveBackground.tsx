@@ -8,14 +8,13 @@ interface InteractiveBackgroundProps {
 }
 
 /**
- * Client component for interactive background effects
- * Handles mouse tracking and glitch effects
+ * Client component for interactive obsidian cyber background
+ * Handles mouse tracking spotlights and high-contrast matrix grid
  */
 export function InteractiveBackground({
   children,
 }: InteractiveBackgroundProps) {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [glitchEffect, setGlitchEffect] = useState(false);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -23,47 +22,26 @@ export function InteractiveBackground({
     };
 
     window.addEventListener("mousemove", handleMouseMove);
-
-    // Random glitch effect
-    const glitchInterval = setInterval(() => {
-      if (Math.random() > 0.95) {
-        setGlitchEffect(true);
-        setTimeout(() => setGlitchEffect(false), 100);
-      }
-    }, 3000);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      clearInterval(glitchInterval);
-    };
+    return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gray-950">
-      {/* Animated background */}
+    <div className="relative min-h-screen overflow-hidden bg-[#070a13] text-slate-100">
+      {/* Interactive dynamic cursor spotlight */}
       <div
-        className="fixed inset-0 opacity-20"
+        className="fixed inset-0 pointer-events-none opacity-40 transition-opacity duration-300"
         style={{
-          background: `radial-gradient(600px at ${mousePosition.x}px ${mousePosition.y}px, rgba(120, 119, 198, 0.15), transparent 80%)`,
+          background: `radial-gradient(650px at ${mousePosition.x}px ${mousePosition.y}px, rgba(6, 182, 212, 0.12), rgba(99, 102, 241, 0.05) 40%, transparent 80%)`,
         }}
       />
 
-      {/* Grid pattern */}
-      <div className="fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-size-[50px_50px]" />
+      {/* Cyber Grid pattern */}
+      <div className="fixed inset-0 pointer-events-none cyber-grid opacity-70" />
 
-      {/* Glitch effect overlay */}
-      {glitchEffect && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.05 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-white mix-blend-overlay"
-        />
-      )}
-
-      {/* Floating elements */}
-      <div className="absolute top-1/4 left-10 w-72 h-72 bg-purple-500/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-1/4 right-10 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
+      {/* Ambient Cyber Neon Orbs */}
+      <div className="absolute top-20 left-1/4 w-[500px] h-[500px] bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/2 right-10 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-20 left-10 w-[450px] h-[450px] bg-emerald-500/8 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Content */}
       <div className="relative z-10">{children}</div>
