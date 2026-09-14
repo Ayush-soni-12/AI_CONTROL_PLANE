@@ -7,8 +7,6 @@ import {
   LogOut,
   User,
   Key,
-  // Settings,
-  Server,
   LayoutDashboard,
   BarChart3,
   Menu,
@@ -22,9 +20,11 @@ import {
   Timer,
   Flag,
   Bot,
+  Cpu,
+  Radio,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useLogout } from "@/hooks/useSignals";
+import { useLogout, useServices } from "@/hooks/useSignals";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const DynamicUserProfile = dynamic(
@@ -37,13 +37,13 @@ const DynamicUserProfile = dynamic(
 
 /**
  * Dashboard Sidebar Component
-// ... existing code ...
- * Beautiful left-side navigation with modern design
+ * Modern Obsidian Cyber Navigation with categorized routes and live system telemetry status
  */
 export function DashboardSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { mutate: logout, isPending: isLoggingOut } = useLogout();
+  const { status: sseStatus } = useServices();
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -57,73 +57,86 @@ export function DashboardSidebar() {
 
   const isCloudMode = process.env.NEXT_PUBLIC_IS_CLOUD_MODE === "true";
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-    { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
-    { icon: Brain, label: "AI Insights", href: "/dashboard/ai-insights" },
-    { icon: AlertTriangle, label: "Incidents", href: "/dashboard/incidents" },
-    { icon: Flag, label: "Feature Flags", href: "/dashboard/flags" },
-    { icon: Shield, label: "Overrides", href: "/dashboard/overrides" },
-    { icon: Bot, label: "Agentic Payments", href: "/dashboard/agentic-payments" },
-    { icon: Shield, label: "Agent Registry", href: "/dashboard/registry" },
-
+  const menuSections = [
     {
-      icon: Timer,
-      label: "Adaptive Timeout",
-      href: "/dashboard/adaptive-timeout",
+      title: "Core Monitoring",
+      items: [
+        { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
+        { icon: BarChart3, label: "Analytics", href: "/dashboard/analytics" },
+        { icon: Brain, label: "AI Insights", href: "/dashboard/ai-insights" },
+        { icon: AlertTriangle, label: "Incidents", href: "/dashboard/incidents" },
+      ],
     },
-    { icon: BookOpen, label: "Docs", href: "/dashboard/docs" },
-    { icon: Key, label: "API Keys", href: "/dashboard/api-keys" },
-    { icon: User, label: "Profile", href: "/dashboard/profile" },
-    // Billing: only visible on the managed cloud (neuralcontrol.online)
-    ...(isCloudMode
-      ? [{ icon: CreditCard, label: "Billing", href: "/dashboard/billing" }]
-      : []),
+    {
+      title: "Governance",
+      items: [
+        { icon: Flag, label: "Feature Flags", href: "/dashboard/flags" },
+        { icon: Shield, label: "Overrides", href: "/dashboard/overrides" },
+        { icon: Timer, label: "Adaptive Timeout", href: "/dashboard/adaptive-timeout" },
+      ],
+    },
+    {
+      title: "Autonomous Agents",
+      items: [
+        { icon: Bot, label: "Agentic Payments", href: "/dashboard/agentic-payments" },
+        { icon: Cpu, label: "Agent Registry", href: "/dashboard/registry" },
+        ...(isCloudMode
+          ? [{ icon: CreditCard, label: "Cloud Billing", href: "/dashboard/billing" }]
+          : []),
+      ],
+    },
+    {
+      title: "Configuration",
+      items: [
+        { icon: Key, label: "API Keys", href: "/dashboard/api-keys" },
+        { icon: BookOpen, label: "Docs", href: "/dashboard/docs" },
+        { icon: User, label: "Profile", href: "/dashboard/profile" },
+      ],
+    },
   ];
 
   const isActive = (href: string) => pathname === href;
 
   return (
     <>
-      {/* Mobile Menu Button */}
+      {/* Mobile Menu Toggle Button */}
       <button
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="2xl:hidden fixed top-6 left-6 z-50 p-3 rounded-xl bg-gray-900/90 backdrop-blur-xl border border-gray-800 hover:bg-gray-800 transition-all duration-300 shadow-lg"
+        className="2xl:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-slate-900/90 backdrop-blur-xl border border-blue-500/20 text-slate-300 hover:text-white hover:border-cyan-500/40 shadow-xl"
       >
-        {isMobileMenuOpen ? (
-          <X className="w-5 h-5 text-gray-300" />
-        ) : (
-          <Menu className="w-5 h-5 text-gray-300" />
-        )}
+        {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
       </button>
 
-      {/* Sidebar */}
+      {/* Sidebar Container */}
       <aside
         className={`
-          fixed top-0 left-0 h-screen w-72 bg-linear-to-b from-gray-950 via-gray-900 to-gray-950 border-r border-gray-800/50 z-40
-          transform transition-transform duration-300 ease-in-out
-          2xl:translate-x-0
+          fixed top-0 left-0 h-screen w-68 bg-[#070c18]/95 backdrop-blur-2xl border-r border-blue-500/10 z-40
+          transform transition-transform duration-300 ease-in-out flex flex-col justify-between
+          2xl:translate-x-0 shadow-2xl shadow-black/60
           ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        <div className="flex flex-col h-full">
-          {/* Logo Section - Static */}
-          <div className="p-6 pb-4">
-            <Link href="/dashboard" className="block">
-              <div className="flex items-center gap-3 mb-2">
+        <div className="flex flex-col h-full overflow-hidden">
+          {/* Brand Logo Header */}
+          <div className="p-5 pb-3 border-b border-slate-800/40">
+            <Link href="/dashboard" className="block group">
+              <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className=" p-2.5 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-                    <Server className="w-6 h-6 text-purple-400" />
+                  <div className="absolute inset-0 bg-cyan-500/30 rounded-xl blur-sm group-hover:blur-md transition-all" />
+                  <div className="relative p-2 rounded-xl bg-gradient-to-br from-[#0e1e38] to-[#0a1426] border border-cyan-500/30 group-hover:border-cyan-400/60 transition-colors">
+                    <Radio className="w-5 h-5 text-cyan-400 animate-pulse" />
                   </div>
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                    Neural Control
-                  </h1>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base font-bold bg-gradient-to-r from-cyan-300 via-blue-200 to-indigo-300 bg-clip-text text-transparent">
+                      NeuralControl
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <Sparkles className="w-3 h-3 text-purple-400" />
-                    <span className="text-xs text-gray-500 font-medium">
-                      Neural Dashboard
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="text-[10px] font-mono tracking-wider text-slate-400 uppercase">
+                      AI Control Plane
                     </span>
                   </div>
                 </div>
@@ -131,108 +144,109 @@ export function DashboardSidebar() {
             </Link>
           </div>
 
-          {/* User Profile Card - Dynamic with Suspense */}
-          <Suspense
-            fallback={
-              <div className="px-6 pb-6">
-                <div className="relative group">
-                  <div className="absolute inset-0 bg-linear-to-r from-purple-600/20 to-pink-600/20 rounded-2xl blur-sm"></div>
-                  <div className="relative p-4 rounded-2xl bg-gray-900/80 backdrop-blur-sm border border-gray-800">
-                    <div className="flex items-center gap-3">
-                      <Skeleton className="w-12 h-12 rounded-full" />
-                      <div className="flex-1 space-y-2">
-                        <Skeleton className="h-4 w-24" />
-                        <Skeleton className="h-3 w-32" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            }
-          >
-            <DynamicUserProfile />
-          </Suspense>
+          {/* Navigation Links (Grouped with section headings) */}
+          <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-4">
+            {menuSections.map((section) => (
+              <div key={section.title} className="space-y-1">
+                <p className="px-3 text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-400">
+                  {section.title}
+                </p>
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.href);
 
-          {/* Navigation Menu */}
-          <nav className="flex-1 px-4 overflow-y-auto">
-            <div className="space-y-1.5">
-              {menuItems.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href);
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`
-                      group relative flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300
-                      ${
-                        active
-                          ? "bg-linear-to-r from-purple-600/20 to-pink-600/20 text-white shadow-lg shadow-purple-500/10"
-                          : "text-gray-400 hover:text-white hover:bg-gray-800/50"
-                      }
-                    `}
-                  >
-                    {active && (
-                      <div className="absolute inset-0 bg-linear-to-r from-purple-600/10 to-pink-600/10 rounded-xl blur-sm"></div>
-                    )}
-                    <div
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setIsMobileMenuOpen(false)}
                       className={`
-                      relative p-2 rounded-lg transition-all duration-300
-                      ${
-                        active
-                          ? "bg-linear-to-br from-purple-500/20 to-pink-500/20"
-                          : "bg-gray-800/50 group-hover:bg-gray-800"
-                      }
-                    `}
+                        group relative flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all duration-200
+                        ${
+                          active
+                            ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/25 shadow-[0_0_12px_rgba(6,182,212,0.1)] font-semibold"
+                            : "text-slate-400 hover:text-slate-200 hover:bg-slate-850/60 border border-transparent"
+                        }
+                      `}
                     >
-                      <Icon
-                        className={`w-4 h-4 ${active ? "text-purple-400" : "text-gray-400 group-hover:text-gray-300"}`}
-                      />
-                    </div>
-                    <span
-                      className={`relative font-medium text-sm ${active ? "text-white" : ""}`}
-                    >
-                      {item.label}
-                    </span>
-                    {active && (
-                      <div className="relative ml-auto">
-                        <div className="absolute inset-0 bg-purple-500 rounded-full blur-sm"></div>
-                        <div className="relative w-1.5 h-1.5 bg-purple-400 rounded-full"></div>
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`
+                            p-1 rounded-lg transition-colors
+                            ${
+                              active
+                                ? "text-cyan-400 bg-cyan-500/15"
+                                : "text-slate-400 group-hover:text-slate-300"
+                            }
+                          `}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <span>{item.label}</span>
                       </div>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
+                      {active && (
+                        <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_#22d3ee]" />
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
-          {/* Logout Button */}
-          <div className="p-4 border-t border-gray-800/50">
+          {/* Bottom System Status & Logout */}
+          <div className="p-3 border-t border-slate-800/40 space-y-2.5 bg-[#050914]/80">
+            {/* System Status Mini Widget */}
+            <div className="p-2.5 rounded-xl bg-slate-900/80 border border-blue-500/15">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-400">
+                  System Status
+                </span>
+                <span className="flex h-1.5 w-1.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-[10.5px]">
+                <div className="flex items-center justify-between text-slate-400 bg-slate-950/60 px-2 py-1 rounded-md">
+                  <span>API</span>
+                  <span className="text-emerald-400 font-mono text-[10px]">
+                    {sseStatus === "connected" ? "Online" : "Connecting"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400 bg-slate-950/60 px-2 py-1 rounded-md">
+                  <span>Redis</span>
+                  <span className="text-cyan-400 font-mono text-[10px]">Active</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400 bg-slate-950/60 px-2 py-1 rounded-md">
+                  <span>DB</span>
+                  <span className="text-emerald-400 font-mono text-[10px]">Synced</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400 bg-slate-950/60 px-2 py-1 rounded-md">
+                  <span>AI</span>
+                  <span className="text-purple-400 font-mono text-[10px]">Ready</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Logout button */}
             <button
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="group relative w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-linear-to-r from-red-900/20 to-red-800/20 border border-red-500/20 hover:border-red-500/40 hover:from-red-900/30 hover:to-red-800/30 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-800 hover:border-red-500/30 transition-all cursor-pointer disabled:opacity-50"
             >
-              <div className="absolute inset-0 bg-linear-to-r from-red-600/0 via-red-600/5 to-red-600/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-              <div className="relative p-2 rounded-lg bg-red-900/30">
-                <LogOut className="w-4 h-4 text-red-400" />
-              </div>
-              <span className="relative font-medium text-sm text-red-400">
-                {isLoggingOut ? "Logging out..." : "Logout"}
-              </span>
+              <LogOut className="w-3.5 h-3.5" />
+              <span>{isLoggingOut ? "Signing out..." : "Sign Out"}</span>
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Overlay for mobile - increased z-index to be behind sidebar but above everything else */}
+      {/* Mobile Backdrop */}
       {isMobileMenuOpen && (
         <div
           onClick={() => setIsMobileMenuOpen(false)}
-          className="2xl:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-30 animate-in fade-in duration-300"
-          style={{ zIndex: 35 }}
+          className="2xl:hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-30 animate-in fade-in duration-200"
         />
       )}
     </>
