@@ -6,11 +6,11 @@ import { DynamicChart } from "@/components/dashboard/DynamicChart";
 import { DynamicErrorChart } from "@/components/dashboard/DynamicErrorChart";
 import { DynamicServices } from "@/components/dashboard/DynamicServices";
 import { TimeRangeSelector, TimeRange } from "@/components/TimeRangeSelector";
-import { ConnectionStatus } from "@/components/ui/connection-status";
-import { Server, LogIn, Database } from "lucide-react";
+import { LogIn, Database, Sparkles, Activity, Layers } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { TopCommandHeader } from "@/components/dashboard/TopCommandHeader";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -73,12 +73,12 @@ export default function DashboardPage() {
   // Show loading while checking auth
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-purple-950/5 to-background">
+      <div className="min-h-screen flex items-center justify-center bg-[#070a13] text-slate-200">
         <div className="text-center">
-          <div className="inline-block p-4 rounded-2xl bg-purple-500/10 mb-4">
-            <LogIn className="w-12 h-12 text-purple-400 animate-pulse" />
+          <div className="inline-block p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 mb-4 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
+            <LogIn className="w-10 h-10 text-cyan-400 animate-pulse" />
           </div>
-          <p className="text-gray-400 text-lg">Verifying authentication...</p>
+          <p className="text-slate-400 text-sm font-mono">Verifying authentication...</p>
         </div>
       </div>
     );
@@ -92,69 +92,71 @@ export default function DashboardPage() {
   return (
     <>
       <DashboardSidebar />
-      <div className="2xl:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
-        <div className="max-w-7xl mx-auto">
-          {/* Header with Connection Status */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 mb-8 mt-12 2xl:mt-0 relative">
-            <div className="shrink-0 p-3 sm:p-4 rounded-xl bg-linear-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-              <Server className="w-8 h-8 sm:w-10 sm:h-10 text-purple-400" />
-            </div>
-            <div className="flex-1 w-full">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-3xl sm:text-4xl font-bold bg-linear-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                    Neural Control
-                  </h1>
-                  <p className="text-sm sm:text-base text-gray-400 mt-1">
-                    Real-time microservice monitoring and autonomous control
-                  </p>
-                </div>
-                <div className="shrink-0 self-start sm:self-auto">
-                  <ConnectionStatus
-                    status={sseStatus}
-                    onReconnect={reconnectSSE}
-                  />
-                </div>
+      <div className="2xl:ml-68 min-h-screen p-4 sm:p-8 bg-[#070a13] cyber-grid text-slate-100 relative">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Top Command Bar & Search Header */}
+          <TopCommandHeader />
+
+          {/* Page Hero Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2 border-b border-blue-500/15">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                  REAL-TIME OVERVIEW
+                </span>
+                <span className="text-xs text-slate-500 font-mono">
+                  Autonomous Protection Loop
+                </span>
               </div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+                <span>Mission Control</span>
+                <Sparkles className="w-5 h-5 text-cyan-400" />
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Real-time microservice signals, anomaly mitigation, and adaptive traffic orchestration
+              </p>
             </div>
           </div>
-          
-        <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
 
-          {/* Dynamic Metrics - SSE handles own loading */}
+          {/* 1. Dynamic Metrics - SSE streams live telemetry */}
           <DynamicMetrics />
 
-          {/* Dynamic Charts - SSE handles own loading */}
-          <DynamicChart />
-          <DynamicErrorChart />
+          {/* 2. Real-time Telemetry & Error Rate Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DynamicChart />
+            <DynamicErrorChart />
+          </div>
 
-          {/* Time Range Selector */}
-          <div className="mb-8">
+          {/* 3. Time Range Selector */}
+          <div>
             <TimeRangeSelector
               onRangeChange={handleRangeChange}
               currentRange={timeRange}
             />
           </div>
 
-          {/* Services Header with Historical Indicator */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-            <h2 className="text-2xl sm:text-3xl font-bold bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Services
-            </h2>
+          {/* 4. Services Header with Historical Indicator */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-4 border-t border-blue-500/15">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                <Activity className="w-4 h-4" />
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-slate-100">
+                Registered Services
+              </h2>
+            </div>
 
             {isHistoricalMode && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/30">
-                <Database className="w-4 h-4 text-blue-400" />
-                <span className="text-sm font-medium text-blue-400">
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30">
+                <Database className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-xs font-medium text-blue-400 font-mono">
                   Historical View
                 </span>
               </div>
             )}
-
-            <div className="h-px w-full sm:flex-1 bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent" />
           </div>
 
-          {/* Dynamic Services List - SSE handles own loading */}
+          {/* 5. Dynamic Services Grid - SSE streams live services */}
           <DynamicServices apiUrl={servicesApiUrl} />
         </div>
       </div>
