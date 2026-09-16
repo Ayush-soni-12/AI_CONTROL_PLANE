@@ -1,23 +1,21 @@
-import { useIncidentDetail, useAnalyzeIncident } from "@/hooks/useIncidents";
+"use client";
+
+import { useIncidentDetail, useAnalyzeIncident, useResolveIncident, Incident } from "@/hooks/useIncidents";
 import { TimelineEvent } from "./TimelineEvent";
+import {
+  ArrowLeft,
+  Sparkles,
+  Zap,
+  CheckCircle2,
+  Clock,
+  Activity,
+  AlertTriangle,
+  Shield,
+  Check,
+  RefreshCw,
+} from "lucide-react";
 
-const SEVERITY_BADGE: Record<string, Record<string, string>> = {
-  critical: {
-    bg: "#fef2f2",
-    text: "#dc2626",
-    border: "#fecaca",
-    label: "Critical",
-  },
-  warning: {
-    bg: "#fffbeb",
-    text: "#d97706",
-    border: "#fde68a",
-    label: "Warning",
-  },
-  info: { bg: "#eff6ff", text: "#2563eb", border: "#bfdbfe", label: "Info" },
-};
-
-function fmt(dt: string) {
+function fmtTime(dt: string) {
   const d = new Date(dt);
   return d.toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -35,197 +33,269 @@ function fmtDate(dt: string) {
   });
 }
 
+interface IncidentDetailProps {
+  incidentId: number;
+  onBack: () => void;
+  onQuickOverride?: (incident: Incident) => void;
+}
+
 export function IncidentDetail({
   incidentId,
   onBack,
-}: {
-  incidentId: number;
-  onBack: () => void;
-}) {
+  onQuickOverride,
+}: IncidentDetailProps) {
   const { data: incident, isLoading } = useIncidentDetail(incidentId);
   const { mutate: analyze, isPending: isAnalyzing } = useAnalyzeIncident();
+  const { mutate: resolve, isPending: isResolving } = useResolveIncident();
 
   if (isLoading || !incident) {
     return (
-      <div className="flex justify-center items-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+      <div className="flex flex-col items-center justify-center py-28 gap-4">
+        <div className="w-10 h-10 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs font-mono text-cyan-300">
+          Loading cognitive incident telemetry...
+        </span>
       </div>
     );
   }
 
-  const badge = SEVERITY_BADGE[incident.severity] || SEVERITY_BADGE.info;
   const isOpen = incident.status === "open";
+  const isCritical = incident.severity === "critical";
+  const isWarning = incident.severity === "warning";
 
   return (
-    <div style={{ fontFamily: "'Inter', -apple-system, sans-serif" }}>
-      {/* Back button */}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors mb-6 pb-2"
-      >
-        ← Back to incidents
-      </button>
-
-      {/* Incident header */}
-      <div className="bg-gray-900/40 border border-gray-800/50 backdrop-blur-xl rounded-2xl p-4 sm:p-6 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div className="flex-1">
-            <h2 className="text-2xl font-bold text-white mb-3">
-              {incident.title}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className="px-3 py-1 rounded-full text-xs font-medium border border-opacity-20"
-                style={{
-                  backgroundColor: badge.bg,
-                  color: badge.text,
-                  borderColor: badge.border,
-                }}
-              >
-                {badge.label}
-              </span>
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-medium border ${
-                  isOpen
-                    ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                    : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
-                }`}
-              >
-                {isOpen ? "🔴 Active" : "✅ Resolved"}
-              </span>
-              <span className="text-sm text-gray-500 ml-2">
-                {fmtDate(incident.started_at)} · {fmt(incident.started_at)}
-                {incident.resolved_at && ` → ${fmt(incident.resolved_at)}`}
-              </span>
-            </div>
-          </div>
-
-          <div className="shrink-0 text-left sm:text-right mt-4 sm:mt-0">
-            <div className="text-3xl font-mono font-bold text-white tracking-tight">
-              {incident.duration_display}
-            </div>
-            <div className="text-xs text-gray-400 font-medium uppercase tracking-wider mt-1">
-              duration
-            </div>
-          </div>
-        </div>
-
-        {/* Peak metrics row */}
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            marginTop: "16px",
-            flexWrap: "wrap",
-          }}
+    <div className="space-y-6">
+      {/* Top navigation & action header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-2 text-xs font-mono font-semibold text-slate-400 hover:text-cyan-300 transition-colors w-fit px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:border-cyan-500/30"
         >
-          {[
-            {
-              label: "Peak response time",
-              value: `${incident.peak_latency_ms?.toFixed(0)}ms`,
-              color: "#f97316",
-            },
-            {
-              label: "Peak failure rate",
-              value: `${(incident.peak_error_rate * 100).toFixed(1)}%`,
-              color: "#ef4444",
-            },
-            {
-              label: "Peak traffic",
-              value: `${incident.peak_rpm?.toFixed(0)}/min`,
-              color: "#8b5cf6",
-            },
-          ].map(({ label, value, color }) => (
-            <div
-              key={label}
-              className="flex-1 min-w-[120px] sm:min-w-[140px]"
-              style={{
-                background: color + "10",
-                border: `1px solid ${color}25`,
-                borderRadius: "10px",
-                padding: "10px 16px",
-                textAlign: "center",
-              }}
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Incident Command Center
+        </button>
+
+        {/* Quick mitigation buttons */}
+        <div className="flex items-center gap-2">
+          {onQuickOverride && (
+            <button
+              onClick={() => onQuickOverride(incident)}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.15)] hover:scale-105 active:scale-95"
             >
-              <div
-                style={{
-                  fontSize: "18px",
-                  fontWeight: "800",
-                  color,
-                  fontFamily: "'DM Mono', monospace",
-                }}
-              >
-                {value}
-              </div>
-              <div
-                style={{ fontSize: "11px", color: "#6b7280", marginTop: "2px" }}
-              >
-                {label}
-              </div>
-            </div>
-          ))}
+              <Zap className="w-3.5 h-3.5" />
+              Apply Override
+            </button>
+          )}
+
+          {isOpen && (
+            <button
+              onClick={() => resolve(incident.id)}
+              disabled={isResolving}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.15)] hover:scale-105 active:scale-95 disabled:opacity-50"
+            >
+              <Check className="w-3.5 h-3.5" />
+              {isResolving ? "Resolving..." : "Mark Resolved"}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* AI Root Cause */}
-      {incident.root_cause_summary ? (
-        <div className="bg-cyan-500/10 border border-cyan-500/20 backdrop-blur-xl rounded-2xl p-4 sm:p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3 flex-1">
-              <span className="text-2xl">🤖</span>
-              <h3 className="text-lg font-bold text-cyan-400">
-                AI Root Cause Analysis
-              </h3>
-              {incident.ai_confidence && (
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                  {incident.ai_confidence} confidence
-                </span>
+      {/* Incident Overview Card */}
+      <div className="relative overflow-hidden rounded-2xl bg-[#091020]/80 border border-white/[0.08] backdrop-blur-xl p-5 sm:p-7 shadow-[0_0_30px_rgba(0,0,0,0.4)]">
+        <div
+          className={`absolute top-0 left-0 right-0 h-1 ${
+            isOpen
+              ? isCritical
+                ? "bg-gradient-to-r from-rose-500 via-pink-500 to-rose-500"
+                : "bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500"
+              : "bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500"
+          }`}
+        />
+
+        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+          <div className="flex-1 min-w-0">
+            {/* Status & Service tags */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-mono font-bold tracking-wider border ${
+                  isCritical
+                    ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                    : isWarning
+                    ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                    : "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
+                }`}
+              >
+                {incident.severity.toUpperCase()}
+              </span>
+
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-mono font-bold tracking-wider border flex items-center gap-1.5 ${
+                  isOpen
+                    ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                    : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                }`}
+              >
+                {isOpen ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+                    ACTIVE OUTAGE
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    RESOLVED
+                  </>
+                )}
+              </span>
+
+              <span className="text-xs font-mono text-slate-300 bg-white/[0.04] px-3 py-1 rounded-lg border border-white/[0.08]">
+                {incident.service_name}
+                <span className="text-cyan-400 ml-1.5">{incident.endpoint}</span>
+              </span>
+            </div>
+
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-100 mb-2">
+              {incident.title}
+            </h2>
+
+            <div className="text-xs font-mono text-slate-400 flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Started: {fmtDate(incident.started_at)} at {fmtTime(incident.started_at)}</span>
+              {incident.resolved_at && (
+                <>
+                  <span className="text-slate-600">→</span>
+                  <span>Resolved at {fmtTime(incident.resolved_at)}</span>
+                </>
               )}
             </div>
-            <button
-              onClick={() => analyze(incident.id)}
-              disabled={isAnalyzing}
-              className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-xl transition-colors border border-cyan-500/30 text-sm font-semibold disabled:opacity-50"
-            >
-              {isAnalyzing ? "Analyzing..." : "Re-Analyze"}
-            </button>
           </div>
-          <p className="text-sm text-cyan-100/80 leading-relaxed whitespace-pre-wrap">
-            {incident.root_cause_summary}
-          </p>
+
+          {/* Duration display */}
+          <div className="shrink-0 p-3 sm:p-4 rounded-xl bg-black/40 border border-white/[0.06] text-left lg:text-right">
+            <div className="text-2xl sm:text-3xl font-mono font-bold text-slate-100">
+              {incident.duration_display || "0s"}
+            </div>
+            <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">
+              Outage Duration
+            </div>
+          </div>
         </div>
-      ) : (
-        <div className="bg-gray-900/40 border border-gray-800/50 rounded-2xl p-6 sm:p-8 mb-6 text-center flex flex-col items-center justify-center">
-          <span className="text-4xl mb-3">🤖</span>
-          <h3 className="text-lg font-semibold text-gray-200 mb-2">
-            No AI Analysis Yet
-          </h3>
-          <p className="text-sm text-gray-400 mb-6 max-w-md">
-            Get an instant, plain-English summary of what caused this incident
-            and what actions you should take next.
-          </p>
+
+        {/* Telemetry Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-white/[0.08]">
+          <div className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06]">
+            <div className="text-[11px] font-mono text-slate-400 mb-1">
+              Peak Latency
+            </div>
+            <div className="text-lg font-mono font-bold text-amber-400">
+              {incident.peak_latency_ms ? `${incident.peak_latency_ms.toFixed(0)}ms` : "0ms"}
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06]">
+            <div className="text-[11px] font-mono text-slate-400 mb-1">
+              Peak Failure Rate
+            </div>
+            <div className="text-lg font-mono font-bold text-rose-400">
+              {incident.peak_error_rate ? `${(incident.peak_error_rate * 100).toFixed(1)}%` : "0.0%"}
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06]">
+            <div className="text-[11px] font-mono text-slate-400 mb-1">
+              Peak Traffic
+            </div>
+            <div className="text-lg font-mono font-bold text-cyan-300">
+              {incident.peak_rpm ? `${incident.peak_rpm.toFixed(0)} RPM` : "0 RPM"}
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06]">
+            <div className="text-[11px] font-mono text-slate-400 mb-1">
+              Event Sequence
+            </div>
+            <div className="text-lg font-mono font-bold text-slate-200">
+              {incident.events?.length || 0} Recorded
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Root Cause Analysis Section */}
+      <div className="relative overflow-hidden rounded-2xl bg-[#071324]/80 border border-cyan-500/30 backdrop-blur-xl p-5 sm:p-6 shadow-[0_0_35px_rgba(0,240,255,0.08)]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-3 border-b border-cyan-500/20">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+              <Sparkles className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold font-mono text-cyan-300">
+                  AI Root Cause Triage
+                </h3>
+                {incident.ai_confidence && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-cyan-500/20 text-cyan-200 border border-cyan-500/30">
+                    {incident.ai_confidence} confidence
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                Automated heuristic & trace correlation analysis
+              </p>
+            </div>
+          </div>
+
           <button
             onClick={() => analyze(incident.id)}
             disabled={isAnalyzing}
-            className="px-6 py-3 bg-linear-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl font-semibold shadow-lg shadow-purple-500/25 transition-all disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-semibold transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(0,240,255,0.15)] disabled:opacity-50"
           >
-            {isAnalyzing
-              ? "Running AI Analyzer..."
-              : "Generate AI Root Cause Analysis"}
+            <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? "animate-spin" : ""}`} />
+            {isAnalyzing ? "Running AI Diagnosis..." : "Re-Analyze Root Cause"}
           </button>
         </div>
-      )}
 
-      {/* Timeline */}
-      <div className="bg-gray-900/40 border border-gray-800/50 backdrop-blur-xl rounded-2xl p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-bold text-white">Event Timeline</h3>
-          <span className="text-xs text-gray-400">
-            {incident.events?.length || 0} events · click any event to expand
+        {incident.root_cause_summary ? (
+          <div className="p-4 rounded-xl bg-black/40 border border-cyan-500/20">
+            <p className="text-xs sm:text-sm font-mono text-cyan-100/90 leading-relaxed whitespace-pre-wrap">
+              {incident.root_cause_summary}
+            </p>
+          </div>
+        ) : (
+          <div className="text-center py-8 px-4 rounded-xl bg-black/40 border border-dashed border-white/[0.1]">
+            <Sparkles className="w-8 h-8 text-cyan-400 mx-auto mb-2 opacity-60" />
+            <h4 className="text-sm font-bold font-mono text-slate-200 mb-1">
+              No Analysis Generated Yet
+            </h4>
+            <p className="text-xs text-slate-400 max-w-md mx-auto mb-4 font-mono">
+              Execute on-demand cognitive analysis to correlate trace metrics, error patterns, and threshold triggers.
+            </p>
+            <button
+              onClick={() => analyze(incident.id)}
+              disabled={isAnalyzing}
+              className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs transition-all shadow-[0_0_20px_rgba(0,240,255,0.25)]"
+            >
+              {isAnalyzing ? "Analyzing..." : "Generate AI Diagnosis"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Timeline Stream */}
+      <div className="rounded-2xl bg-[#091020]/70 border border-white/[0.08] backdrop-blur-xl p-5 sm:p-6 shadow-[0_0_20px_rgba(0,0,0,0.3)]">
+        <div className="flex items-center justify-between mb-6 pb-3 border-b border-white/[0.08]">
+          <div className="flex items-center gap-2.5">
+            <Activity className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-base font-bold font-mono text-slate-100">
+              Chronological Event Stream
+            </h3>
+          </div>
+          <span className="text-xs font-mono text-slate-400">
+            {incident.events?.length || 0} events recorded · Click event for details
           </span>
         </div>
 
-        <div>
+        <div className="space-y-1">
           {incident.events?.map((event, i) => (
             <TimelineEvent
               key={event.id}
@@ -233,6 +303,12 @@ export function IncidentDetail({
               isLast={i === (incident.events?.length || 0) - 1}
             />
           ))}
+
+          {(!incident.events || incident.events.length === 0) && (
+            <div className="text-center py-10 text-xs font-mono text-slate-500">
+              No event log snapshots recorded for this incident.
+            </div>
+          )}
         </div>
       </div>
     </div>

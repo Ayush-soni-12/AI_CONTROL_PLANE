@@ -1,79 +1,119 @@
+"use client";
+
 import { useState } from "react";
 import { IncidentEvent } from "@/hooks/useIncidents";
 import { TraceWaterfall } from "./TraceWaterfall";
+import {
+  AlertTriangle,
+  Clock,
+  Activity,
+  Flame,
+  ShieldAlert,
+  Sliders,
+  CheckCircle2,
+  Sparkles,
+  Search,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 
-// ─── Config ───────────────────────────────────────────────────────────────────
-const EVENT_STYLES: Record<string, Record<string, string>> = {
+const EVENT_CONFIG: Record<
+  string,
+  {
+    color: string;
+    badgeBg: string;
+    badgeBorder: string;
+    lineColor: string;
+    label: string;
+  }
+> = {
   incident_opened: {
-    color: "#ef4444",
-    bg: "#fef2f2",
-    icon: "🚨",
-    line: "#ef4444",
+    color: "text-rose-400",
+    badgeBg: "bg-rose-500/15",
+    badgeBorder: "border-rose-500/30",
+    lineColor: "bg-rose-500/40",
+    label: "INCIDENT OPENED",
   },
   latency_spike: {
-    color: "#f97316",
-    bg: "#fff7ed",
-    icon: "🐢",
-    line: "#f97316",
+    color: "text-amber-400",
+    badgeBg: "bg-amber-500/15",
+    badgeBorder: "border-amber-500/30",
+    lineColor: "bg-amber-500/40",
+    label: "LATENCY SPIKE",
   },
-  error_spike: { color: "#ef4444", bg: "#fef2f2", icon: "❗", line: "#ef4444" },
+  error_spike: {
+    color: "text-rose-400",
+    badgeBg: "bg-rose-500/15",
+    badgeBorder: "border-rose-500/30",
+    lineColor: "bg-rose-500/40",
+    label: "ERROR SPIKE",
+  },
   traffic_spike: {
-    color: "#8b5cf6",
-    bg: "#f5f3ff",
-    icon: "📈",
-    line: "#8b5cf6",
+    color: "text-cyan-400",
+    badgeBg: "bg-cyan-500/15",
+    badgeBorder: "border-cyan-500/30",
+    lineColor: "bg-cyan-500/40",
+    label: "TRAFFIC SPIKE",
   },
   cache_enabled: {
-    color: "#3b82f6",
-    bg: "#eff6ff",
-    icon: "💾",
-    line: "#3b82f6",
+    color: "text-cyan-300",
+    badgeBg: "bg-cyan-500/15",
+    badgeBorder: "border-cyan-500/30",
+    lineColor: "bg-cyan-500/40",
+    label: "CACHE ENGAGED",
   },
   circuit_breaker: {
-    color: "#dc2626",
-    bg: "#fef2f2",
-    icon: "🔴",
-    line: "#dc2626",
+    color: "text-rose-400",
+    badgeBg: "bg-rose-500/15",
+    badgeBorder: "border-rose-500/30",
+    lineColor: "bg-rose-500/40",
+    label: "CIRCUIT BREAKER",
   },
   load_shedding: {
-    color: "#ea580c",
-    bg: "#fff7ed",
-    icon: "⚠️",
-    line: "#ea580c",
+    color: "text-orange-400",
+    badgeBg: "bg-orange-500/15",
+    badgeBorder: "border-orange-500/30",
+    lineColor: "bg-orange-500/40",
+    label: "LOAD SHEDDING",
   },
   queue_deferral: {
-    color: "#ca8a04",
-    bg: "#fefce8",
-    icon: "🕐",
-    line: "#ca8a04",
+    color: "text-yellow-400",
+    badgeBg: "bg-yellow-500/15",
+    badgeBorder: "border-yellow-500/30",
+    lineColor: "bg-yellow-500/40",
+    label: "QUEUE DEFERRAL",
   },
   rate_limited: {
-    color: "#7c3aed",
-    bg: "#f5f3ff",
-    icon: "🚫",
-    line: "#7c3aed",
+    color: "text-purple-400",
+    badgeBg: "bg-purple-500/15",
+    badgeBorder: "border-purple-500/30",
+    lineColor: "bg-purple-500/40",
+    label: "RATE LIMITED",
   },
   recovery_detected: {
-    color: "#16a34a",
-    bg: "#f0fdf4",
-    icon: "📉",
-    line: "#16a34a",
+    color: "text-emerald-400",
+    badgeBg: "bg-emerald-500/15",
+    badgeBorder: "border-emerald-500/30",
+    lineColor: "bg-emerald-500/40",
+    label: "RECOVERY DETECTED",
   },
   incident_resolved: {
-    color: "#15803d",
-    bg: "#f0fdf4",
-    icon: "✅",
-    line: "#15803d",
+    color: "text-emerald-400",
+    badgeBg: "bg-emerald-500/15",
+    badgeBorder: "border-emerald-500/30",
+    lineColor: "bg-emerald-500/40",
+    label: "INCIDENT RESOLVED",
   },
   ai_root_cause: {
-    color: "#0891b2",
-    bg: "#ecfeff",
-    icon: "🤖",
-    line: "#0891b2",
+    color: "text-cyan-400",
+    badgeBg: "bg-cyan-500/15",
+    badgeBorder: "border-cyan-500/30",
+    lineColor: "bg-cyan-500/40",
+    label: "AI ANALYSIS",
   },
 };
 
-function fmt(dt: string) {
+function fmtTime(dt: string) {
   const d = new Date(dt);
   return d.toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -81,35 +121,6 @@ function fmt(dt: string) {
     second: "2-digit",
     hour12: false,
   });
-}
-
-function MetricPill({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "3px",
-        padding: "2px 8px",
-        borderRadius: "20px",
-        background: color + "15",
-        color: color,
-        fontSize: "11px",
-        fontWeight: "600",
-        fontFamily: "'DM Mono', monospace",
-      }}
-    >
-      <span style={{ opacity: 0.7, fontWeight: 400 }}>{label}</span> {value}
-    </span>
-  );
 }
 
 export function TimelineEvent({
@@ -121,113 +132,113 @@ export function TimelineEvent({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
-  const style = EVENT_STYLES[event.event_type] || EVENT_STYLES.latency_spike;
+
+  const config = EVENT_CONFIG[event.event_type] || {
+    color: "text-cyan-400",
+    badgeBg: "bg-cyan-500/15",
+    badgeBorder: "border-cyan-500/30",
+    lineColor: "bg-cyan-500/40",
+    label: event.event_type.toUpperCase(),
+  };
 
   return (
-    <div className="flex relative">
-      {/* Left: time column */}
-      <div className="w-16 sm:w-20 shrink-0 pt-3.5 text-right pr-3 sm:pr-4">
-        <span className="text-[11px] text-gray-500 font-mono tracking-tight">
-          {fmt(event.occurred_at)}
+    <div className="flex relative group">
+      {/* Time column */}
+      <div className="w-20 sm:w-24 shrink-0 pt-3 text-right pr-3 sm:pr-4">
+        <span className="text-[11px] font-mono text-slate-400">
+          {fmtTime(event.occurred_at)}
         </span>
       </div>
 
-      {/* Center: dot + line */}
+      {/* Center line + dot */}
       <div className="relative w-6 shrink-0 flex flex-col items-center">
         <div
-          className="w-3 h-3 rounded-full mt-4 shrink-0 relative z-10"
-          style={{
-            background: style.color,
-            boxShadow: `0 0 0 4px ${style.color}20`,
-          }}
+          className={`w-3 h-3 rounded-full mt-3.5 shrink-0 relative z-10 ${config.badgeBg} border ${config.badgeBorder} shadow-[0_0_10px_rgba(0,240,255,0.2)]`}
         />
         {!isLast && (
-          <div
-            className="w-px flex-1 min-h-[24px] mt-1"
-            style={{
-              background: `linear-gradient(to bottom, ${style.color}60, rgba(75,85,99,0.3))`,
-            }}
-          />
+          <div className="w-px flex-1 min-h-[32px] mt-1 bg-gradient-to-b from-white/[0.15] to-white/[0.04]" />
         )}
       </div>
 
-      {/* Right: content card */}
-      <div className="flex-1 pl-2 sm:pl-4 pb-6 pt-2 min-w-0">
+      {/* Right Content Card */}
+      <div className="flex-1 pl-2 sm:pl-4 pb-5 min-w-0">
         <div
           onClick={() => setExpanded(!expanded)}
-          className={`bg-gray-800/20 backdrop-blur-md rounded-xl p-3 sm:p-4 cursor-pointer transition-all duration-200 border ${
+          className={`rounded-xl p-3.5 sm:p-4 cursor-pointer transition-all duration-200 bg-[#091020]/60 border backdrop-blur-md ${
             expanded
-              ? "border-opacity-40 shadow-[0_4px_24px_-4px_rgba(0,0,0,0.3)]"
-              : "border-gray-700/50 hover:border-gray-600 hover:bg-gray-800/40"
+              ? "border-cyan-500/40 shadow-[0_0_20px_rgba(0,240,255,0.06)]"
+              : "border-white/[0.06] hover:border-white/[0.15] hover:bg-[#091020]/80"
           }`}
-          style={{ borderColor: expanded ? style.color : undefined }}
         >
           {/* Header row */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <span className="text-[13.5px] font-semibold text-gray-200 leading-snug">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider border shrink-0 ${config.badgeBg} ${config.color} ${config.badgeBorder}`}
+              >
+                {config.label}
+              </span>
+              <span className="text-xs sm:text-sm font-semibold text-slate-100 truncate">
                 {event.title}
               </span>
             </div>
-            {/* Metrics pills */}
-            <div className="flex gap-1.5 flex-wrap justify-end shrink-0">
+
+            {/* Metrics tags */}
+            <div className="flex items-center gap-2 shrink-0">
               {event.latency_ms > 0 && (
-                <MetricPill
-                  label="⏱"
-                  value={`${event.latency_ms.toFixed(0)}ms`}
-                  color="#f97316"
-                />
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/[0.06] text-[10px] font-mono text-amber-400">
+                  {event.latency_ms.toFixed(0)}ms
+                </span>
               )}
               {event.error_rate > 0 && (
-                <MetricPill
-                  label="❌"
-                  value={`${(event.error_rate * 100).toFixed(1)}%`}
-                  color="#ef4444"
-                />
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/[0.06] text-[10px] font-mono text-rose-400">
+                  {(event.error_rate * 100).toFixed(1)}% err
+                </span>
               )}
               {event.rpm > 0 && (
-                <MetricPill
-                  label="📶"
-                  value={`${event.rpm.toFixed(0)}/m`}
-                  color="#6b7280"
-                />
+                <span className="px-2 py-0.5 rounded bg-black/40 border border-white/[0.06] text-[10px] font-mono text-slate-400">
+                  {event.rpm.toFixed(0)} RPM
+                </span>
               )}
+              <span className="text-slate-500">
+                {expanded ? (
+                  <ChevronUp className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                )}
+              </span>
             </div>
           </div>
 
-          {/* Expanded description */}
+          {/* Description */}
           {expanded && event.description && (
-            <div
-              className="mt-3 pt-3 text-[13px] text-gray-400 leading-relaxed border-t"
-              style={{ borderColor: `${style.color}20` }}
-            >
+            <div className="mt-3 pt-3 border-t border-white/[0.06] text-xs font-mono text-slate-300 leading-relaxed">
               {event.description}
             </div>
           )}
 
-          {/* View Trace button - only shown when trace data is available */}
+          {/* Trace inspector launcher */}
           {event.trace_id && (
-            <div className="mt-2 pt-2 border-t" style={{ borderColor: `${style.color}15` }}>
+            <div className="mt-2.5 pt-2.5 border-t border-white/[0.06] flex items-center justify-between">
               <button
-                onClick={(e) => { e.stopPropagation(); setShowTrace(true); }}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-400 hover:text-purple-300 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTrace(true);
+                }}
+                className="inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
               >
-                🔍 View trace
-                <span className="text-gray-600 font-mono text-[10px]">{event.trace_id.substring(0, 8)}...</span>
+                <Search className="w-3 h-3" />
+                Inspect Trace
+                <span className="text-slate-500 text-[10px]">
+                  ({event.trace_id.substring(0, 8)}...)
+                </span>
               </button>
-            </div>
-          )}
-
-          {/* Expand chevron */}
-          {event.description && (
-            <div className="mt-2 text-right text-[11px] text-gray-500 font-medium tracking-wide">
-              {expanded ? "▲ less" : "▼ more"}
             </div>
           )}
         </div>
       </div>
 
-      {/* Trace waterfall modal */}
+      {/* Trace Waterfall Modal */}
       {showTrace && event.trace_id && (
         <TraceWaterfall
           traceId={event.trace_id}

@@ -98,3 +98,20 @@ export const useAnalyzeIncident = () => {
     },
   });
 };
+
+export const useResolveIncident = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (incidentId: number) => {
+      const url = `${API_BASE_URL}/api/incidents/${incidentId}/resolve`;
+      const response = await fetch(url, { method: 'POST', credentials: 'include' });
+      if (!response.ok) throw new Error('Failed to resolve incident');
+      return response.json();
+    },
+    onSuccess: (_, incidentId) => {
+      queryClient.invalidateQueries({ queryKey: ['incident', incidentId] });
+      queryClient.invalidateQueries({ queryKey: ['incidents'] });
+    },
+  });
+};
+
