@@ -17,7 +17,6 @@ import {
 interface IncidentCardProps {
   incident: Incident;
   onClick: () => void;
-  onQuickOverride: (incident: Incident) => void;
 }
 
 function fmtDate(dt: string) {
@@ -33,7 +32,6 @@ function fmtDate(dt: string) {
 export function IncidentCard({
   incident,
   onClick,
-  onQuickOverride,
 }: IncidentCardProps) {
   const { mutate: analyze, isPending: isAnalyzing } = useAnalyzeIncident();
   const { mutate: resolve, isPending: isResolving } = useResolveIncident();
@@ -184,18 +182,6 @@ export function IncidentCard({
         {/* Action Mitigation Bar */}
         <div className="flex flex-wrap lg:flex-col items-center lg:items-end gap-2 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-white/[0.08]">
           <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onQuickOverride(incident);
-              }}
-              title="Apply emergency threshold override"
-              className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-mono font-semibold transition-all flex items-center gap-1.5 hover:scale-105 active:scale-95"
-            >
-              <Zap className="w-3 h-3 text-amber-400" />
-              Override
-            </button>
-
             <button
               onClick={(e) => {
                 e.stopPropagation();

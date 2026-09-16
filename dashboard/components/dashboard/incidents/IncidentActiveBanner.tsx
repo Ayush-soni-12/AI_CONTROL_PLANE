@@ -7,13 +7,11 @@ import { Siren, AlertTriangle, CheckCircle2, ShieldAlert, ArrowRight, Zap } from
 interface IncidentActiveBannerProps {
   activeIncidents: Incident[];
   onSelectIncident: (id: number) => void;
-  onQuickOverride: (incident: Incident) => void;
 }
 
 export function IncidentActiveBanner({
   activeIncidents,
   onSelectIncident,
-  onQuickOverride,
 }: IncidentActiveBannerProps) {
   const [ticker, setTicker] = useState(0);
 
@@ -123,15 +121,7 @@ export function IncidentActiveBanner({
         </div>
 
         {/* Right actions */}
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-white/[0.08]">
-          <button
-            onClick={() => onQuickOverride(primaryIncident)}
-            className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.15)] hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <Zap className="w-3.5 h-3.5" />
-            Quick Override
-          </button>
-
+        <div className="flex items-center gap-2.5 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-white/[0.08]">
           <button
             onClick={() => onSelectIncident(primaryIncident.id)}
             className="px-4 py-2 rounded-xl bg-linear-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white text-xs font-mono font-bold transition-all flex items-center gap-1.5 shadow-[0_0_20px_rgba(244,63,94,0.3)] hover:scale-[1.02] active:scale-[0.98]"

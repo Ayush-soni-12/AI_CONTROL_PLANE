@@ -2,26 +2,19 @@
 
 import { useState, useMemo } from "react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
-import { useIncidents, Incident } from "@/hooks/useIncidents";
+import { useIncidents } from "@/hooks/useIncidents";
 import { IncidentCard } from "@/components/dashboard/incidents/IncidentCard";
 import { IncidentDetail } from "@/components/dashboard/incidents/IncidentDetail";
 import { IncidentActiveBanner } from "@/components/dashboard/incidents/IncidentActiveBanner";
-import { QuickOverrideModal } from "@/components/dashboard/incidents/QuickOverrideModal";
 import {
-  Siren,
   Search,
-  Filter,
   ShieldAlert,
-  Sparkles,
   RefreshCw,
-  Layers,
-  Activity,
   CheckCircle2,
 } from "lucide-react";
 
 export default function IncidentTimelinePage() {
   const [selectedIncidentId, setSelectedIncidentId] = useState<number | null>(null);
-  const [quickOverrideIncident, setQuickOverrideIncident] = useState<Incident | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [serviceFilter, setServiceFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -77,7 +70,6 @@ export default function IncidentTimelinePage() {
               <IncidentDetail
                 incidentId={selectedIncidentId}
                 onBack={() => setSelectedIncidentId(null)}
-                onQuickOverride={(inc) => setQuickOverrideIncident(inc)}
               />
             </div>
           ) : (
@@ -99,7 +91,7 @@ export default function IncidentTimelinePage() {
                       </span>
                     </div>
                     <p className="text-xs sm:text-sm text-slate-400 font-mono mt-1">
-                      Autonomous incident detection, real-time AI root cause triage, and rapid mitigation workflows.
+                      Autonomous incident detection, real-time AI root cause triage, and event timeline sequences.
                     </p>
                   </div>
                 </div>
@@ -121,7 +113,6 @@ export default function IncidentTimelinePage() {
               <IncidentActiveBanner
                 activeIncidents={activeIncidents}
                 onSelectIncident={(id) => setSelectedIncidentId(id)}
-                onQuickOverride={(inc) => setQuickOverrideIncident(inc)}
               />
 
               {/* Filters & Search Toolbar */}
@@ -222,7 +213,6 @@ export default function IncidentTimelinePage() {
                       key={incident.id}
                       incident={incident}
                       onClick={() => setSelectedIncidentId(incident.id)}
-                      onQuickOverride={(inc) => setQuickOverrideIncident(inc)}
                     />
                   ))}
                 </div>
@@ -231,14 +221,6 @@ export default function IncidentTimelinePage() {
           )}
         </div>
       </div>
-
-      {/* Quick Override Modal Drawer */}
-      {quickOverrideIncident && (
-        <QuickOverrideModal
-          incident={quickOverrideIncident}
-          onClose={() => setQuickOverrideIncident(null)}
-        />
-      )}
     </>
   );
 }

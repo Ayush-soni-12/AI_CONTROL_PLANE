@@ -36,13 +36,11 @@ function fmtDate(dt: string) {
 interface IncidentDetailProps {
   incidentId: number;
   onBack: () => void;
-  onQuickOverride?: (incident: Incident) => void;
 }
 
 export function IncidentDetail({
   incidentId,
   onBack,
-  onQuickOverride,
 }: IncidentDetailProps) {
   const { data: incident, isLoading } = useIncidentDetail(incidentId);
   const { mutate: analyze, isPending: isAnalyzing } = useAnalyzeIncident();
@@ -77,16 +75,6 @@ export function IncidentDetail({
 
         {/* Quick mitigation buttons */}
         <div className="flex items-center gap-2">
-          {onQuickOverride && (
-            <button
-              onClick={() => onQuickOverride(incident)}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-mono font-semibold transition-all flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.15)] hover:scale-105 active:scale-95"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              Apply Override
-            </button>
-          )}
-
           {isOpen && (
             <button
               onClick={() => resolve(incident.id)}
