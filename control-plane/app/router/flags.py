@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from datetime import datetime, timezone
 from app.database import models
 from app.database.database import get_async_db
 from app.router.token import get_current_user
@@ -72,6 +73,14 @@ async def stream_flags(service_name: str, request: Request):
                 del active_connections[service_name]
 
     return EventSourceResponse(event_generator())
+
+@router.get("/meta/services")
+async def list_flag_services(db: AsyncSession = Depends(get_async_db)):
+    """Fetch distinct service names that have feature flags."""
+    stmt = select(models.FeatureFlag.service_name).distinct()
+    result = await db.execute(stmt)
+    services = [s for s in result.scalars().all() if s]
+    return {"services": services}
 
 @router.get("/{service_name}")
 async def list_flags(service_name: str, db: AsyncSession = Depends(get_async_db)):
@@ -268,7 +277,21 @@ async def service_auto_disable_flag(
     flag = res.scalar_one_or_none()
     
     if not flag:
-        return None
+        # Dynamic flag not in DB — still set Redis override for safety
+        try:
+            from app.redis.cache import cache_set, cache_get, get_tenant_key
+            effective_tid = tenant_id or "default"
+            flag_key = get_tenant_key(effective_tid, service_name, "flag:disabled", name)
+            await cache_set(flag_key, {"disabled": True, "reason": reason, "updated_at": datetime.now(timezone.utc).isoformat()}, ttl=86400)
+            overrides_key = get_tenant_key(effective_tid, service_name, "overrides")
+            existing_overrides = await cache_get(overrides_key) or {}
+            flags_override = existing_overrides.get("flags", {})
+            flags_override[name] = False
+            existing_overrides["flags"] = flags_override
+            await cache_set(overrides_key, existing_overrides, ttl=86400)
+        except Exception:
+            pass
+        return {"status": "disabled_in_redis", "name": name, "service_name": service_name}
         
     if flag.rollout_percent == 0 and flag.status == "auto-disabled":
         return {"status": "already disabled"}
