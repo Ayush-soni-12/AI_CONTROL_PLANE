@@ -141,3 +141,24 @@ class PatternAnalysis(BaseModel):
             # This is a warning, not an error - sometimes truly no patterns exist
             pass
         return v
+
+
+class IncidentRootCause(BaseModel):
+    """Schema for LLM incident root cause analysis response."""
+    summary: str = Field(
+        description="2-3 sentence plain English explanation of what happened and the most likely cause"
+    )
+    what_happened: str = Field(
+        description="The story of the incident in chronological order"
+    )
+    likely_cause: str = Field(
+        description="What probably caused the incident in plain English"
+    )
+    what_to_check: List[str] = Field(
+        default_factory=list,
+        description="Actionable things the developer should look at next"
+    )
+    confidence: Literal["low", "medium", "high"] = Field(
+        default="medium",
+        description="Confidence level in the root cause determination"
+    )

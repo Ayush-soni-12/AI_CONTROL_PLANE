@@ -18,8 +18,8 @@ Start this from main.py startup:
 import json
 import asyncio
 import aio_pika
-from ..queue.connection import get_email_rabbitmq_channel, EMAIL_QUEUE_NAME
-from ..functions.mailer import send_alert_email
+from app.queue.connection import get_email_rabbitmq_channel, EMAIL_QUEUE_NAME
+from app.functions.mailer import send_alert_email
 
 
 async def _process_email(payload: dict) -> None:

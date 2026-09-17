@@ -9,21 +9,22 @@ IMPROVEMENTS over v1:
 5. Incident tracking: automatically opens/logs/resolves incidents
 """
 
-from ..realtime_aggregates import get_realtime_metrics, get_active_flags_for_endpoint
-from ..router.flags import service_auto_disable_flag
-from ..customer_metrics import get_customer_metrics
+from app.realtime_aggregates import get_realtime_metrics, get_active_flags_for_endpoint
+from app.router.flags import service_auto_disable_flag
+from app.customer_metrics import get_customer_metrics
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from ..database import models
-from ..database.database import AsyncSessionLocal
-from ..ai_engine import ai_engine
-from ..ai_engine.threshold_manager import (
+from app.database import models
+from app.database.models import Span
+from app.database.database import AsyncSessionLocal
+from app.ai_engine import ai_engine
+from app.ai_engine.threshold_manager import (
     get_all_thresholds,
     _get_active_override,
     _apply_override,
 )
 from datetime import datetime, timezone
-from .IncidentTracker import process_decision_for_incident
+from app.functions.IncidentTracker import process_decision_for_incident
 import json
 import time
 import asyncio
@@ -213,12 +214,14 @@ async def make_decision(
     # ── STEP 1.5: Link an active trace_id if none provided ───────────────────
     if not trace_id and db:
         try:
-            from sqlalchemy import select, text
-            from ..database.models import Span
             recent_span_stmt = (
                 select(Span.trace_id)
-                .where(Span.service_name == service_name)
-                # optionally link by endpoint by looking at operation prefix matching, but for now just get the latest trace for the service
+                .where(
+                    and_(
+                        Span.service_name == service_name,
+                        Span.operation.ilike(f"%{endpoint}%"),
+                    )
+                )
                 .order_by(Span.created_at.desc())
                 .limit(1)
             )
@@ -227,7 +230,7 @@ async def make_decision(
             if latest_trace_id:
                 trace_id = latest_trace_id
         except Exception as e:
-            print(f"⚠️  [TraceLink] Failed to fetch latest trace_id for {service_name}: {e}")
+            print(f"⚠️  [TraceLink] Failed to fetch latest trace_id for {service_name}{endpoint}: {e}")
 
     # ── STEP 2: Get metrics (1h window = primary, 24h = trend baseline) ──────
     metrics_1h = None
@@ -254,7 +257,6 @@ async def make_decision(
         if override is not None and override.rate_limit_customer_rpm:
              customer_rpm_limit = override.rate_limit_customer_rpm
         else:
-             from ..ai_engine.threshold_manager import get_all_thresholds
              current_thresholds = await get_all_thresholds(db, user_id, service_name, endpoint)
              customer_rpm_limit = current_thresholds.get("rate_limit_customer_rpm", 15) 
 
@@ -272,13 +274,13 @@ async def make_decision(
             print(f"📊 [Decision] Found active flags for {service_name}{endpoint}: {active_flags}")
         for f_name in active_flags:
             f_metrics = await get_realtime_metrics(user_id, service_name, endpoint, window='1h', flag_name=f_name)
-            if f_metrics and f_metrics['count'] >= 5:
+            if f_metrics and f_metrics.get('count', 0) >= 5:
                 flag_performance[f_name] = {
-                    'avg_latency': f_metrics['avg_latency'],
-                    'error_rate': f_metrics['error_rate'],
-                    'count': f_metrics['count']
+                    'avg_latency': f_metrics.get('avg_latency', 0),
+                    'error_rate': f_metrics.get('error_rate', 0),
+                    'count': f_metrics.get('count', 0),
                 }
-                print(f"   🚩 Flag '{f_name}' performance: {f_metrics['avg_latency']:.0f}ms, {f_metrics['error_rate']*100:.1f}% errors ({f_metrics['count']} calls)")
+                print(f"   🚩 Flag '{f_name}' performance: {flag_performance[f_name]['avg_latency']:.0f}ms, {flag_performance[f_name]['error_rate']*100:.1f}% errors ({flag_performance[f_name]['count']} calls)")
 
     if latency_trend != 'stable' or error_trend != 'stable' or rpm_trend != 'stable' or flag_performance:
         print(
@@ -385,7 +387,6 @@ async def make_decision(
             if db:
                 try:
                     async def _run_flag_rollback():
-                        from ..database.database import AsyncSessionLocal
                         try:
                             async with AsyncSessionLocal() as session:
                                  print(f"⏳ [RollbackTask] Executing auto-disable for '{ai_decision['flag_to_disable']}'...")
@@ -397,7 +398,8 @@ async def make_decision(
                                      db=session,
                                      tenant_id=str(user_id) if user_id else "default",
                                  )
-                                 print(f"✅ [RollbackTask] Result: {result.get('status', 'Success' if result else 'Failed')}")
+                                 status_msg = result.get('status', 'Success') if result is not None else 'Disabled in Redis'
+                                 print(f"✅ [RollbackTask] Result: {status_msg}")
                         except Exception as inner_e:
                             print(f"❌ [RollbackTask] Fatal error during execution: {inner_e}")
                     asyncio.create_task(_run_flag_rollback())
@@ -514,5 +516,13 @@ async def make_decision(
         'request_coalescing': False,
         'reason': 'Not enough data yet (need 3+ signals in Redis or snapshot)',
         'send_alert': False,
+        'disable_flag': False,
+        'flag_to_disable': None,
+        'adaptive_timeout': {
+            'active': False,
+            'recommended_timeout_ms': 2000,
+            'threshold_ms': 2000,
+            'baseline_p99_ms': 0,
+        },
         'trends': {'latency': 'stable', 'errors': 'stable', 'rpm': 'stable'},
     }

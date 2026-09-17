@@ -25,7 +25,7 @@ from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel, Field
 from app.database.Schema import OverrideCreate, OverrideResponse
 from typing import Optional
-from .auth import get_current_user
+from app.router.auth import get_current_user
 
 router = APIRouter(prefix="/api/overrides", tags=["Overrides"])
 

@@ -30,7 +30,7 @@ from app.blockchain.erc8004 import check_agent_reputation_async, format_reputati
 from app.blockchain.avalanche import verify_payment_async
 from app.redis.cache import redis_client, get_tenant_key
 from web3 import Web3
-from .auth import get_current_user
+from app.router.auth import get_current_user
 
 router = APIRouter(prefix="/api/agentic", tags=["Agentic Payments"])
 

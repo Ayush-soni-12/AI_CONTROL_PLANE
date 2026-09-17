@@ -11,7 +11,7 @@ IMPROVEMENTS over v1:
 import logging
 from typing import Optional
 from langchain_google_genai import ChatGoogleGenerativeAI
-from app.ai_engine.schemas import ThresholdRecommendation, PatternAnalysis
+from app.ai_engine.schemas import ThresholdRecommendation, PatternAnalysis, IncidentRootCause
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ def _get_llm():
     if not api_key:
         raise ValueError("GEMINI_API_KEY not set in environment variables")
     return ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+        model="gemini-3.6-flash",
         temperature=0.1,
         google_api_key=api_key,
     )
@@ -525,13 +525,53 @@ Confidence guide:
 
 Now analyze the incident and write your response in plain English."""
 
+        # Try structured output first for guaranteed schema compatibility
+        try:
+            structured_llm = llm.with_structured_output(IncidentRootCause)
+            result = await structured_llm.ainvoke(prompt)
+            if result:
+                logger.info(
+                    f"✅ Structured root cause analysis for {service_name}{endpoint}: "
+                    f"confidence={result.confidence}"
+                )
+                return {
+                    "summary": result.summary,
+                    "what_happened": result.what_happened,
+                    "likely_cause": result.likely_cause,
+                    "what_to_check": result.what_to_check,
+                    "confidence": result.confidence,
+                }
+        except Exception as struct_err:
+            logger.warning(
+                f"Structured output failed ({struct_err}), falling back to direct invocation"
+            )
+
         response = await llm.ainvoke(prompt)
-        content = response.content if hasattr(response, 'content') else str(response)
+
+        # Handle various response.content formats (str, list of dicts/strings/blocks)
+        raw_content = response.content if hasattr(response, 'content') else str(response)
+        if isinstance(raw_content, list):
+            parts = []
+            for block in raw_content:
+                if isinstance(block, dict):
+                    parts.append(block.get("text", str(block)))
+                elif isinstance(block, str):
+                    parts.append(block)
+                elif hasattr(block, "text"):
+                    parts.append(str(block.text))
+                else:
+                    parts.append(str(block))
+            content = "".join(parts)
+        else:
+            content = str(raw_content)
 
         # Parse JSON response
         import json, re
         # Strip any markdown code fences if present
         clean = re.sub(r'```(?:json)?\s*|\s*```', '', content).strip()
+        match = re.search(r'\{.*\}', clean, re.DOTALL)
+        if match:
+            clean = match.group(0)
         result = json.loads(clean)
 
         logger.info(
@@ -549,3 +589,4 @@ Now analyze the incident and write your response in plain English."""
             "what_to_check": ["Review the timeline events manually", "Check server logs from the incident period"],
             "confidence": "low",
         }
+

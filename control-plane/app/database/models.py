@@ -1,7 +1,7 @@
 from sqlalchemy import TIMESTAMP, Boolean, Column, ForeignKey, Integer, String, text, Float, Index, Text ,JSON , DateTime
 from datetime import datetime, timezone
 from sqlalchemy.orm import relationship
-from .database import Base
+from app.database.database import Base
 
 
 # Signal table

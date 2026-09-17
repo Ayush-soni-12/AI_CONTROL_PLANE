@@ -46,7 +46,14 @@ async def run_worker():
         print("⚠️ Error closing RabbitMQ connection:", e)
 
     try:
-        await redis_client.close()
+        from app.database.database import async_engine
+        await async_engine.dispose()
+        print("✅ Database connection pool closed cleanly")
+    except Exception as e:
+        print("⚠️ Error closing Database connections:", e)
+
+    try:
+        await redis_client.aclose()
         print("✅ Redis connection closed cleanly")
     except Exception as e:
         print("⚠️ Error closing Redis connection:", e)

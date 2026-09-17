@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, func, select
 from app.database import models, Schema
 from app.database.database import get_async_db
-from .auth import get_current_user
+from app.router.auth import get_current_user
 from fastapi import Request
 
 router = APIRouter(prefix="/api/history", tags=["history"])

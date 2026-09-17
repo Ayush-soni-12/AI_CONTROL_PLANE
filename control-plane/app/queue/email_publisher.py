@@ -14,7 +14,7 @@ Usage:
 
 import json
 import aio_pika
-from .connection import get_email_rabbitmq_channel, EMAIL_QUEUE_NAME
+from app.queue.connection import get_email_rabbitmq_channel, EMAIL_QUEUE_NAME
 
 
 async def publish_email(to_email: str, subject: str, context: dict) -> None:

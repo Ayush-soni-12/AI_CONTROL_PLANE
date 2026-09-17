@@ -43,7 +43,7 @@ class DecisionState(TypedDict):
     rpm_trend: str                      # 'rising', 'falling', 'stable'
 
     # NEW: Per-flag performance data (for anomaly attribution)
-    # Structure: { "flag_name": { "avg_latency": float, "error_rate": float, "count": int } }
+    # Structure: { "flag_name": { "avg_latenicy": float, "error_rate": float, "count": int } }
     flag_performance: Optional[dict] = None
 
     # Outputs
@@ -159,12 +159,14 @@ def analyze_node(state: DecisionState) -> DecisionState:
                 continue # Require minimum 20 samples to avoid false positives
             
             # If flag latency is 1.8x baseline and > 400ms
-            if metrics['avg_latency'] > baseline_latency * 1.8 and metrics['avg_latency'] > 400:
-                issues.append(f"Flag '{flag_name}' is degrading performance (Lat: {metrics['avg_latency']:.0f}ms vs baseline: {baseline_latency:.0f}ms)")
+            flag_avg = metrics.get('avg_latency', 0)
+            flag_err = metrics.get('error_rate', 0)
+            if flag_avg > baseline_latency * 1.8 and flag_avg > 400:
+                issues.append(f"Flag '{flag_name}' is degrading performance (Lat: {flag_avg:.0f}ms vs baseline: {baseline_latency:.0f}ms)")
             
             # If flag error rate is 2.5x baseline and > 10%
-            if metrics['error_rate'] > baseline_error * 2.5 and metrics['error_rate'] > 0.1:
-                issues.append(f"Flag '{flag_name}' is causing errors ({metrics['error_rate']*100:.1f}% vs baseline: {baseline_error*100:.1f}%)")
+            if flag_err > baseline_error * 2.5 and flag_err > 0.1:
+                issues.append(f"Flag '{flag_name}' is causing errors ({flag_err*100:.1f}% vs baseline: {baseline_error*100:.1f}%)")
 
     state['analysis'] = ", ".join(issues) if issues else "No issues detected"
     return state
@@ -448,6 +450,7 @@ def make_ai_decision(
     latency_trend: str = 'stable',
     error_trend: str = 'stable',
     rpm_trend: str = 'stable',
+    flag_performance: dict | None = None,
 ) -> dict:
     """
     Simple rule-based decision. Accepts optional trend/percentile data for
@@ -467,7 +470,7 @@ def make_ai_decision(
         "latency_trend": latency_trend,
         "error_trend": error_trend,
         "rpm_trend": rpm_trend,
-        "flag_performance": None,  # Fix: Default for simple rule-based decisions
+        "flag_performance": flag_performance,
         "analysis": "",
         "decision": {},
         "reasoning": "",
@@ -832,9 +835,9 @@ async def get_ai_tuned_decision(
             if metrics.get('count', 0) < 20:
                 continue  # Require minimum 20 samples to avoid false positives on low-traffic canaries
             
-            flag_count = metrics['count']
-            flag_avg = metrics['avg_latency']
-            flag_err = metrics['error_rate']
+            flag_count = metrics.get('count', 0)
+            flag_avg = metrics.get('avg_latency', 0)
+            flag_err = metrics.get('error_rate', 0)
             
             # Calculate clean performance baseline WITHOUT this flag
             if total_count > flag_count:

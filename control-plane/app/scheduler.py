@@ -1,3 +1,4 @@
+from app.ai_engine.background_analyzer import analyze_all_services
 import asyncio
 import signal
 import sys
@@ -37,6 +38,7 @@ async def run_scheduler():
     print("   • Aggregate snapshots:  Every 30 minutes")
     print("   • Agent Trust Scoring:  Every hour at :00")
     print("   • Monthly quota reset:  1st of month at 00:00 UTC")
+    print("   • AI Service Analysis:  Every 5 minutes")
     print("=" * 60)
 
     # Test Redis connection
@@ -101,6 +103,13 @@ async def run_scheduler():
         name="Reset monthly signal quota counters",
         replace_existing=True
     )
+    # scheduler.add_job(
+    #     analyze_all_services,
+    #     trigger=CronTrigger(minute='*/5'),
+    #     id="ai_background_analysis",
+    #     name="AI background service analysis",
+    #     replace_existing=True
+    # )
 
     scheduler.start()
     print("✅ Scheduler loop active and running.")
@@ -111,7 +120,14 @@ async def run_scheduler():
     scheduler.shutdown(wait=False)
 
     try:
-        await redis_client.close()
+        from app.database.database import async_engine
+        await async_engine.dispose()
+        print("✅ Database connection pool closed cleanly")
+    except Exception as e:
+        print("⚠️ Error closing Database connections:", e)
+
+    try:
+        await redis_client.aclose()
         print("✅ Redis connection closed cleanly")
     except Exception as e:
         print("⚠️ Error closing Redis connection:", e)

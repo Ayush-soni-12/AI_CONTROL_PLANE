@@ -74,7 +74,14 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     try:
-        await redis_client.close()
+        from app.database.database import async_engine
+        await async_engine.dispose()
+        print("✅ Database connection pool closed cleanly (API Gateway)")
+    except Exception as e:
+        print("⚠️ Error disposing Database connection pool:", e)
+
+    try:
+        await redis_client.aclose()
         print("🛑 Redis connection closed (API Gateway)")
     except Exception as e:
         print("⚠️ Error closing Redis connection:", e)

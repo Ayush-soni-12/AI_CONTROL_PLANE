@@ -193,6 +193,18 @@ async def shutdown():
         await asyncio.gather(*tasks, return_exceptions=True)
         
     await close_rabbitmq_connection()
+
+    try:
+        from app.database.database import async_engine
+        await async_engine.dispose()
+    except Exception as e:
+        print("⚠️ Error disposing database pool:", e)
+
+    try:
+        await redis_client.aclose()
+    except Exception as e:
+        print("⚠️ Error closing Redis connection:", e)
+
     print("🛑 Background jobs stopped")
 
 @app.get("/health")

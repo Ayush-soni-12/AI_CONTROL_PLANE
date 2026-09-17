@@ -13,7 +13,7 @@ Usage:
 
 import json
 import aio_pika
-from .connection import get_rabbitmq_channel, SIGNALS_EXCHANGE_NAME
+from app.queue.connection import get_rabbitmq_channel, SIGNALS_EXCHANGE_NAME
 
 
 async def publish_signal(signal_data: dict) -> None:
@@ -41,3 +41,4 @@ async def publish_signal(signal_data: dict) -> None:
         f"endpoint={signal_data.get('endpoint')} "
         f"user_id={signal_data.get('user_id')}"
     )
+    return True

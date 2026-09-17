@@ -328,20 +328,6 @@ async def trigger_root_cause_analysis(
     ]
 
     try:
-        # Build event list for LLM context
-        event_dicts = [
-            {
-                "event_type": e.event_type,
-                "title": e.title,
-                "description": e.description,
-                "latency_ms": e.latency_ms,
-                "error_rate": e.error_rate,
-                "rpm": e.rpm,
-                "occurred_at": (e.occurred_at - timedelta(minutes=timezone_offset)).isoformat() if timezone_offset else e.occurred_at.isoformat(),
-            }
-            for e in events
-        ]
-
         # Fetch spans for this incident's trace_id (enables trace-backed root cause analysis)
         spans_data = []
         if incident.trace_id:
@@ -392,3 +378,41 @@ async def trigger_root_cause_analysis(
     except Exception as e:
         logger.error(f"Root cause analysis failed for incident {incident_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@router.post("/{incident_id}/resolve", response_model=dict)
+async def resolve_incident_endpoint(
+    request: Request,
+    incident_id: int,
+    db: AsyncSession = Depends(get_async_db),
+):
+    """
+    Manually mark an incident as resolved.
+    """
+    db, current_user = await _get_db_and_user(request, db)
+
+    incident = await get_incident_with_events(
+        db, incident_id=incident_id, user_id=current_user.id
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    if incident.status == "resolved":
+        return {"status": "ok", "message": "Incident is already resolved"}
+
+    from app.functions.IncidentTracker import _resolve_incident
+    await _resolve_incident(
+        db,
+        incident,
+        metrics={
+            "avg_latency": incident.peak_latency_ms or 0,
+            "error_rate": 0.0,
+            "rpm": incident.peak_rpm or 0,
+        },
+    )
+    await db.commit()
+
+    return {
+        "status": "ok",
+        "message": f"Incident {incident_id} marked as resolved",
+    }

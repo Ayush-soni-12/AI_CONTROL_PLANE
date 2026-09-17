@@ -34,15 +34,16 @@ MAX_RETRIES = 3
 
 async def _process_metrics_signal(signal_data: dict) -> None:
     """Updates in-memory Redis metrics in sub-millisecond time."""
-    user_id      = signal_data.get("user_id")
-    service_name = signal_data.get("service_name")
-    endpoint     = signal_data.get("endpoint")
-    latency_ms   = signal_data.get("latency_ms")
-    sig_status   = signal_data.get("status")
+    user_id      = signal_data.get("user_id") or 1
+    service_name = signal_data.get("service_name") or "default-service"
+    endpoint     = signal_data.get("endpoint") or "/"
+    latency_ms   = float(signal_data.get("latency_ms") if signal_data.get("latency_ms") is not None else 0.0)
+    sig_status   = signal_data.get("status") or "success"
     customer_id  = signal_data.get("customer_identifier")
     priority     = signal_data.get("priority", "medium")
     action_taken = signal_data.get("action_taken", "none")
     flag_name    = signal_data.get("flag_name")
+    tenant_id    = str(signal_data.get("tenant_id") or user_id or "default")
 
     await update_realtime_aggregate(
         user_id=user_id,
@@ -54,6 +55,7 @@ async def _process_metrics_signal(signal_data: dict) -> None:
         priority=priority,
         action_taken=action_taken,
         flag_name=flag_name,
+        tenant_id=tenant_id,
     )
     await invalidate_user_cache(user_id)
 
@@ -69,12 +71,24 @@ async def _on_metrics_message(message: aio_pika.abc.AbstractIncomingMessage) -> 
     except Exception as exc:
         print(f"⚠️ [Metrics Consumer] Error processing signal: {exc} (retry {retry_count}/{MAX_RETRIES})")
         if retry_count < MAX_RETRIES:
-            # Requeue with incremented retry count
-            headers["x-retry-count"] = retry_count + 1
-            await message.nack(requeue=True)
+            try:
+                channel = await get_rabbitmq_channel()
+                retry_message = aio_pika.Message(
+                    body=message.body,
+                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                    content_type="application/json",
+                    headers={**headers, "x-retry-count": retry_count + 1},
+                )
+                await channel.default_exchange.publish(
+                    retry_message,
+                    routing_key=SIGNALS_METRICS_QUEUE_NAME,
+                )
+                await message.ack()
+            except Exception:
+                await message.nack(requeue=True)
         else:
             print(f"☠️ [Metrics Consumer] Quarantining poison message to DLQ after {MAX_RETRIES} failures.")
-            await message.reject(requeue=False) # Routes to dead-letter queue
+            await message.reject(requeue=False)
 
 
 async def start_metrics_consumer() -> None:
@@ -133,12 +147,25 @@ async def _process_storage_signal(signal_data: dict) -> None:
             "customer_identifier", "action_taken", "flag_name", "is_agent"
         }
         clean = {k: v for k, v in signal_data.items() if k in SIGNAL_COLUMNS}
+        clean["user_id"] = int(clean.get("user_id") or 1)
+        clean["service_name"] = str(clean.get("service_name") or "default-service")
+        clean["tenant_id"] = str(clean.get("tenant_id") or signal_data.get("tenant_id") or signal_data.get("user_id") or "default")
+        clean["endpoint"] = str(clean.get("endpoint") or "/")
+        clean["latency_ms"] = float(clean.get("latency_ms") if clean.get("latency_ms") is not None else 0.0)
+        clean["status"] = str(clean.get("status") or "success")
+        clean["priority"] = str(clean.get("priority") or "medium")
+        clean["action_taken"] = str(clean.get("action_taken") or "none")
+        clean["is_agent"] = bool(clean.get("is_agent") or False)
         if resolved_ts:
             clean["timestamp"] = resolved_ts
 
-        signal = models.Signal(**clean)
-        db.add(signal)
-        await db.commit()
+        try:
+            signal = models.Signal(**clean)
+            db.add(signal)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
 
 
 async def _on_storage_message(message: aio_pika.abc.AbstractIncomingMessage) -> None:
@@ -152,8 +179,21 @@ async def _on_storage_message(message: aio_pika.abc.AbstractIncomingMessage) -> 
     except Exception as exc:
         print(f"⚠️ [Storage Consumer] DB write error: {exc} (retry {retry_count}/{MAX_RETRIES})")
         if retry_count < MAX_RETRIES:
-            headers["x-retry-count"] = retry_count + 1
-            await message.nack(requeue=True)
+            try:
+                channel = await get_rabbitmq_channel()
+                retry_message = aio_pika.Message(
+                    body=message.body,
+                    delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                    content_type="application/json",
+                    headers={**headers, "x-retry-count": retry_count + 1},
+                )
+                await channel.default_exchange.publish(
+                    retry_message,
+                    routing_key=SIGNALS_STORAGE_QUEUE_NAME,
+                )
+                await message.ack()
+            except Exception:
+                await message.nack(requeue=True)
         else:
             print(f"☠️ [Storage Consumer] Quarantining poison message to DLQ after {MAX_RETRIES} failures.")
             await message.reject(requeue=False)
