@@ -3,19 +3,7 @@
 import { useState } from "react";
 import { IncidentEvent } from "@/hooks/useIncidents";
 import { TraceWaterfall } from "./TraceWaterfall";
-import {
-  AlertTriangle,
-  Clock,
-  Activity,
-  Flame,
-  ShieldAlert,
-  Sliders,
-  CheckCircle2,
-  Sparkles,
-  Search,
-  ChevronDown,
-  ChevronUp,
-} from "lucide-react";
+import { Layers } from "lucide-react";
 
 const EVENT_CONFIG: Record<
   string,
@@ -130,7 +118,6 @@ export function TimelineEvent({
   event: IncidentEvent;
   isLast: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
 
   const config = EVENT_CONFIG[event.event_type] || {
@@ -140,6 +127,8 @@ export function TimelineEvent({
     lineColor: "bg-cyan-500/40",
     label: event.event_type.toUpperCase(),
   };
+
+  const hasTrace = Boolean(event.trace_id);
 
   return (
     <div className="flex relative group">
@@ -163,11 +152,15 @@ export function TimelineEvent({
       {/* Right Content Card */}
       <div className="flex-1 pl-2 sm:pl-4 pb-5 min-w-0">
         <div
-          onClick={() => setExpanded(!expanded)}
-          className={`rounded-xl p-3.5 sm:p-4 cursor-pointer transition-all duration-200 bg-[#091020]/60 border backdrop-blur-md ${
-            expanded
-              ? "border-cyan-500/40 shadow-[0_0_20px_rgba(0,240,255,0.06)]"
-              : "border-white/[0.06] hover:border-white/[0.15] hover:bg-[#091020]/80"
+          onClick={() => {
+            if (hasTrace) {
+              setShowTrace(true);
+            }
+          }}
+          className={`rounded-xl p-3.5 sm:p-4 transition-all duration-200 bg-[#091020]/60 border backdrop-blur-md ${
+            hasTrace
+              ? "cursor-pointer border-white/[0.08] hover:border-cyan-500/40 hover:bg-[#091020]/90 hover:shadow-[0_0_25px_rgba(0,240,255,0.08)]"
+              : "border-white/[0.06] hover:border-white/[0.12] hover:bg-[#091020]/75"
           }`}
         >
           {/* Header row */}
@@ -183,8 +176,8 @@ export function TimelineEvent({
               </span>
             </div>
 
-            {/* Metrics tags */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Metrics & Trace tags */}
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
               {event.latency_ms > 0 && (
                 <span className="px-2 py-0.5 rounded bg-black/40 border border-white/[0.06] text-[10px] font-mono text-amber-400">
                   {event.latency_ms.toFixed(0)}ms
@@ -200,45 +193,25 @@ export function TimelineEvent({
                   {event.rpm.toFixed(0)} RPM
                 </span>
               )}
-              <span className="text-slate-500">
-                {expanded ? (
-                  <ChevronUp className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                )}
-              </span>
+              {hasTrace && (
+                <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 flex items-center gap-1 shadow-[0_0_8px_rgba(0,240,255,0.1)]">
+                  <Layers className="w-3 h-3 text-cyan-400" />
+                  Waterfall Trace
+                </span>
+              )}
             </div>
           </div>
 
           {/* Description */}
-          {expanded && event.description && (
-            <div className="mt-3 pt-3 border-t border-white/[0.06] text-xs font-mono text-slate-300 leading-relaxed">
+          {event.description && (
+            <div className="mt-2.5 text-xs font-mono text-slate-300 leading-relaxed">
               {event.description}
-            </div>
-          )}
-
-          {/* Trace inspector launcher */}
-          {event.trace_id && (
-            <div className="mt-2.5 pt-2.5 border-t border-white/[0.06] flex items-center justify-between">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowTrace(true);
-                }}
-                className="inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
-              >
-                <Search className="w-3 h-3" />
-                Inspect Trace
-                <span className="text-slate-500 text-[10px]">
-                  ({event.trace_id.substring(0, 8)}...)
-                </span>
-              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Trace Waterfall Modal */}
+      {/* Trace Waterfall Modal Popup */}
       {showTrace && event.trace_id && (
         <TraceWaterfall
           traceId={event.trace_id}
@@ -248,3 +221,4 @@ export function TimelineEvent({
     </div>
   );
 }
+

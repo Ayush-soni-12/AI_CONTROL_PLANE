@@ -279,7 +279,7 @@ export function IncidentDetail({
             </h3>
           </div>
           <span className="text-xs font-mono text-slate-400">
-            {incident.events?.length || 0} events recorded · Click event for details
+            {incident.events?.length || 0} events recorded · Click event to view waterfall trace
           </span>
         </div>
 

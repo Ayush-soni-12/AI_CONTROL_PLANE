@@ -101,8 +101,8 @@ export function FlagCard({ flag, onUpdate, onKill, latestTraceId }: FlagCardProp
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="font-mono text-base sm:text-lg font-bold text-slate-100 truncate">
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            <span className="text-base sm:text-lg font-bold text-white tracking-tight truncate">
               {flag.name}
             </span>
 
@@ -129,15 +129,15 @@ export function FlagCard({ flag, onUpdate, onKill, latestTraceId }: FlagCardProp
             </span>
           </div>
 
-          <div className="text-xs font-mono text-slate-400 flex flex-wrap items-center gap-2">
+          <div className="text-xs text-slate-400 flex flex-wrap items-center gap-2">
             <span>
               Updated by{" "}
-              <span className={isAIUpdated ? "text-purple-400 font-bold" : "text-slate-200"}>
+              <span className={isAIUpdated ? "text-purple-400 font-bold" : "text-slate-200 font-medium"}>
                 {flag.updated_by}
               </span>
             </span>
             <span>·</span>
-            <span>
+            <span className="font-mono">
               {new Date(flag.updated_at).toLocaleTimeString("en-US", {
                 hour: "2-digit",
                 minute: "2-digit",
