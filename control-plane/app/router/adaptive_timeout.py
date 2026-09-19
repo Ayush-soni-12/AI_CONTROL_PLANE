@@ -92,18 +92,39 @@ async def get_adaptive_timeout_status(
             except Exception:
                 pass
 
-            # Current & baseline p99
+            # Current percentiles & baseline
+            p50_now = float(metrics_1h.get("p50", 0) or 0)
+            p95_now = float(metrics_1h.get("p95", 0) or 0)
             p99_now = float(metrics_1h.get("p99", 0) or 0)
             p99_baseline = float(
                 (metrics_24h or {}).get("p99", p99_now) or p99_now
             )
 
-            # AI-tuned threshold (from DB, fallback to 2000ms default)
-            thresholds = await get_all_thresholds(
-                db, current_user.id, service_name, endpoint
+            # Fetch manual override if active, else AI-tuned threshold, else 2000ms default
+            stmt_override = select(models.ConfigOverride).filter(
+                models.ConfigOverride.user_id == current_user.id,
+                models.ConfigOverride.service_name == service_name,
+                models.ConfigOverride.endpoint == endpoint,
+                models.ConfigOverride.is_active == True,
+                models.ConfigOverride.expires_at > datetime.now(timezone.utc),
             )
-            threshold_val = thresholds.get("adaptive_timeout_latency_ms")
-            threshold_ms = int(threshold_val) if threshold_val is not None else 2000
+            res_override = await db.execute(stmt_override)
+            override = res_override.scalars().first()
+
+            stmt_ai = select(models.AIThreshold).filter(
+                models.AIThreshold.user_id == current_user.id,
+                models.AIThreshold.service_name == service_name,
+                models.AIThreshold.endpoint == endpoint,
+            )
+            res_ai = await db.execute(stmt_ai)
+            ai_thresh = res_ai.scalars().first()
+
+            if override and override.adaptive_timeout_latency_ms is not None:
+                threshold_ms = int(override.adaptive_timeout_latency_ms)
+            elif ai_thresh and ai_thresh.adaptive_timeout_latency_ms is not None:
+                threshold_ms = int(ai_thresh.adaptive_timeout_latency_ms)
+            else:
+                threshold_ms = 2000
 
             # Compute recommended timeout (what the SDK enforces)
             recommended_timeout_ms = threshold_ms
@@ -120,6 +141,8 @@ async def get_adaptive_timeout_status(
                 "active": is_active,
                 "recommended_timeout_ms": recommended_timeout_ms,
                 "threshold_ms": threshold_ms,
+                "p50_ms": round(p50_now, 1),
+                "p95_ms": round(p95_now, 1),
                 "baseline_p99_ms": round(p99_baseline, 1),
                 "current_p99_ms": round(p99_now, 1),
                 "latency_trend": trend,

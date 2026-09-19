@@ -122,6 +122,7 @@ async def get_all_ai_thresholds(
                 "queue_deferral_rpm": t.queue_deferral_rpm,
                 "load_shedding_rpm": t.load_shedding_rpm,
                 "rate_limit_customer_rpm": t.rate_limit_customer_rpm,
+                "adaptive_timeout_latency_ms": getattr(t, "adaptive_timeout_latency_ms", 2000),
                 "confidence": t.confidence,
                 "reasoning": t.reasoning,
                 "last_updated": t.last_updated.isoformat() if t.last_updated else None
