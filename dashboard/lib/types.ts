@@ -181,6 +181,7 @@ export interface AIThreshold {
   queue_deferral_rpm: number;
   load_shedding_rpm: number;
   rate_limit_customer_rpm: number;
+  adaptive_timeout_latency_ms?: number;
   confidence: number;
   reasoning: string;
   last_updated: string;
@@ -230,6 +231,8 @@ export interface AdaptiveTimeoutStatus {
   active: boolean;
   recommended_timeout_ms: number;
   threshold_ms: number;
+  p50_ms?: number;
+  p95_ms?: number;
   baseline_p99_ms: number;
   current_p99_ms: number;
   latency_trend: "rising" | "falling" | "stable";

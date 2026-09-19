@@ -132,8 +132,8 @@ export function AIThresholdsTable({
                 </div>
               </div>
 
-              {/* 5-Column Threshold Metrics Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+              {/* 6-Column Threshold Metrics Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
                 {/* 1. Speculative Cache Latency */}
                 <div className="p-3.5 rounded-xl bg-[#070a13] border border-cyan-500/20 hover:border-cyan-500/40 transition-colors">
                   <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
@@ -187,7 +187,7 @@ export function AIThresholdsTable({
                 </div>
 
                 {/* 5. Rate Limit */}
-                <div className="p-3.5 rounded-xl bg-[#070a13] border border-emerald-500/20 hover:border-emerald-500/40 transition-colors col-span-2 sm:col-span-1">
+                <div className="p-3.5 rounded-xl bg-[#070a13] border border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
                   <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
                     <Users className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Rate Limit</span>
@@ -197,6 +197,19 @@ export function AIThresholdsTable({
                     <span className="text-xs text-slate-500 ml-1 font-normal">rpm</span>
                   </div>
                   <div className="text-[10px] text-slate-500 font-mono mt-0.5">Per-customer quota</div>
+                </div>
+
+                {/* 6. Adaptive Timeout */}
+                <div className="p-3.5 rounded-xl bg-[#070a13] border border-orange-500/20 hover:border-orange-500/40 transition-colors">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
+                    <Clock className="w-3.5 h-3.5 text-orange-400" />
+                    <span>Adaptive Timeout</span>
+                  </div>
+                  <div className="text-lg sm:text-xl font-bold font-mono text-orange-300">
+                    {threshold.adaptive_timeout_latency_ms || 2000}
+                    <span className="text-xs text-slate-500 ml-1 font-normal">ms</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">P99 spike limit</div>
                 </div>
               </div>
 

@@ -35,24 +35,33 @@ const MULTIPLIER_PRESETS = [
 interface CreateOverrideFormProps {
   onClose: () => void;
   defaultService?: string;
+  defaultEndpoint?: string;
+  defaultAdaptiveTimeout?: number | null;
+  defaultReason?: string;
 }
 
-export function CreateOverrideForm({ onClose, defaultService = "demo-service" }: CreateOverrideFormProps) {
+export function CreateOverrideForm({
+  onClose,
+  defaultService = "demo-service",
+  defaultEndpoint = "/api/products",
+  defaultAdaptiveTimeout = null,
+  defaultReason = "",
+}: CreateOverrideFormProps) {
   const { mutate: create, isPending, error } = useCreateOverride();
   const { data: servicesData } = useServices();
   const { services: flagServices } = useFlagServices();
 
   const [form, setForm] = useState<CreateOverridePayload>({
     service_name: defaultService,
-    endpoint: "/api/products",
+    endpoint: defaultEndpoint,
     duration_minutes: 30,
-    reason: "",
+    reason: defaultReason,
     cache_latency_ms: null,
     circuit_breaker_error_rate: null,
     queue_deferral_rpm: null,
     load_shedding_rpm: null,
     rate_limit_customer_rpm: null,
-    adaptive_timeout_latency_ms: null,
+    adaptive_timeout_latency_ms: defaultAdaptiveTimeout,
   });
 
   // Close on Escape key
