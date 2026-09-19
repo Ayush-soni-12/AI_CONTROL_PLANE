@@ -404,3 +404,145 @@ async def get_payment_history(
         ],
         "total": len(payments),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEMO TEST SEEDER ENDPOINT (Allows instant testing of the UI)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/demo-seed")
+async def seed_demo_transactions(
+    count: int = 5,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Seed realistic test agent payments for testing and verifying the UI.
+    Creates varied records: AVAX and confidential cAGT, verified and pending,
+    with realistic Snowtrace Fuji hashes and ERC-8004 scores.
+    """
+    import secrets
+    now = datetime.now(timezone.utc)
+    demo_agents = [
+        {
+            "agent_id": "agent_weather_oracle_v2",
+            "score": 94,
+            "service": "demo-service",
+            "endpoint": "/api/weather",
+            "mode": "rate_limit",
+            "amount_wei": str(int(0.05 * 10**18)),
+            "status": "verified",
+            "minutes_ago": 3,
+            "access_mins": 30,
+        },
+        {
+            "agent_id": "agent_arbitrage_trader_ai",
+            "score": 88,
+            "service": "demo-service",
+            "endpoint": "/api/products",
+            "mode": "pay_per_request",
+            "amount_wei": "eERC",
+            "status": "verified",
+            "minutes_ago": 8,
+            "access_mins": 15,
+        },
+        {
+            "agent_id": "agent_sentiment_crawler_v1",
+            "score": 76,
+            "service": "demo-service",
+            "endpoint": "/cache-demo",
+            "mode": "rate_limit",
+            "amount_wei": str(int(0.02 * 10**18)),
+            "status": "pending",
+            "minutes_ago": 1,
+            "access_mins": 10,
+        },
+        {
+            "agent_id": "agent_code_reviewer_bot",
+            "score": 92,
+            "service": "demo-service",
+            "endpoint": "/api/circuit-breaker-demo",
+            "mode": "rate_limit",
+            "amount_wei": str(int(0.01 * 10**18)),
+            "status": "consumed",
+            "minutes_ago": 45,
+            "access_mins": 20,
+        },
+        {
+            "agent_id": "agent_deep_research_node",
+            "score": 65,
+            "service": "demo-service",
+            "endpoint": "/api/products",
+            "mode": "pay_per_request",
+            "amount_wei": "eERC",
+            "status": "verified",
+            "minutes_ago": 18,
+            "access_mins": 25,
+        },
+    ]
+
+    seeded = []
+    for spec in demo_agents[:count]:
+        tx_hash = "0x" + secrets.token_hex(32)
+        created_at = now - timedelta(minutes=spec["minutes_ago"])
+        access_until = created_at + timedelta(minutes=spec["access_mins"]) if spec["status"] in ["verified", "consumed"] else None
+        verified_at = created_at + timedelta(seconds=12) if spec["status"] in ["verified", "consumed"] else None
+
+        payment = models.AgentPayment(
+            user_id=current_user.id,
+            agent_id=spec["agent_id"],
+            agent_erc8004_score=spec["score"],
+            service_name=spec["service"],
+            endpoint=spec["endpoint"],
+            payment_mode=spec["mode"],
+            tx_hash=tx_hash if spec["status"] != "pending" else None,
+            amount_paid_wei=spec["amount_wei"],
+            status=spec["status"],
+            access_granted_until=access_until,
+            created_at=created_at,
+            verified_at=verified_at,
+        )
+        db.add(payment)
+        seeded.append(payment)
+
+    await db.commit()
+    return {
+        "success": True,
+        "seeded_count": len(seeded),
+        "message": f"Successfully seeded {len(seeded)} test agent payments into PostgreSQL."
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FUJI EVM GAS TELEMETRY ENDPOINT
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/gas")
+async def get_fuji_gas_telemetry(
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Return real-time or cached Avalanche Fuji EVM gas parameters.
+    """
+    try:
+        from app.blockchain.avalanche import w3
+        base_fee_wei = w3.eth.gas_price
+        base_fee_gwei = round(float(base_fee_wei) / 1e9, 2)
+    except Exception:
+        base_fee_gwei = 26.5  # Typical Fuji base fee in nAVAX / Gwei
+
+    congestion = "Nominal"
+    if base_fee_gwei > 40:
+        congestion = "Congested"
+    elif base_fee_gwei > 30:
+        congestion = "Elevated"
+
+    return {
+        "network": "Avalanche Fuji C-Chain (EVM)",
+        "chain_id": 43113,
+        "base_fee_gwei": base_fee_gwei,
+        "priority_fee_gwei": 1.5,
+        "congestion": congestion,
+        "explorer_url": "https://testnet.snowtrace.io",
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
