@@ -256,3 +256,7 @@ app.include_router(flags.router)
 # Agentic Payments
 from app.router import agentic_payments
 app.include_router(agentic_payments.router)
+
+# Agent Registry
+from app.router import registry
+app.include_router(registry.router)

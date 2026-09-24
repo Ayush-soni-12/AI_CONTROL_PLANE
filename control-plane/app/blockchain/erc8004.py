@@ -68,6 +68,17 @@ CONTRACT_ABI = [
 # ── Score threshold for payment eligibility ────────────────────────────────────
 TRUSTED_SCORE_THRESHOLD = 30
 
+# ── Simulation Registry Map ───────────────────────────────────────────────────
+SIMULATION_REGISTRY = {
+    "agent_good_": {"score": 95, "tier": "verified"},
+    "agent_weather_": {"score": 91, "tier": "verified"},
+    "agent_trusted_": {"score": 75, "tier": "trusted"},
+    "agent_": {"score": 62, "tier": "trusted"},
+    "bot_": {"score": 5,  "tier": "suspicious"},
+    "ddos_": {"score": 0,  "tier": "blacklisted"},
+}
+_SIMULATION_REGISTRY = SIMULATION_REGISTRY
+
 # ── Contract instance (created once at startup) ────────────────────────────────
 _contract = None
 
@@ -115,24 +126,7 @@ def check_agent_reputation(agent_id: Optional[str]) -> dict:
     Tries the on-chain registry first. If the contract is not configured
     or the network is unreachable, falls back to the simulation mode
     so the system keeps working even during network issues.
-
-    Parameters
-    ----------
-    agent_id : str or None
-        The agent's identifier from the 'x-agent-id' HTTP header.
-
-    Returns
-    -------
-    dict with keys:
-        - is_trusted (bool)  : Can this agent be offered payment?
-        - score (int)        : 0-100 reputation score
-        - tier (str)         : 'verified' | 'trusted' | 'low_reputation' | etc.
-        - agent_id (str)     : The agent_id that was looked up
-        - description (str)  : Human-readable explanation
-        - source (str)       : 'on_chain' | 'simulation' | 'no_id'
     """
-
-    # ── No agent ID provided ────────────────────────────────────────────────
     if not agent_id:
         return {
             "is_trusted": False,
@@ -157,8 +151,12 @@ def check_agent_reputation(agent_id: Optional[str]) -> dict:
                 return {
                     "is_trusted": False,
                     "score": 0,
-                    "tier": "unregistered",
+                    "tier": "unregistered" if not registered else "revoked",
                     "agent_id": agent_id,
+                    "owner_wallet": owner_wallet if registered else None,
+                    "staked_balance_avax": float(balance) / 1e18 if registered else 0.0,
+                    "is_registered": bool(registered),
+                    "is_revoked": bool(is_revoked),
                     "description": (
                         f"Agent '{agent_id}' is not registered in the ERC-8004 "
                         f"registry at {CONTRACT_ADDRESS}. "
@@ -180,6 +178,10 @@ def check_agent_reputation(agent_id: Optional[str]) -> dict:
                 "score": score,
                 "tier": tier,
                 "agent_id": agent_id,
+                "owner_wallet": owner_wallet,
+                "staked_balance_avax": float(balance) / 1e18,
+                "is_registered": bool(registered),
+                "is_revoked": bool(is_revoked),
                 "description": f"On-chain ERC-8004 score: {score}/100 (tier: {tier})",
                 "source": "on_chain",
             }
@@ -192,24 +194,12 @@ def check_agent_reputation(agent_id: Optional[str]) -> dict:
             # Fall through to simulation below
 
     # ── Fallback: Simulation mode ───────────────────────────────────────────
-    # Used when:
-    #   - ERC8004_CONTRACT_ADDRESS is not set in .env
-    #   - Fuji RPC is temporarily unreachable
-    # This ensures the system keeps working during network issues.
     logger.info(f"🔄 Using simulation mode for agent '{agent_id}'")
 
-    _SIMULATION_REGISTRY = {
-        "agent_good_": {"score": 95, "tier": "verified"},
-        "agent_trusted_": {"score": 75, "tier": "trusted"},
-        "agent_": {"score": 62, "tier": "trusted"},
-        "bot_": {"score": 5,  "tier": "suspicious"},
-        "ddos_": {"score": 0,  "tier": "blacklisted"},
-    }
-
     reputation = None
-    for prefix in sorted(_SIMULATION_REGISTRY.keys(), key=len, reverse=True):
+    for prefix in sorted(SIMULATION_REGISTRY.keys(), key=len, reverse=True):
         if agent_id.startswith(prefix):
-            reputation = _SIMULATION_REGISTRY[prefix]
+            reputation = SIMULATION_REGISTRY[prefix]
             break
 
     if reputation is None:

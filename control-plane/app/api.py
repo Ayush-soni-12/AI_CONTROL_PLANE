@@ -101,3 +101,5 @@ app.include_router(adaptive_timeout.router)
 app.include_router(traces.router)
 app.include_router(flags.router)
 app.include_router(agentic_payments.router)
+from app.router import registry
+app.include_router(registry.router)
