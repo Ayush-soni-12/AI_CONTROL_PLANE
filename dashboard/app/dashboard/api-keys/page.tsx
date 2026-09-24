@@ -21,7 +21,6 @@ import { useApiKeys } from "@/hooks/useApiKeys";
 
 import { ApiKeyCard } from "@/components/dashboard/api-keys/ApiKeyCard";
 import { CreateKeyModal } from "@/components/dashboard/api-keys/CreateKeyModal";
-import { ApiKeyIntegrationGuide } from "@/components/dashboard/api-keys/ApiKeyIntegrationGuide";
 
 export default function ApiKeysPage() {
   const { data: user, isLoading: isAuthLoading } = useCheckAuth();

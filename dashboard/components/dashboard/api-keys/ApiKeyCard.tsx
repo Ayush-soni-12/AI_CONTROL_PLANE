@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import type { ApiKey } from "@/lib/types";
 import { useDeleteApiKey } from "@/hooks/useApiKeys";
-import { QuotaConsumptionMeter } from "./QuotaConsumptionMeter";
 
 interface ApiKeyCardProps {
   apiKey: ApiKey;
