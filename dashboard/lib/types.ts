@@ -117,6 +117,8 @@ export interface ApiKeyData {
   is_active: boolean;
 }
 
+export type ApiKey = ApiKeyData;
+
 export interface ApiKeyGenerateResponse {
   api_key: ApiKeyData;
   message: string;
