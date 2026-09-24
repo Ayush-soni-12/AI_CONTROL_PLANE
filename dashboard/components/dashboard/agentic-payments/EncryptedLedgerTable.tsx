@@ -98,11 +98,11 @@ export function EncryptedLedgerTable({
   };
 
   return (
-    <div className="rounded-2xl bg-[#091020]/85 border border-white/[0.08] hover:border-purple-500/20 backdrop-blur-xl shadow-[0_4px_25px_rgba(0,0,0,0.3)] transition-all overflow-hidden">
+    <div className="rounded-xl bg-[#091020]/80 border border-purple-500/20 hover:border-purple-500/30 backdrop-blur-xl shadow-[0_4px_20px_rgba(168,85,247,0.05)] transition-all overflow-hidden">
       {/* Table Header Controls */}
       <div className="p-4 sm:p-5 border-b border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.2)]">
+          <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.2)]">
             <History className="w-4 h-4" />
           </div>
           <div>
@@ -133,12 +133,12 @@ export function EncryptedLedgerTable({
                 setCurrentPage(1);
               }}
               placeholder="Filter agent or hash..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-purple-500/50 transition-all"
+              className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#091020] border border-white/[0.12] hover:border-purple-500/30 focus:border-purple-400 focus:shadow-[0_0_10px_rgba(168,85,247,0.2)] text-xs font-mono text-white placeholder-slate-500 transition-all focus:outline-none"
             />
           </div>
 
           {/* Status Filter Tabs */}
-          <div className="flex items-center p-1 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-mono">
+          <div className="flex items-center p-1 rounded-xl bg-[#070d1a]/80 border border-white/[0.08] text-xs font-mono">
             {["all", "verified", "pending", "consumed"].map((status) => (
               <button
                 key={status}
@@ -147,7 +147,7 @@ export function EncryptedLedgerTable({
                   setStatusFilter(status);
                   setCurrentPage(1);
                 }}
-                className={`px-2.5 py-1 rounded-lg capitalize transition-all ${
+                className={`px-2.5 py-1 rounded-lg capitalize transition-all cursor-pointer ${
                   statusFilter === status
                     ? "bg-purple-500/25 text-purple-300 font-bold shadow-[0_0_8px_rgba(168,85,247,0.2)]"
                     : "text-slate-400 hover:text-white"
@@ -179,7 +179,7 @@ export function EncryptedLedgerTable({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-mono">
             <thead>
-              <tr className="border-b border-white/[0.08] bg-black/30 text-slate-400 uppercase tracking-wider text-[11px]">
+              <tr className="border-b border-white/[0.08] bg-[#070d1a]/90 text-slate-400 uppercase tracking-wider text-[11px]">
                 <th className="px-5 py-3 font-semibold">Tx Hash</th>
                 <th className="px-5 py-3 font-semibold">Agent Identity</th>
                 <th className="px-5 py-3 font-semibold">ERC-8004 Trust</th>

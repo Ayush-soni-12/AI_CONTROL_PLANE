@@ -1,48 +1,70 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { ethers } from "ethers";
-import { Wallet, Shield, CheckCircle, PlusCircle, AlertCircle, LogIn } from "lucide-react";
+import {
+  Shield,
+  Wallet,
+  Coins,
+  Star,
+  Users,
+  ExternalLink,
+  Sparkles,
+  RefreshCw,
+  HelpCircle,
+  Activity,
+  CheckCircle2,
+  AlertCircle,
+  LogIn,
+} from "lucide-react";
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { TopCommandHeader } from "@/components/dashboard/TopCommandHeader";
 import { useCheckAuth } from "@/hooks/useSignals";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import {
+  useRegisteredAgents,
+  useSeedDemoAgents,
+} from "@/hooks/useAgentRegistry";
 
-// Placeholder Address: We will update this after deploying Phase 1
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_REGISTRY_CONTRACT_ADDRESS || "0x29243AD8082F5f0CEdCa89ED85db662975E5d96A";
+import { RegisterAgentForm } from "@/components/dashboard/registry/RegisterAgentForm";
+import { AgentScoreLookup } from "@/components/dashboard/registry/AgentScoreLookup";
+import { RegisteredAgentsTable } from "@/components/dashboard/registry/RegisteredAgentsTable";
+import { TrustLifecycleGuide } from "@/components/dashboard/registry/TrustLifecycleGuide";
+import { RegistryTelemetryBadge } from "@/components/dashboard/registry/RegistryTelemetryBadge";
 
-
-const ABI = [
-  "function registerAgent(string memory agentId) external payable",
-  "function depositFunds(string memory agentId) external payable",
-  "function getAgent(string memory agentId) external view returns (tuple(address ownerWallet, uint256 trustScore, uint256 balance, bool isRegistered, bool isRevoked))"
-];
+const CONTRACT_ADDRESS =
+  process.env.NEXT_PUBLIC_REGISTRY_CONTRACT_ADDRESS ||
+  "0x29243AD8082F5f0CEdCa89ED85db662975E5d96A";
 
 export default function AgentRegistryPage() {
+  const { data: user, isLoading: isAuthLoading } = useCheckAuth();
+
+  // Web3 MetaMask State
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null);
-  const [agentId, setAgentId] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  
-  // Lookup state
-  const [lookupId, setLookupId] = useState("");
-  const [agentData, setAgentData] = useState<any>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
 
-  const { data: user, isLoading: isAuthLoading } = useCheckAuth();
-  const router = useRouter();
+  // Agent Registry Queries
+  const { data: registryData, isLoading: isAgentsLoading, refetch: refetchAgents } = useRegisteredAgents();
+  const { mutate: seedDemo, isPending: isSeeding } = useSeedDemoAgents();
 
-  useEffect(() => {
-    if (!isAuthLoading && !user) {
-      router.push("/auth/login");
-    }
-  }, [user, isAuthLoading, router]);
+  const agents = registryData?.agents ?? [];
+  const totalAgents = agents.length;
+
+  // Derived Telemetry Metrics
+  const avgTrustScore = useMemo(() => {
+    if (agents.length === 0) return 75;
+    const sum = agents.reduce((acc, a) => acc + (a.trust_score ?? 50), 0);
+    return Math.round(sum / agents.length);
+  }, [agents]);
+
+  const totalStakedAvax = useMemo(() => {
+    return agents.reduce((acc, a) => acc + (a.staked_balance_avax ?? 0.01), 0);
+  }, [agents]);
 
   const connectWallet = async () => {
-    setError(null);
+    setWalletError(null);
     if (typeof window === "undefined" || !(window as any).ethereum) {
-      setError("Please install MetaMask to use the Registry.");
+      setWalletError("Please install MetaMask to connect with Avalanche Fuji.");
       return;
     }
 
@@ -51,254 +73,253 @@ export default function AgentRegistryPage() {
       await browserProvider.send("eth_requestAccounts", []);
       const signer = await browserProvider.getSigner();
       const address = await signer.getAddress();
-      
+
       setWalletAddress(address);
       setProvider(browserProvider);
     } catch (err: any) {
-      setError(err.message || "Failed to connect wallet.");
+      setWalletError(err.message || "Failed to connect MetaMask wallet.");
     }
   };
 
-  const registerAgent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
-
-    if (!provider || !walletAddress) {
-      setError("Please connect your wallet first.");
-      return;
-    }
-
-    if (!agentId.trim()) {
-      setError("Agent ID cannot be empty.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
-
-      // 0.01 AVAX stake required
-      const tx = await contract.registerAgent(agentId, {
-        value: ethers.parseEther("0.01"),
-        gasLimit: 300000,
-      });
-
-      setSuccess("Transaction submitted! Waiting for confirmation...");
-      await tx.wait();
-      
-      setSuccess(`Agent "${agentId}" registered successfully!`);
-      setAgentId("");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      setError(err.reason || err.message || "Transaction failed.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const lookupAgent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setAgentData(null);
-    if (!lookupId.trim()) return;
-
-    try {
-      // Use public RPC if wallet is not connected
-      const readProvider = provider || new ethers.JsonRpcProvider("https://api.avax-test.network/ext/bc/C/rpc");
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, readProvider);
-      
-      const data = await contract.getAgent(lookupId);
-      
-      setAgentData({
-        ownerWallet: data[0],
-        trustScore: data[1].toString(),
-        balance: ethers.formatEther(data[2]),
-        isRegistered: data[3],
-        isRevoked: data[4],
-      });
-    } catch (err: any) {
-      setError(err.reason || err.message || "Failed to lookup agent.");
-    }
+  const disconnectWallet = () => {
+    setWalletAddress(null);
+    setProvider(null);
   };
 
   if (isAuthLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background via-purple-950/5 to-background">
-        <div className="text-center">
-          <div className="inline-block p-4 rounded-2xl bg-purple-500/10 mb-4">
-            <LogIn className="w-12 h-12 text-purple-400 animate-pulse" />
+      <div className="min-h-screen flex items-center justify-center bg-[#070a13] cyber-grid text-slate-100">
+        <div className="text-center space-y-3">
+          <div className="inline-block p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+            <Shield className="w-10 h-10 text-cyan-400 animate-pulse" />
           </div>
-          <p className="text-gray-400 text-lg">Verifying authentication...</p>
+          <p className="text-sm font-mono text-slate-300">Verifying session credentials...</p>
+          <div className="w-32 h-1 bg-white/[0.06] rounded-full mx-auto overflow-hidden">
+            <div className="w-full h-full bg-linear-to-r from-cyan-500 to-cyan-400 animate-pulse" />
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
     <>
       <DashboardSidebar />
-      <div className="2xl:ml-64 min-h-screen p-8 bg-linear-to-br from-background via-purple-950/5 to-background">
-        <div className="max-w-7xl mx-auto space-y-8">
-          
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 py-4 sm:py-0 mb-4">
-              <div>
-                <h1 className="text-3xl sm:text-4xl font-bold flex items-center gap-2 bg-linear-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  <Shield className="w-8 h-8 text-purple-400" />
-                  Global Agent Registry
-                </h1>
-                <p className="text-gray-400 mt-2">
-                  The "DMV for AI" — Register your autonomous agent, fund its wallet, and build a Trust Score.
-                </p>
+      <div className="2xl:ml-68 min-h-screen p-4 sm:p-8 bg-[#070a13] cyber-grid text-slate-100 relative">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <TopCommandHeader />
+
+          {/* ── Hero Header ────────────────────────────────────────────── */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-cyan-500/20">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                  [IDENTITY MESH] Global Agent Registry & ERC-8004 Trust
+                </span>
+                <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                  The &quot;DMV for AI&quot; • Avalanche Fuji C-Chain
+                </span>
               </div>
-              
-              <button
-                onClick={connectWallet}
-                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all duration-300 ${
-                  walletAddress 
-                    ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20"
-                    : "bg-linear-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white"
-                }`}
-              >
-                <Wallet size={20} />
-                {walletAddress 
-                  ? `${walletAddress.substring(0, 6)}...${walletAddress.substring(38)}`
-                  : "Connect Wallet"}
-              </button>
-            </div>
-          </div>
-          
-          <div className="h-px w-full bg-linear-to-r from-purple-500/50 via-pink-500/50 to-transparent mb-6" />
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* Registration Form */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <PlusCircle className="text-blue-500" size={24} />
-              Register New Agent
-            </h2>
-            
-            <form onSubmit={registerAgent} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Agent ID (Must be unique)
-                </label>
-                <input
-                  type="text"
-                  value={agentId}
-                  onChange={(e) => setAgentId(e.target.value)}
-                  placeholder="e.g. agent_trading_bot_v1"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
-                <p className="text-sm text-blue-400 flex items-center gap-2">
-                  <AlertCircle size={16} />
-                  Requires 0.01 AVAX stake to prevent spam.
-                </p>
-              </div>
-
-              {error && (
-                <div className="text-red-400 bg-red-400/10 border border-red-400/20 p-3 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
-
-              {success && (
-                <div className="text-green-400 bg-green-400/10 border border-green-400/20 p-3 rounded-lg text-sm flex items-center gap-2">
-                  <CheckCircle size={16} />
-                  {success}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading || !walletAddress}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-800 disabled:text-gray-500 text-white font-medium py-3 rounded-lg transition-colors flex justify-center items-center gap-2"
-              >
-                {loading ? "Processing..." : "Register Agent"}
-              </button>
-            </form>
-          </div>
-
-          {/* Info Panel */}
-          <div className="space-y-6">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-              <h3 className="text-lg font-medium mb-4">How it works</h3>
-              <ol className="space-y-4 text-gray-400 text-sm list-decimal list-inside">
-                <li><strong className="text-gray-200">Connect Wallet:</strong> Link your MetaMask wallet to the Avalanche Fuji Testnet.</li>
-                <li><strong className="text-gray-200">Register:</strong> Claim a unique Agent ID and deposit a small stake.</li>
-                <li><strong className="text-gray-200">Build Trust:</strong> The agent starts with a default Trust Score of 50. NeuralControl will adjust this based on its API behavior.</li>
-                <li><strong className="text-gray-200">Bypass Limits:</strong> High-trust agents can use X-402 Agentic Payments to seamlessly bypass rate limits.</li>
-              </ol>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
+                <span>Global Agent Registry</span>
+                <Sparkles className="w-5 h-5 text-cyan-400" />
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Register autonomous AI agents, stake anti-spam deposits, and inspect ERC-8004 trust scores on Avalanche Fuji
+              </p>
             </div>
 
-            {/* Lookup Panel */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-              <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
-                <Shield className="text-blue-500" size={20} />
-                Check Agent Score
-              </h3>
-              
-              <form onSubmit={lookupAgent} className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  value={lookupId}
-                  onChange={(e) => setLookupId(e.target.value)}
-                  placeholder="Enter Agent ID (e.g. bot_2)"
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                />
+            {/* Quick Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              {/* Wallet Connection Button */}
+              {!walletAddress ? (
                 <button
-                  type="submit"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  type="button"
+                  onClick={connectWallet}
+                  className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-black font-mono font-bold text-xs transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:scale-105 active:scale-95 cursor-pointer"
                 >
-                  Lookup
+                  <Wallet className="w-3.5 h-3.5 text-black" />
+                  <span>Connect Wallet</span>
                 </button>
-              </form>
-
-              {agentData && (
-                <div className="bg-gray-800 rounded-lg p-4 space-y-3 text-sm">
-                  <div className="flex justify-between items-center pb-2 border-b border-gray-700">
-                    <span className="text-gray-400">Status</span>
-                    {agentData.isRegistered ? (
-                      <span className="text-green-400 font-medium flex items-center gap-1"><CheckCircle size={14}/> Registered</span>
-                    ) : (
-                      <span className="text-red-400 font-medium">Not Found</span>
-                    )}
-                  </div>
-                  
-                  {agentData.isRegistered && (
-                    <>
-                      <div className="flex justify-between items-center pb-2 border-b border-gray-700">
-                        <span className="text-gray-400">Trust Score</span>
-                        <span className="text-white font-bold text-lg">{agentData.trustScore} / 100</span>
-                      </div>
-                      <div className="flex justify-between items-center pb-2 border-b border-gray-700">
-                        <span className="text-gray-400">Stake Balance</span>
-                        <span className="text-white">{agentData.balance} AVAX</span>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400">Owner Wallet</span>
-                        <span className="text-xs text-gray-300 break-all bg-gray-900 p-2 rounded">{agentData.ownerWallet}</span>
-                      </div>
-                    </>
-                  )}
+              ) : (
+                <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#091020]/80 border border-cyan-500/30 text-xs font-mono shadow-[0_0_10px_rgba(168,85,247,0.15)]">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-cyan-300 font-bold">
+                    {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={disconnectWallet}
+                    className="px-1.5 py-0.5 rounded text-[10px] text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-colors ml-1 cursor-pointer"
+                  >
+                    Disconnect
+                  </button>
                 </div>
               )}
+
+              {/* Seed Demo Records */}
+              <button
+                type="button"
+                onClick={() => seedDemo()}
+                disabled={isSeeding}
+                className="px-3.5 py-2 rounded-xl bg-[#091020]/80 hover:bg-[#091020] text-slate-200 hover:text-cyan-300 border border-white/[0.08] hover:border-cyan-500/30 text-xs font-mono font-semibold transition-all flex items-center gap-2 shadow-[0_0_10px_rgba(0,0,0,0.2)] hover:scale-105 active:scale-95 disabled:opacity-50 cursor-pointer"
+                title="Populate test agents in registry"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${isSeeding ? "animate-spin text-cyan-400" : "text-cyan-400"}`} />
+                <span>Seed Demo Agents</span>
+              </button>
+
+              {/* Refresh Button */}
+              <button
+                type="button"
+                onClick={() => refetchAgents()}
+                disabled={isAgentsLoading}
+                className="p-2 rounded-xl bg-[#091020]/80 hover:bg-[#091020] text-slate-400 hover:text-cyan-300 border border-white/[0.08] hover:border-cyan-500/30 transition-all cursor-pointer shadow-[0_0_10px_rgba(0,0,0,0.2)]"
+                title="Refresh registry data"
+              >
+                <RefreshCw className={`w-4 h-4 ${isAgentsLoading ? "animate-spin text-cyan-400" : ""}`} />
+              </button>
+
+              {/* Contract Link */}
+              <a
+                href={`https://testnet.snowtrace.io/address/${CONTRACT_ADDRESS}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-xl bg-[#091020]/80 hover:bg-[#091020] text-slate-400 hover:text-purple-300 border border-white/[0.08] hover:border-purple-500/30 transition-all cursor-pointer shadow-[0_0_10px_rgba(0,0,0,0.2)]"
+                title="View ERC8004Registry contract on Snowtrace"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
             </div>
           </div>
 
+          {/* Wallet Error Alert */}
+          {walletError && (
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono flex items-center gap-2 animate-in fade-in">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{walletError}</span>
+            </div>
+          )}
+
+          {/* ── 4 KPI Telemetry Cards (Matching Overrides Style) ──────── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {/* Card 1: Total Registered Agents */}
+            <div className="p-4 rounded-xl bg-[#091020]/80 border border-purple-500/20 shadow-[0_4px_20px_rgba(168,85,247,0.05)] transition-all">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
+                  <Users className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Registered Agents</span>
+                </div>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-300 border border-purple-500/30">
+                  ERC-8004
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-purple-300">
+                {totalAgents}
+                <span className="text-xs font-normal text-slate-400 ml-1.5">Identities</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Verified on Avalanche Fuji C-Chain
+              </div>
+            </div>
+
+            {/* Card 2: Average Trust Score */}
+            <div className="p-4 rounded-xl bg-[#091020]/80 border border-emerald-500/20 shadow-[0_4px_20px_rgba(0,230,153,0.05)] transition-all">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
+                  <Star className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Avg Trust Score</span>
+                </div>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                  Network Health
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-emerald-400">
+                {avgTrustScore}
+                <span className="text-xs font-normal text-slate-400 ml-1">/ 100</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Consensus reputation rating
+              </div>
+            </div>
+
+            {/* Card 3: Total Staked AVAX */}
+            <div className="p-4 rounded-xl bg-[#091020]/80 border border-cyan-500/20 shadow-[0_4px_20px_rgba(0,240,255,0.05)] transition-all">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
+                  <Coins className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Anti-Spam Staked Pool</span>
+                </div>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                  Collateral
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-bold font-mono text-cyan-300">
+                {totalStakedAvax.toFixed(4)}
+                <span className="text-xs font-normal text-slate-400 ml-1.5">AVAX</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                0.01 AVAX security stake per agent
+              </div>
+            </div>
+
+            {/* Card 4: Fuji EVM Contract Status */}
+            <div className="p-4 rounded-xl bg-[#091020]/80 border border-amber-500/20 shadow-[0_4px_20px_rgba(245,158,11,0.05)] transition-all">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Fuji Registry Status</span>
+                </div>
+                <span className="flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Connected
+                </span>
+              </div>
+              <div className="text-sm font-bold font-mono text-white truncate" title={CONTRACT_ADDRESS}>
+                {CONTRACT_ADDRESS.slice(0, 8)}...{CONTRACT_ADDRESS.slice(-6)}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1">
+                Chain ID 43113 (Avalanche Fuji)
+              </div>
+            </div>
           </div>
 
+          {/* ── Registry Telemetry Strip (Matching Payments page) ──────── */}
+          <RegistryTelemetryBadge
+            contractAddress={CONTRACT_ADDRESS}
+            totalAgents={totalAgents}
+            totalStakedAvax={totalStakedAvax}
+          />
+
+          {/* ── Interactive Staking & Score Lookup Grid ─────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+            {/* Left: Register Agent Form */}
+            <RegisterAgentForm
+              walletAddress={walletAddress}
+              provider={provider}
+              contractAddress={CONTRACT_ADDRESS}
+              onConnectWallet={connectWallet}
+              onSuccessRegistered={() => refetchAgents()}
+            />
+
+            {/* Right: Agent Score Lookup */}
+            <AgentScoreLookup
+              contractAddress={CONTRACT_ADDRESS}
+            />
+          </div>
+
+          {/* ── How It Works (Trust Lifecycle Guide) ────────────────────── */}
+          <TrustLifecycleGuide />
+
+          {/* ── Registered Agents Directory Table ───────────────────────── */}
+          <RegisteredAgentsTable
+            agents={agents}
+            isLoading={isAgentsLoading}
+            onSeedDemo={() => seedDemo()}
+            isSeeding={isSeeding}
+          />
         </div>
       </div>
     </>

@@ -11,7 +11,7 @@ export function GasTelemetryBadge() {
   const isOptimal = congestion === "Nominal";
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#091020]/70 border border-white/[0.08] hover:border-cyan-500/30 backdrop-blur-xl transition-all shadow-[0_4px_20px_rgba(0,0,0,0.3)]">
+    <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-[#091020]/80 border border-cyan-500/20 hover:border-cyan-500/40 backdrop-blur-xl transition-all shadow-[0_4px_20px_rgba(0,240,255,0.05)]">
       {/* Left: Chain & Gas Label */}
       <div className="flex items-center gap-2.5">
         <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 shadow-[0_0_12px_rgba(0,240,255,0.2)]">
