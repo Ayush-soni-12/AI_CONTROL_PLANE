@@ -68,17 +68,6 @@ CONTRACT_ABI = [
 # ── Score threshold for payment eligibility ────────────────────────────────────
 TRUSTED_SCORE_THRESHOLD = 30
 
-# ── Simulation Registry Map ───────────────────────────────────────────────────
-SIMULATION_REGISTRY = {
-    "agent_good_": {"score": 95, "tier": "verified"},
-    "agent_weather_": {"score": 91, "tier": "verified"},
-    "agent_trusted_": {"score": 75, "tier": "trusted"},
-    "agent_": {"score": 62, "tier": "trusted"},
-    "bot_": {"score": 5,  "tier": "suspicious"},
-    "ddos_": {"score": 0,  "tier": "blacklisted"},
-}
-_SIMULATION_REGISTRY = SIMULATION_REGISTRY
-
 # ── Contract instance (created once at startup) ────────────────────────────────
 _contract = None
 
@@ -92,7 +81,7 @@ def _get_contract():
         return _contract
     if not CONTRACT_ADDRESS:
         logger.warning(
-            "⚠️  ERC8004_CONTRACT_ADDRESS not set — falling back to simulation mode."
+            "ERC8004_CONTRACT_ADDRESS not set in settings."
         )
         return None
     try:
@@ -188,38 +177,20 @@ def check_agent_reputation(agent_id: Optional[str]) -> dict:
 
         except Exception as e:
             logger.warning(
-                f"⚠️  On-chain lookup failed for '{agent_id}': {e}. "
-                "Falling back to simulation."
+                f"On-chain lookup failed for '{agent_id}': {e}."
             )
-            # Fall through to simulation below
 
-    # ── Fallback: Simulation mode ───────────────────────────────────────────
-    logger.info(f"🔄 Using simulation mode for agent '{agent_id}'")
-
-    reputation = None
-    for prefix in sorted(SIMULATION_REGISTRY.keys(), key=len, reverse=True):
-        if agent_id.startswith(prefix):
-            reputation = SIMULATION_REGISTRY[prefix]
-            break
-
-    if reputation is None:
-        return {
-            "is_trusted": False,
-            "score": 0,
-            "tier": "unregistered",
-            "agent_id": agent_id,
-            "description": f"Agent '{agent_id}' not found in registry.",
-            "source": "simulation",
-        }
-
-    score = reputation["score"]
     return {
-        "is_trusted": score >= TRUSTED_SCORE_THRESHOLD,
-        "score": score,
-        "tier": reputation["tier"],
+        "is_trusted": False,
+        "score": 0,
+        "tier": "unregistered",
         "agent_id": agent_id,
-        "description": f"Simulated ERC-8004 score: {score}/100",
-        "source": "simulation",
+        "owner_wallet": None,
+        "staked_balance_avax": 0.0,
+        "is_registered": False,
+        "is_revoked": False,
+        "description": f"Agent '{agent_id}' is not registered on-chain.",
+        "source": "on_chain",
     }
 
 
@@ -244,7 +215,7 @@ async def check_agent_reputation_async(
             "source": "no_id",
         }
 
-    cache_key = f"agent:reputation:{agent_id.lower()}"
+    cache_key = f"nc:agent:reputation:{agent_id.lower()}"
 
     # 1. Check Redis Cache First (< 1ms)
     try:
@@ -287,7 +258,18 @@ async def check_agent_reputation_async(
         }
     except Exception as e:
         logger.error(f"Async reputation check failed: {e}")
-        return check_agent_reputation(agent_id)
+        return {
+            "is_trusted": False,
+            "score": 0,
+            "tier": "unregistered",
+            "agent_id": agent_id,
+            "owner_wallet": None,
+            "staked_balance_avax": 0.0,
+            "is_registered": False,
+            "is_revoked": False,
+            "description": f"Reputation check error: {e}",
+            "source": "error_fallback",
+        }
 
 
 def format_reputation_for_response(reputation: dict) -> dict:

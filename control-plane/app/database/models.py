@@ -80,6 +80,10 @@ class User(Base):
     signals = relationship("Signal", back_populates="user", cascade="all, delete-orphan")
 
 
+    # Relationship to registered agents
+    registered_agents = relationship("RegisteredAgent", back_populates="user")
+
+
 class ApiKey(Base):
     __tablename__ = "api_keys"
     
@@ -723,3 +727,31 @@ class AgentPayment(Base):
               "user_id", "agent_id", "service_name", "endpoint",
               "status", "access_granted_until"),
     )
+
+
+
+
+class RegisteredAgent(Base):
+    """
+    Durable registry of autonomous AI agents.
+    Acts as the PostgreSQL source of truth for agent identities,
+    ERC-8004 reputation, stakes, and optional user ownership.
+    """
+    __tablename__ = "registered_agents"
+
+    id = Column(Integer, primary_key=True)
+    agent_id = Column(String(255), unique=True, nullable=False, index=True)
+    name = Column(String(255), nullable=True)
+    owner_wallet = Column(String(42), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    trust_score = Column(Integer, nullable=False, server_default=text("50"))
+    staked_balance_avax = Column(Float, nullable=False, server_default=text("0.01"))
+    is_registered = Column(Boolean, nullable=False, server_default=text("true"))
+    is_revoked = Column(Boolean, nullable=False, server_default=text("false"))
+    tx_hash = Column(String(66), nullable=True, index=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=text("now()"))
+    last_active = Column(TIMESTAMP(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="registered_agents")
