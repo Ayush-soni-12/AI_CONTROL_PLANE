@@ -12,6 +12,7 @@ from collections import defaultdict
 from app.queue.email_publisher import publish_email
 from app.redis.cache import cache_get, cache_set, invalidate_user_cache
 from app.queue.publisher import publish_signal
+import asyncio
 import time
 from typing import List, Optional
 from pydantic import BaseModel
@@ -102,28 +103,33 @@ async def receive_signal_batch(
     
     print(f"📥 Batch received: {len(payload.signals)} signals | user={current_user.email}")
     
+    tasks = []
+    for signal in payload.signals:
+        signal_data = signal.model_dump()
+        signal_data['user_id'] = current_user.id
+        
+        # Map SDK 'recorded_at' to backend 'timestamp' ORM attribute
+        if 'recorded_at' in signal_data:
+            recorded_val = signal_data.pop('recorded_at')
+            if recorded_val:
+                # Keep it as string, Pydantic/SQLAlchemy will parse it from ISO or consumer will handle
+                signal_data['timestamp'] = datetime.fromisoformat(recorded_val.replace('Z', '+00:00'))
+        
+        tasks.append(publish_signal(signal_data))
+
+    # Send all signals to RabbitMQ concurrently
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
     processed = 0
     errors = 0
 
-    for signal in payload.signals:
-        try:
-            signal_data = signal.model_dump()
-            signal_data['user_id'] = current_user.id
-            
-            # Map SDK 'recorded_at' to backend 'timestamp' ORM attribute
-            if 'recorded_at' in signal_data:
-                recorded_val = signal_data.pop('recorded_at')
-                if recorded_val:
-                    # Keep it as string, Pydantic/SQLAlchemy will parse it from ISO or consumer will handle
-                    signal_data['timestamp'] = datetime.fromisoformat(recorded_val.replace('Z', '+00:00'))
-            
-            # Send each to RabbitMQ just like the single endpoint does
-            await publish_signal(signal_data)
-            processed += 1
-        except Exception as e:
-            print(f"❌ Failed to publish signal in batch: {e}")
+    for res in results:
+        if isinstance(res, Exception):
+            print(f"❌ Failed to publish signal in batch: {res}")
             errors += 1
-            
+        else:
+            processed += 1
+
     # Increment billing counter for successfully queued signals
     if processed > 0:
         await _increment_signal_counter(current_user.id, processed, db)
