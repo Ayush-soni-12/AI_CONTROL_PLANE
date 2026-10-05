@@ -96,6 +96,7 @@ async def update_realtime_aggregate(
                     'count': 0,
                     'sum_latency': 0.0,
                     'errors': 0,
+                    'rate_limit_count': 0,
                     'rate_limit_enabled': False,
                     'last_updated': None,
                     'window_start': current_timestamp if window == '1m' else None
@@ -105,10 +106,11 @@ async def update_realtime_aggregate(
             agg['sum_latency'] += latency_ms
             if status == 'error':
                 agg['errors'] += 1
+            if 'rate_limit_count' not in agg:
+                agg['rate_limit_count'] = 1 if agg.get('rate_limit_enabled') else 0
             if action_taken == 'rate_limited':
-                agg['rate_limit_enabled'] = True
-            else:
-                agg['rate_limit_enabled'] = False
+                agg['rate_limit_count'] = agg.get('rate_limit_count', 0) + 1
+            agg['rate_limit_enabled'] = agg['rate_limit_count'] > 0
             agg['last_updated'] = datetime.now(timezone.utc).isoformat()
 
             await redis_client.setex(key, ttl, json.dumps(agg))
@@ -244,6 +246,9 @@ async def get_realtime_metrics(
             except Exception as e:
                 logger.debug(f"Could not compute percentiles from Redis: {e}")
 
+            rate_limit_count = agg.get('rate_limit_count', 0)
+            rate_limit_enabled = rate_limit_count > 0 or agg.get('rate_limit_enabled', False)
+
             return {
                 'count': agg['count'],
                 'sum_latency': agg['sum_latency'],
@@ -251,7 +256,8 @@ async def get_realtime_metrics(
                 'avg_latency': avg_latency,
                 'error_rate': error_rate,
                 'requests_per_minute': requests_per_minute,
-                'rate_limit_enabled': agg.get('rate_limit_enabled', False),
+                'rate_limit_count': rate_limit_count,
+                'rate_limit_enabled': rate_limit_enabled,
                 'p50': round(p50, 2),
                 'p95': round(p95, 2),
                 'p99': round(p99, 2),
@@ -278,6 +284,8 @@ async def get_realtime_metrics(
                 snapshot_metrics['requests_per_minute'] = (
                     snapshot_metrics.get('count', 0) / window_minutes if window_minutes > 0 else 0
                 )
+                snapshot_metrics['rate_limit_count'] = snapshot_metrics.get('rate_limit_count', 0)
+                snapshot_metrics['rate_limit_enabled'] = snapshot_metrics['rate_limit_count'] > 0
                 snapshot_metrics['source'] = 'snapshot'
                 return snapshot_metrics
         except Exception as e:
@@ -309,6 +317,8 @@ async def get_realtime_metrics(
                 p95 = _percentile(latencies, 95)
                 p99 = _percentile(latencies, 99)
 
+                rate_limit_count = len([s for s in signals if s.action_taken == 'rate_limited'])
+
                 return {
                     'count': count,
                     'sum_latency': sum_latency,
@@ -316,7 +326,8 @@ async def get_realtime_metrics(
                     'avg_latency': avg_latency,
                     'error_rate': error_rate,
                     'requests_per_minute': 0,
-                    'rate_limit_enabled': False,
+                    'rate_limit_count': rate_limit_count,
+                    'rate_limit_enabled': rate_limit_count > 0,
                     'p50': p50,
                     'p95': p95,
                     'p99': p99,

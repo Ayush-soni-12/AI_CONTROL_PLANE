@@ -102,6 +102,7 @@ class EndpointMetrics(BaseModel):
     tenant_id: Optional[str]
     cache_enabled: bool
     circuit_breaker: bool
+    rate_limit_count: int = 0
     rate_limit_enabled: bool = False  
     queue_deferral: bool = False  
     load_shedding: bool = False  
@@ -145,6 +146,7 @@ class EndpointDetailResponse(BaseModel):
     suggestions: List[str]
     cache_enabled: bool
     circuit_breaker: bool
+    rate_limit_count: int = 0
     rate_limit_enabled: bool = False  
     queue_deferral: bool = False  
     load_shedding: bool = False  

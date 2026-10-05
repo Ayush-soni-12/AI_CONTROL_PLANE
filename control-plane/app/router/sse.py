@@ -351,7 +351,8 @@ async def stream_services(
                             p50 = metrics_1h.get('p50', 0)
                             p95 = metrics_1h.get('p95', 0)
                             p99 = metrics_1h.get('p99', 0)
-                            rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
+                            rate_limit_count = metrics_1h.get('rate_limit_count', 0)
+                            rate_limit_enabled = rate_limit_count > 0 or metrics_1h.get('rate_limit_enabled', False)
 
                             ai_decision = await get_ai_tuned_decision(
                                 service_name, 
@@ -376,7 +377,8 @@ async def stream_services(
                             error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
                             signal_count = metrics_1h['count'] if metrics_1h else 0
                             requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
-                            rate_limit_enabled = False
+                            rate_limit_count = metrics_1h.get('rate_limit_count', 0) if metrics_1h else 0
+                            rate_limit_enabled = rate_limit_count > 0 or (metrics_1h.get('rate_limit_enabled', False) if metrics_1h else False)
                             p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
                             p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
                             p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
@@ -419,6 +421,7 @@ async def stream_services(
                             'tenant_id': tenant_id,
                             'cache_enabled': ai_decision['cache_enabled'],
                             'circuit_breaker': ai_decision['circuit_breaker'],
+                            'rate_limit_count': rate_limit_count,
                             'rate_limit_enabled': rate_limit_enabled,
                             'queue_deferral': ai_decision.get('queue_deferral', False),
                             'load_shedding': ai_decision.get('load_shedding', False),
@@ -601,7 +604,8 @@ async def stream_endpoint_detail(
                         p50 = metrics_1h.get('p50', 0)
                         p95 = metrics_1h.get('p95', 0)
                         p99 = metrics_1h.get('p99', 0)
-                        rate_limit_enabled = metrics_1h.get('rate_limit_enabled', False)
+                        rate_limit_count = metrics_1h.get('rate_limit_count', 0)
+                        rate_limit_enabled = rate_limit_count > 0 or metrics_1h.get('rate_limit_enabled', False)
 
                         ai_decision = await get_ai_tuned_decision(
                             service_name, 
@@ -626,7 +630,8 @@ async def stream_endpoint_detail(
                         avg_latency = metrics_1h['avg_latency'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
                         error_rate = metrics_1h['error_rate'] if metrics_1h and metrics_1h.get('count', 0) > 0 else 0
                         requests_per_minute = metrics_1h.get('requests_per_minute', 0) if metrics_1h else 0
-                        rate_limit_enabled = False
+                        rate_limit_count = metrics_1h.get('rate_limit_count', 0) if metrics_1h else 0
+                        rate_limit_enabled = rate_limit_count > 0 or (metrics_1h.get('rate_limit_enabled', False) if metrics_1h else False)
                         p50 = metrics_1h.get('p50', 0) if metrics_1h else 0
                         p95 = metrics_1h.get('p95', 0) if metrics_1h else 0
                         p99 = metrics_1h.get('p99', 0) if metrics_1h else 0
@@ -733,6 +738,7 @@ async def stream_endpoint_detail(
                         "cache_enabled": ai_decision['cache_enabled'],
                         "circuit_breaker": ai_decision.get('circuit_breaker', False),
                         "request_coalescing": ai_decision.get('request_coalescing', False),
+                        "rate_limit_count": rate_limit_count,
                         "rate_limit_enabled": rate_limit_enabled,
                         "reasoning": ai_decision['reasoning'],
                         "status": ai_decision.get('status', 'healthy'),
