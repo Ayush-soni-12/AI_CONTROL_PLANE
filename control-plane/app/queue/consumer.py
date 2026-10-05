@@ -11,7 +11,7 @@ import json
 import asyncio
 import random
 import aio_pika
-from datetime import datetime
+from datetime import datetime, timezone
 from app.config import settings
 from app.queue.connection import (
     get_rabbitmq_channel,
@@ -21,7 +21,7 @@ from app.queue.connection import (
     SIGNALS_QUEUE_NAME
 )
 from app.realtime_aggregates import update_realtime_aggregate
-from app.redis.cache import invalidate_user_cache
+from app.redis.cache import redis_client, get_tenant_key
 from app.database.database import AsyncSessionLocal
 from app.database import models
 
@@ -57,7 +57,41 @@ async def _process_metrics_signal(signal_data: dict) -> None:
         flag_name=flag_name,
         tenant_id=tenant_id,
     )
-    await invalidate_user_cache(user_id)
+
+    # Format telemetry event for in-memory recent events list (sub 5ms SSE streaming buffer)
+    raw_timestamp = signal_data.get("timestamp") or signal_data.get("recorded_at")
+    if raw_timestamp:
+        if isinstance(raw_timestamp, datetime):
+            timestamp = raw_timestamp.isoformat()
+        else:
+            timestamp = str(raw_timestamp)
+    else:
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+    event_payload = json.dumps({
+        "service_name": service_name,
+        "endpoint": endpoint,
+        "latency_ms": latency_ms,
+        "status": sig_status,
+        "timestamp": timestamp,
+        "priority": priority,
+        "action_taken": action_taken,
+        "customer_identifier": customer_id,
+        "tenant_id": tenant_id,
+    })
+
+    service_event_key = get_tenant_key(user_id, service_name, "recent_events")
+    tenant_event_key = get_tenant_key(user_id, None, "recent_events")
+
+    try:
+        pipe = redis_client.pipeline()
+        for key in (service_event_key, tenant_event_key):
+            pipe.lpush(key, event_payload)
+            pipe.ltrim(key, 0, 99)
+            pipe.expire(key, 7200)
+        await pipe.execute()
+    except Exception as redis_err:
+        print(f"⚠️ [Metrics Consumer] Redis recent_events update failed: {redis_err}")
 
 
 async def _on_metrics_message(message: aio_pika.abc.AbstractIncomingMessage) -> None:

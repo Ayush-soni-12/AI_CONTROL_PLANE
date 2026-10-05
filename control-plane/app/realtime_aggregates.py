@@ -301,7 +301,7 @@ async def get_realtime_metrics(
                     models.Signal.service_name == service_name,
                     models.Signal.endpoint == endpoint
                 )
-            ).order_by(models.Signal.timestamp.desc())
+            ).order_by(models.Signal.timestamp.desc()).limit(500)
 
             result = await db.execute(stmt)
             signals = result.scalars().all()
