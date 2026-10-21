@@ -16,7 +16,7 @@ export default function DashboardLoading() {
             Synchronizing neural control plane state...
           </p>
         </div>
-        <div className="w-full h-1 bg-white/[0.06] rounded-full overflow-hidden">
+        <div className="w-full h-1 bg-white/6 rounded-full overflow-hidden">
           <div className="w-full h-full bg-linear-to-r from-purple-500 via-cyan-400 to-purple-500 animate-pulse" />
         </div>
       </div>

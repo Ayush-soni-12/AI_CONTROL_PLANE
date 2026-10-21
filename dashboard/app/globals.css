@@ -3,11 +3,22 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme inline {
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-subtle: var(--subtle);
+  --color-accent-hover: var(--accent-hover);
+  --color-queue: var(--queue);
+  --color-ai: var(--ai);
+  --color-danger: var(--danger);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-sans: var(--font-geist-sans), var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -48,91 +59,178 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Vercel Black & White Monochromatic System (Geist Design) */
+  /* Cyan channel remapped to Crisp Pure White & Platinum */
+  --color-cyan-50: #ffffff;
+  --color-cyan-100: #fafafa;
+  --color-cyan-200: #f5f5f5;
+  --color-cyan-300: #e5e5e5;
+  --color-cyan-400: #ffffff;
+  --color-cyan-500: #ededed;
+  --color-cyan-600: #a3a3a3;
+  --color-cyan-700: #737373;
+  --color-cyan-800: #404040;
+  --color-cyan-900: #262626;
+  --color-cyan-950: #171717;
+
+  /* Purple channel remapped to Vercel Neutral Silver & Slate */
+  --color-purple-50: #fafafa;
+  --color-purple-100: #f5f5f5;
+  --color-purple-200: #e5e5e5;
+  --color-purple-300: #d4d4d4;
+  --color-purple-400: #d4d4d4;
+  --color-purple-500: #a3a3a3;
+  --color-purple-600: #737373;
+  --color-purple-700: #525252;
+  --color-purple-800: #262626;
+  --color-purple-900: #171717;
+  --color-purple-950: #0a0a0a;
+
+  /* Blue channel remapped to Vercel Monochromatic Slate */
+  --color-blue-50: #ffffff;
+  --color-blue-100: #fafafa;
+  --color-blue-200: #f5f5f5;
+  --color-blue-300: #e5e5e5;
+  --color-blue-400: #ffffff;
+  --color-blue-500: #ededed;
+  --color-blue-600: #a3a3a3;
+  --color-blue-700: #737373;
+  --color-blue-800: #404040;
+  --color-blue-900: #262626;
+  --color-blue-950: #171717;
+
+  /* Teal channel remapped to Platinum White */
+  --color-teal-50: #ffffff;
+  --color-teal-100: #fafafa;
+  --color-teal-200: #f5f5f5;
+  --color-teal-300: #e5e5e5;
+  --color-teal-400: #ffffff;
+  --color-teal-500: #ededed;
+  --color-teal-600: #a3a3a3;
+  --color-teal-700: #737373;
+  --color-teal-800: #404040;
+  --color-teal-900: #262626;
+  --color-teal-950: #171717;
+
+  /* Status Emerald (Geist system operational & health indicators) */
+  --color-emerald-50: #f0fdf4;
+  --color-emerald-100: #dcfce7;
+  --color-emerald-200: #bbf7d0;
+  --color-emerald-300: #86efac;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
 }
 
 :root {
-  --radius: 0.75rem;
-  --background: oklch(0.985 0.005 240);
-  --foreground: oklch(0.145 0.02 260);
+  --bg: #09090b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --border-strong: #3f3f46;
+  --text: #fafafa;
+  --subtle: #71717a;
+  --accent-hover: #4ade80;
+  --queue: #f59e0b;
+  --ai: #a78bfa;
+  --danger: #ef4444;
+
+  --radius: 0.5rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0.02 260);
+  --card-foreground: oklch(0 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0.02 260);
-  --primary: oklch(0.488 0.243 264.376);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.95 0.01 240);
-  --secondary-foreground: oklch(0.205 0.02 260);
-  --muted: oklch(0.95 0.01 240);
-  --muted-foreground: oklch(0.5 0.02 240);
-  --accent: oklch(0.94 0.02 240);
-  --accent-foreground: oklch(0.205 0.02 260);
+  --popover-foreground: oklch(0 0 0);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.1 0 0);
+  --muted: oklch(0.96 0 0);
+  --muted-foreground: oklch(0.45 0 0);
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0.01 240);
-  --input: oklch(0.9 0.01 240);
-  --ring: oklch(0.6 0.18 250);
-  --chart-1: oklch(0.7 0.18 200);
-  --chart-2: oklch(0.72 0.2 160);
-  --chart-3: oklch(0.62 0.22 280);
-  --chart-4: oklch(0.75 0.18 70);
-  --chart-5: oklch(0.65 0.22 25);
-  --sidebar: oklch(0.98 0.005 240);
-  --sidebar-foreground: oklch(0.145 0.02 260);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.95 0.01 240);
-  --sidebar-accent-foreground: oklch(0.205 0.02 260);
-  --sidebar-border: oklch(0.9 0.01 240);
-  --sidebar-ring: oklch(0.6 0.18 250);
+  --border: oklch(0.9 0 0);
+  --input: oklch(0.9 0 0);
+  --ring: oklch(0 0 0);
+  --chart-1: oklch(0 0 0);
+  --chart-2: oklch(0.4 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.8 0 0);
+  --chart-5: oklch(0.55 0.22 25);
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: oklch(0 0 0);
+  --sidebar-primary: oklch(0 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.95 0 0);
+  --sidebar-accent-foreground: oklch(0 0 0);
+  --sidebar-border: oklch(0.9 0 0);
+  --sidebar-ring: oklch(0 0 0);
 }
 
 .dark {
-  /* Obsidian Cyber Base: #070a13 */
-  --background: oklch(0.11 0.02 260);
-  --foreground: oklch(0.98 0.005 240);
-  
-  /* Translucent Slate Card: #0d1527 */
-  --card: oklch(0.15 0.025 255);
-  --card-foreground: oklch(0.98 0.005 240);
-  
-  --popover: oklch(0.13 0.025 260);
-  --popover-foreground: oklch(0.98 0.005 240);
-  
-  /* Electric Cyber Accents */
-  --primary: oklch(0.78 0.18 200); /* Cyan */
-  --primary-foreground: oklch(0.1 0.02 260);
-  
-  --secondary: oklch(0.18 0.03 255);
-  --secondary-foreground: oklch(0.95 0.01 240);
-  
-  --muted: oklch(0.17 0.025 255);
-  --muted-foreground: oklch(0.65 0.03 240);
-  
-  --accent: oklch(0.2 0.035 255);
-  --accent-foreground: oklch(0.98 0.01 240);
-  
-  --destructive: oklch(0.65 0.22 25);
-  
-  /* 1px glowing specular borders */
-  --border: oklch(0.28 0.035 250 / 35%);
-  --input: oklch(0.28 0.035 250 / 35%);
-  --ring: oklch(0.75 0.18 200 / 50%);
-  
-  /* Vibrant Neon Telemetry Charts */
-  --chart-1: oklch(0.78 0.18 200); /* Neon Cyan (#00f0ff) */
-  --chart-2: oklch(0.76 0.21 160); /* Neon Mint (#00e699) */
-  --chart-3: oklch(0.68 0.23 280); /* Electric Violet (#8b5cf6) */
-  --chart-4: oklch(0.78 0.18 70);  /* Amber Flare (#f59e0b) */
-  --chart-5: oklch(0.65 0.22 25);  /* Coral Red (#ef4444) */
-  
-  /* Sidebar Deep Navy Obsidian */
-  --sidebar: oklch(0.12 0.025 260);
-  --sidebar-foreground: oklch(0.95 0.01 240);
-  --sidebar-primary: oklch(0.78 0.18 200);
-  --sidebar-primary-foreground: oklch(0.1 0.02 260);
-  --sidebar-accent: oklch(0.17 0.03 255);
-  --sidebar-accent-foreground: oklch(0.98 0.01 240);
-  --sidebar-border: oklch(0.25 0.03 250 / 30%);
-  --sidebar-ring: oklch(0.75 0.18 200 / 50%);
+  --bg: #09090b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --border-strong: #3f3f46;
+  --text: #fafafa;
+  --subtle: #71717a;
+  --accent-hover: #4ade80;
+  --queue: #f59e0b;
+  --ai: #a78bfa;
+  --danger: #ef4444;
+
+  /* Vercel Pure Jet Black Base: #000000 */
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.95 0 0);
+
+  /* Vercel Obsidian Precision Card (#0a0a0a) */
+  --card: oklch(0.08 0 0);
+  --card-foreground: oklch(0.95 0 0);
+
+  --popover: oklch(0.05 0 0);
+  --popover-foreground: oklch(0.95 0 0);
+
+  /* Vercel Pure White Primary */
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0 0 0);
+
+  --secondary: oklch(0.14 0 0);
+  --secondary-foreground: oklch(0.9 0 0);
+
+  --muted: oklch(0.12 0 0);
+  --muted-foreground: oklch(0.6 0 0);
+
+  --accent: oklch(0.16 0 0);
+  --accent-foreground: oklch(1 0 0);
+
+  --destructive: oklch(0.6 0.25 25);
+
+  /* Vercel Precision Hairline Borders */
+  --border: oklch(0.24 0 0 / 60%);
+  --input: oklch(0.24 0 0 / 60%);
+  --ring: oklch(1 0 0 / 60%);
+
+  /* Vercel High-Contrast Monochromatic Charts */
+  --chart-1: oklch(1 0 0);       /* Pure White */
+  --chart-2: oklch(0.7 0 0);     /* Platinum Silver */
+  --chart-3: oklch(0.85 0.18 150); /* Health/Live Mint */
+  --chart-4: oklch(0.8 0.15 80);  /* Warning Amber */
+  --chart-5: oklch(0.65 0.22 25); /* Alarm Red */
+
+  --sidebar: oklch(0 0 0);
+  --sidebar-foreground: oklch(0.9 0 0);
+  --sidebar-primary: oklch(1 0 0);
+  --sidebar-primary-foreground: oklch(0 0 0);
+  --sidebar-accent: oklch(0.12 0 0);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.2 0 0 / 50%);
+  --sidebar-ring: oklch(1 0 0 / 60%);
 }
 
 @layer base {
@@ -147,127 +245,144 @@
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #070a13;
+    background-color: #000000 !important;
+  }
+  /* Tabular numbers for telemetry data, numbers, and stats (Vercel best practice) */
+  .font-mono, [class*="tabular-nums"], table, code, pre {
+    font-variant-numeric: tabular-nums;
   }
 }
 
 @layer utilities {
-  /* Glassmorphism surfaces */
+  /* Global Overrides for dark backgrounds & cards to pure pitch black & obsidian */
+  .bg-\[\#070a13\], .bg-\[\#0a0e17\], .bg-\[\#030708\], .bg-\[\#06050b\], .bg-\[\#0a1e3d\], .bg-\[\#0c1833\], .bg-\[\#0b1429\], .bg-\[\#070c18\], .bg-\[\#0b1222\], .bg-\[\#0d1c33\], .bg-\[\#050914\],
+  [class*="bg-[#070a13]"], [class*="bg-[#0a0e17]"], [class*="bg-[#030708]"], [class*="bg-[#06050b]"], [class*="bg-[#070c18]"], [class*="bg-[#0b1222]"] {
+    background-color: #000000 !important;
+  }
+  .bg-\[\#091020\], [class*="bg-[#091020]"], [class*="bg-[#091020]/"] {
+    background-color: #0a0a0a !important;
+  }
+  .bg-\[\#0d1527\], [class*="bg-[#0d1527]"] {
+    background-color: #111111 !important;
+  }
+
+  /* Vercel Precision Obsidian Glass Surfaces */
   .glass-card {
-    background: rgba(13, 21, 39, 0.72);
+    background: rgba(10, 10, 10, 0.8) !important;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(59, 130, 246, 0.14);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
   }
 
   .glass-card-hover {
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  
+
   .glass-card-hover:hover {
-    background: rgba(16, 26, 48, 0.82);
-    border-color: rgba(6, 182, 212, 0.35);
-    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5), 0 0 20px 0 rgba(6, 182, 212, 0.15);
-    transform: translateY(-2px);
+    background: rgba(18, 18, 18, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    box-shadow: 0 8px 30px 0 rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.12) !important;
+    transform: translateY(-1px);
   }
 
   .glass-panel {
-    background: rgba(10, 16, 30, 0.85);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(5, 5, 5, 0.9) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
   }
 
-  /* Cyber Grid & Background patterns */
+  /* Vercel Signature Hairline Grid (32px geometric pattern) */
   .cyber-grid {
-    background-size: 40px 40px;
-    background-image: 
-      linear-gradient(to right, rgba(59, 130, 246, 0.04) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-image:
+      linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px) !important;
   }
 
+  /* Vercel Top Ambient Spotlight */
   .cyber-radial-glow {
-    background: radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.08) 0%, rgba(99, 102, 241, 0.04) 45%, transparent 70%);
+    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 45%, transparent 70%) !important;
   }
 
-  /* Glow effects */
+  /* Vercel Specular Halos */
   .glow-cyan {
-    box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.16) !important;
   }
 
   .glow-emerald {
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.25);
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.25) !important;
   }
 
   .glow-purple {
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.25);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.12) !important;
   }
 
   .glow-amber {
-    box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.25) !important;
   }
 
-  /* Text Gradients */
+  /* Vercel Clean Gradient Text */
   .text-gradient-cyan {
-    background: linear-gradient(135deg, #a5f3fc 0%, #22d3ee 50%, #38bdf8 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    background: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.65) 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
   }
 
   .text-gradient-emerald {
-    background: linear-gradient(135deg, #a7f3d0 0%, #34d399 50%, #10b981 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    background: linear-gradient(180deg, #ffffff 0%, #34d399 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
   }
 
   .text-gradient-purple {
-    background: linear-gradient(135deg, #ddd6fe 0%, #a78bfa 50%, #818cf8 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    background: linear-gradient(180deg, #ffffff 0%, #a3a3a3 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
   }
 
   .text-gradient-brand {
-    background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    background: linear-gradient(180deg, #ffffff 0%, #888888 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
   }
 
-  /* Neon Borders */
+  /* Vercel Hairline Specular Borders */
   .neon-border-cyan {
-    border: 1px solid rgba(6, 182, 212, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.18) !important;
   }
   .neon-border-cyan:hover {
-    border-color: rgba(6, 182, 212, 0.6);
+    border-color: rgba(255, 255, 255, 0.4) !important;
   }
 
   .neon-border-emerald {
-    border: 1px solid rgba(16, 185, 129, 0.3);
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
   }
   .neon-border-emerald:hover {
-    border-color: rgba(16, 185, 129, 0.6);
+    border-color: rgba(16, 185, 129, 0.6) !important;
   }
 
   .neon-border-purple {
-    border: 1px solid rgba(139, 92, 246, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
   }
   .neon-border-purple:hover {
-    border-color: rgba(139, 92, 246, 0.6);
+    border-color: rgba(255, 255, 255, 0.32) !important;
   }
 
-  /* Pulse Animations */
+  /* Pulse & Micro-Interactions */
   .pulse-node {
-    animation: pulseGlow 2.5s infinite ease-in-out;
+    animation: vercelPulse 2.8s infinite ease-in-out;
   }
 
-  @keyframes pulseGlow {
+  @keyframes vercelPulse {
     0%, 100% {
-      opacity: 0.9;
+      opacity: 0.95;
       transform: scale(1);
     }
     50% {
-      opacity: 0.5;
-      transform: scale(1.05);
+      opacity: 0.6;
+      transform: scale(1.03);
     }
   }
 
@@ -282,6 +397,16 @@
     }
     50% {
       background-position: 100% 50%;
+    }
+  }
+
+  /* Reduced Motion Support (Vercel Guidelines) */
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 }
