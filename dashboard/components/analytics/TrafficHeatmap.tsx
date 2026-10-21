@@ -2,7 +2,7 @@
 
 import { useTrafficPatterns } from "@/hooks/useAnalytics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Activity, Clock, Zap, Flame, BarChart2, Calendar } from "lucide-react";
+import { Activity, Clock, Flame, BarChart2, Calendar } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -12,9 +12,11 @@ export function TrafficHeatmap() {
   const { data: patterns, isLoading } = useTrafficPatterns(7);
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
 
+  const activePatterns = patterns || [];
+
   // Create a map in LOCAL timezone for display
   const patternMap = useMemo(() => {
-    if (!patterns) return new Map<string, { count: number; latency: number }>();
+    if (!activePatterns || activePatterns.length === 0) return new Map<string, { count: number; latency: number }>();
 
     const map = new Map<string, { count: number; latency: number }>();
 
@@ -22,7 +24,7 @@ export function TrafficHeatmap() {
     const offsetMinutes = -new Date().getTimezoneOffset();
     const offsetHours = offsetMinutes / 60;
 
-    patterns.forEach((p) => {
+    activePatterns.forEach((p) => {
       let localHour = p.hour + offsetHours;
       let localDay = p.day_of_week;
 
@@ -51,11 +53,11 @@ export function TrafficHeatmap() {
       }
     });
     return map;
-  }, [patterns]);
+  }, [activePatterns]);
 
   // Find max count and summary stats
   const { maxCount, totalRequests, peakHourInfo } = useMemo(() => {
-    if (!patterns || patterns.length === 0) {
+    if (!activePatterns || activePatterns.length === 0) {
       return { maxCount: 1, totalRequests: 0, peakHourInfo: null };
     }
 
@@ -83,19 +85,19 @@ export function TrafficHeatmap() {
       totalRequests: total,
       peakHourInfo: peakCount > 0 ? { day: DAYS[peakDay], hour: peakHr, count: peakCount, latency: peakLat } : null,
     };
-  }, [patterns, patternMap]);
+  }, [activePatterns, patternMap]);
 
-  // Get Obsidian Cyber color based on request count
+  // Get Obsidian Cyber color based on request count (rich solid hues, no glow fog)
   const getColor = (count: number) => {
     if (count === 0) return "bg-[#091020]/60 border-white/[0.04]";
 
     const intensity = count / maxCount;
     if (intensity > 0.8)
-      return "bg-emerald-400 border-emerald-300 shadow-[0_0_12px_rgba(0,230,153,0.7)]";
+      return "bg-emerald-400 border-emerald-300";
     if (intensity > 0.6)
-      return "bg-cyan-400 border-cyan-300 shadow-[0_0_10px_rgba(0,240,255,0.5)]";
+      return "bg-cyan-400 border-cyan-300";
     if (intensity > 0.4)
-      return "bg-cyan-600 border-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.3)]";
+      return "bg-cyan-600 border-cyan-500";
     if (intensity > 0.2)
       return "bg-cyan-900/80 border-cyan-700/60";
     return "bg-cyan-950/60 border-cyan-800/40";
@@ -104,7 +106,7 @@ export function TrafficHeatmap() {
   if (isLoading) {
     return (
       <Card className="glass-card border-blue-500/15 p-6">
-        <div className="flex items-center gap-3 pb-6 border-b border-white/[0.06]">
+        <div className="flex items-center gap-3 pb-6 border-b border-white/6">
           <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
             <Activity className="w-5 h-5 animate-pulse" />
           </div>
@@ -123,13 +125,10 @@ export function TrafficHeatmap() {
 
   return (
     <Card className="glass-card border-blue-500/15 overflow-hidden mb-6 relative">
-      {/* Top ambient glow line */}
-      <div className="h-[2px] w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-emerald-400 opacity-60" />
-
       <CardHeader className="p-5 sm:p-6 pb-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1.5">
+            <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                 TEMPORAL HEATMAP
               </span>
@@ -138,25 +137,33 @@ export function TrafficHeatmap() {
                 7-Day Hourly Distribution
               </span>
             </div>
-            <CardTitle className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2.5">
+            <CardTitle className="text-xl sm:text-2xl font-semibold tracking-tight text-white flex items-center gap-2.5">
               <span>Traffic Velocity Matrix</span>
             </CardTitle>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+            <p className="text-sm text-slate-400 mt-1 max-w-2xl font-sans">
               Identify peak traffic hours, load distribution patterns, and scheduled cron spikes across local time horizons.
             </p>
           </div>
 
           {/* Quick Summary Badges */}
-          {peakHourInfo && (
-            <div className="flex flex-wrap items-center gap-2.5 p-2 rounded-xl bg-[#070a13] border border-white/[0.08]">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-mono">
+          {peakHourInfo ? (
+            <div className="flex flex-wrap items-center gap-2.5 p-1.5 rounded-xl bg-[#070a13] border border-white/8">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs">
                 <Flame className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Peak: {peakHourInfo.day} {peakHourInfo.hour}:00 ({peakHourInfo.count.toLocaleString()} reqs)</span>
+                <span className="font-sans text-slate-300">Peak:</span>
+                <span className="font-mono tabular-nums font-semibold text-emerald-300">{peakHourInfo.day} {peakHourInfo.hour}:00</span>
+                <span className="font-mono tabular-nums text-slate-400 text-[11px]">({peakHourInfo.count.toLocaleString()} reqs)</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-mono">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-xs">
                 <BarChart2 className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Total: {totalRequests.toLocaleString()}</span>
+                <span className="font-sans text-slate-300">Total:</span>
+                <span className="font-mono tabular-nums font-semibold text-cyan-300">{totalRequests.toLocaleString()}</span>
               </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#070a13] border border-white/8 text-xs text-slate-400 font-mono">
+              <span className="w-2 h-2 rounded-full bg-slate-500" />
+              <span>Awaiting traffic signals</span>
             </div>
           )}
         </div>
@@ -164,16 +171,16 @@ export function TrafficHeatmap() {
 
       <CardContent className="p-5 sm:p-6 pt-2">
         <div className="p-4 sm:p-5 bg-[#070a13]/80 rounded-xl border border-blue-500/15 overflow-x-auto">
-          <div className="min-w-[720px]">
+          <div className="min-w-180">
             {/* Hour Labels Header */}
             <div className="grid grid-cols-[60px_repeat(24,1fr)] gap-1 mb-2">
-              <div className="text-center text-[11px] font-mono text-slate-400 font-semibold uppercase">
+              <div className="text-center text-[11px] font-sans text-slate-400 font-semibold uppercase tracking-wider">
                 Day
               </div>
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="text-center text-[10px] font-mono text-slate-400"
+                  className="text-center text-[11px] font-mono tabular-nums text-slate-400"
                 >
                   {hour}
                 </div>
@@ -187,7 +194,7 @@ export function TrafficHeatmap() {
                   key={day}
                   className="grid grid-cols-[60px_repeat(24,1fr)] gap-1 items-center"
                 >
-                  <div className="text-xs font-mono font-medium text-slate-300 pr-2 text-right">
+                  <div className="text-xs font-sans font-medium text-slate-300 pr-2 text-right">
                     {day}
                   </div>
                   {HOURS.map((hour) => {
@@ -202,11 +209,11 @@ export function TrafficHeatmap() {
                         key={hour}
                         className={`
                           aspect-square rounded-md ${getColor(count)}
-                          transition-all duration-200 cursor-pointer
+                          transition-all duration-150 cursor-pointer
                           border relative
                           ${
                             isHovered
-                              ? "scale-125 z-20 shadow-[0_0_15px_rgba(0,240,255,0.8)] border-white"
+                              ? "scale-125 z-20 ring-2 ring-cyan-300 ring-offset-1 ring-offset-[#070a13] border-white"
                               : "hover:scale-110 hover:z-10"
                           }
                         `}
@@ -230,31 +237,31 @@ export function TrafficHeatmap() {
               const hour = parseInt(hourStr);
 
               return data && data.count > 0 ? (
-                <div className="mt-5 p-3.5 bg-[#091020]/95 backdrop-blur-md rounded-xl border border-cyan-500/30 shadow-[0_4px_20px_rgba(0,240,255,0.15)] flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-200">
+                <div className="mt-5 p-3.5 bg-[#091020] rounded-xl border border-cyan-500/30 flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150 font-sans">
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
                       <Clock className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="text-xs font-mono font-semibold text-slate-100">
-                        {day} · {hour.toString().padStart(2, "0")}:00 - {(hour + 1).toString().padStart(2, "0")}:00 Local
+                      <div className="text-xs font-sans font-semibold text-slate-100">
+                        {day} · <span className="font-mono tabular-nums">{hour.toString().padStart(2, "0")}:00 - {(hour + 1).toString().padStart(2, "0")}:00</span> Local
                       </div>
-                      <div className="text-[11px] text-slate-400 font-mono">
+                      <div className="text-xs text-slate-400 font-sans">
                         Temporal window load telemetry
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 font-mono text-xs">
-                    <div className="px-3 py-1 rounded-lg bg-[#070a13] border border-white/[0.08]">
-                      <span className="text-slate-400 mr-1.5">Volume:</span>
-                      <span className="text-cyan-400 font-bold">{data.count.toLocaleString()}</span>
-                      <span className="text-slate-500 ml-1">reqs</span>
+                  <div className="flex items-center gap-4 text-xs">
+                    <div className="px-3 py-1 rounded-lg bg-[#070a13] border border-white/8 flex items-baseline">
+                      <span className="text-slate-400 mr-1.5 font-sans">Volume:</span>
+                      <span className="text-cyan-400 font-semibold font-mono tabular-nums">{data.count.toLocaleString()}</span>
+                      <span className="text-slate-500 ml-1 font-sans text-[11px]">reqs</span>
                     </div>
-                    <div className="px-3 py-1 rounded-lg bg-[#070a13] border border-white/[0.08]">
-                      <span className="text-slate-400 mr-1.5">Avg Latency:</span>
-                      <span className="text-emerald-400 font-bold">{data.latency.toFixed(1)}</span>
-                      <span className="text-slate-500 ml-1">ms</span>
+                    <div className="px-3 py-1 rounded-lg bg-[#070a13] border border-white/8 flex items-baseline">
+                      <span className="text-slate-400 mr-1.5 font-sans">Avg Latency:</span>
+                      <span className="text-emerald-400 font-semibold font-mono tabular-nums">{data.latency.toFixed(1)}</span>
+                      <span className="text-slate-500 ml-1 font-sans text-[11px]">ms</span>
                     </div>
                   </div>
                 </div>
@@ -262,17 +269,17 @@ export function TrafficHeatmap() {
             })()}
 
           {/* Matrix Legend */}
-          <div className="mt-5 pt-3 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono">
-            <span className="text-slate-400">Load Intensity</span>
+          <div className="mt-5 pt-3 border-t border-white/6 flex flex-wrap items-center justify-between gap-3 text-xs font-sans">
+            <span className="text-slate-400 font-medium">Load Intensity</span>
             <div className="flex items-center gap-1.5">
-              <span className="text-slate-400 text-[10px]">Zero</span>
-              <div className="w-4 h-4 rounded bg-[#091020]/60 border border-white/[0.04]" />
+              <span className="text-slate-400 text-xs font-sans">Zero</span>
+              <div className="w-4 h-4 rounded bg-[#091020]/60 border border-white/4" />
               <div className="w-4 h-4 rounded bg-cyan-950/60 border border-cyan-800/40" />
               <div className="w-4 h-4 rounded bg-cyan-900/80 border border-cyan-700/60" />
               <div className="w-4 h-4 rounded bg-cyan-600 border border-cyan-500" />
               <div className="w-4 h-4 rounded bg-cyan-400 border border-cyan-300" />
-              <div className="w-4 h-4 rounded bg-emerald-400 border border-emerald-300 shadow-[0_0_8px_rgba(0,230,153,0.6)]" />
-              <span className="text-emerald-400 text-[10px] font-semibold">Peak</span>
+              <div className="w-4 h-4 rounded bg-emerald-400 border border-emerald-300" />
+              <span className="text-emerald-400 text-xs font-medium font-sans">Peak</span>
             </div>
           </div>
         </div>
