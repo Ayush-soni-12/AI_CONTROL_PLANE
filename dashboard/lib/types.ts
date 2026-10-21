@@ -44,6 +44,7 @@ export interface Endpoint {
   cache_enabled: boolean;
   status: 'healthy' | 'degraded' | 'down';
   circuit_breaker: boolean;
+  rate_limit_count?: number;
   rate_limit_enabled?: boolean;
   queue_deferral?: boolean;
   load_shedding?: boolean;
@@ -67,6 +68,7 @@ export interface EndpointDetail {
   suggestions: string[];
   cache_enabled: boolean;
   circuit_breaker: boolean;
+  rate_limit_count?: number;
   rate_limit_enabled?: boolean;
   request_coalescing?: boolean;
   reasoning: string;

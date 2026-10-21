@@ -6,20 +6,37 @@ import type { User, EndpointDetail, Signal, ServicesResponse } from '@/lib/types
 import { useSSE } from './useSSE';
 
 
-export const useSignals = () => {
-  return useSSE<{ signals: Signal[]; timestamp: number }>('/api/sse/signals', 'signals');
+export const useSignals = (limit: number = 50, serviceName?: string | null, enabled: boolean = true) => {
+  const queryParams = new URLSearchParams();
+  if (limit) queryParams.set('limit', limit.toString());
+  if (serviceName) queryParams.set('service_name', serviceName);
+  const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+  return useSSE<{ signals: Signal[]; timestamp: number }>(`/api/sse/signals${queryString}`, 'signals', enabled);
 }
 
 /**
  * Hook to fetch signals for a specific service via SSE
  * 
  * @param serviceName - Name of the service to filter signals
+ * @param limit - Maximum number of signals to stream (default: 50)
+ * @param endpoint - Optional specific endpoint filter
  * @param enabled - Whether to connect (default: true, but should be false if serviceName is empty)
  * @returns Signals filtered by service name
  */
-export const useServiceSignals = (serviceName: string, enabled: boolean = true) => {
+export const useServiceSignals = (
+  serviceName: string,
+  limit: number = 50,
+  endpoint?: string | null,
+  enabled: boolean = true
+) => {
+  const queryParams = new URLSearchParams();
+  if (limit) queryParams.set('limit', limit.toString());
+  if (endpoint) queryParams.set('endpoint', endpoint);
+  const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
   return useSSE<{ signals: Signal[]; timestamp: number }>(
-    `/api/sse/service-signals/${serviceName}`, 
+    `/api/sse/service-signals/${encodeURIComponent(serviceName)}${queryString}`, 
     'signals',  // Event type must match what backend sends
     enabled && !!serviceName  // Only connect if enabled AND serviceName is not empty
   );
@@ -78,12 +95,24 @@ export const useServices = (apiUrl: string = '/api/sse/services') => {
  * 
  * @param serviceName - Name of the service
  * @param endpointPath - Endpoint path to get details for
+ * @param limit - Maximum number of signals history to stream (default: 50)
  * @param enabled - Whether to enable SSE streaming (default: true)
  * @returns Detailed endpoint metrics streamed via SSE
  */
-export const useEndpointDetail = (serviceName: string, endpointPath: string, enabled: boolean = true) => {
+export const useEndpointDetail = (
+  serviceName: string,
+  endpointPath: string,
+  limit: number = 50,
+  enabled: boolean = true
+) => {
+  const queryParams = new URLSearchParams();
+  if (limit) queryParams.set('limit', limit.toString());
+  const queryString = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+  const cleanPath = endpointPath.startsWith('/') ? endpointPath.slice(1) : endpointPath;
+
   return useSSE<EndpointDetail>(
-    `/api/sse/endpoint-detail/${serviceName}/${endpointPath}`,
+    `/api/sse/endpoint-detail/${encodeURIComponent(serviceName)}/${cleanPath}${queryString}`,
     'endpoint-detail',
     enabled
   );

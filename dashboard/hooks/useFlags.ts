@@ -53,11 +53,14 @@ export function useFlags(serviceName: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-
-  const cleanService = serviceName.trim() || "demo-service";
+  const cleanService = (serviceName || "").trim();
 
   const fetchFlags = useCallback(async () => {
-    if (!cleanService) return;
+    if (!cleanService) {
+      setFlags([]);
+      setIsLoading(false);
+      return;
+    }
     try {
       setError(null);
       const res = await fetch(`${API_BASE}/api/flags/${encodeURIComponent(cleanService)}`, {
@@ -228,10 +231,14 @@ export function useFlags(serviceName: string) {
 export function useFlagAuditLog(serviceName: string, flagName?: string) {
   const [logs, setLogs] = useState<FlagAuditLogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const cleanService = serviceName.trim() || "demo-service";
+  const cleanService = (serviceName || "").trim();
 
   const fetchAudit = useCallback(async () => {
-    if (!cleanService) return;
+    if (!cleanService) {
+      setLogs([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const params = flagName ? `?flag_name=${encodeURIComponent(flagName)}` : "";
