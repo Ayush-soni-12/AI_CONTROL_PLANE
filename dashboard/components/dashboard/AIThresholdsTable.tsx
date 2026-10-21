@@ -4,16 +4,13 @@ import { AIThreshold } from "@/lib/types";
 import {
   TrendingUp,
   Clock,
-  Activity,
   Zap,
-  Shield,
   ShieldAlert,
   Users,
   Brain,
   Layers,
   Flame,
   CheckCircle2,
-  Sparkles,
 } from "lucide-react";
 
 interface AIThresholdsTableProps {
@@ -31,7 +28,7 @@ export function AIThresholdsTable({
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-44 rounded-xl bg-[#091020]/60 border border-white/[0.05] animate-pulse"
+            className="h-44 rounded-xl bg-[#091020]/60 border border-white/5 animate-pulse"
           />
         ))}
       </div>
@@ -40,14 +37,14 @@ export function AIThresholdsTable({
 
   if (thresholds.length === 0) {
     return (
-      <div className="text-center py-20 rounded-xl bg-[#091020]/40 border border-white/[0.05]">
-        <div className="inline-block p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 mb-3 shadow-[0_0_20px_rgba(0,240,255,0.15)]">
+      <div className="text-center py-20 rounded-xl bg-[#091020]/40 border border-white/5">
+        <div className="inline-block p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 mb-3">
           <Brain className="w-8 h-8 text-cyan-400" />
         </div>
-        <h3 className="text-base font-bold font-mono text-slate-200 mb-1">
+        <h3 className="text-base font-semibold font-sans text-slate-200 mb-1">
           No AI Thresholds Generated Yet
         </h3>
-        <p className="text-xs text-slate-400 max-w-md mx-auto">
+        <p className="text-xs text-slate-400 max-w-md mx-auto font-sans leading-relaxed">
           The background AI cognitive analyzer runs periodically on traffic signals to derive optimal protection thresholds.
         </p>
       </div>
@@ -96,28 +93,25 @@ export function AIThresholdsTable({
         return (
           <div
             key={`${threshold.service_name}-${threshold.endpoint}-${index}`}
-            className="group relative rounded-xl bg-[#091020]/90 backdrop-blur-md border border-blue-500/15 hover:border-cyan-500/40 transition-all duration-300 overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.3)]"
+            className="group relative rounded-xl bg-[#091020] border border-blue-500/15 hover:border-cyan-500/40 transition-colors duration-200 overflow-hidden"
           >
-            {/* Top subtle glow line */}
-            <div className="h-[2px] w-full bg-gradient-to-r from-cyan-500 via-emerald-400 to-blue-500 opacity-40 group-hover:opacity-100 transition-opacity" />
-
             <div className="p-5 sm:p-6">
               {/* Card Header */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.15)]">
+                  <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
                     <TrendingUp className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                      <h3 className="text-base sm:text-lg font-semibold text-white tracking-tight font-sans">
                         {threshold.service_name}
                       </h3>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                         AI TUNED
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 font-mono mt-0.5">
+                    <p className="text-xs text-cyan-300/80 font-mono mt-0.5">
                       {threshold.endpoint}
                     </p>
                   </div>
@@ -125,9 +119,9 @@ export function AIThresholdsTable({
 
                 {/* Confidence Pill */}
                 <div
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-mono font-medium ${conf.pill}`}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-mono tabular-nums font-medium ${conf.pill}`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full ${conf.dot} animate-pulse`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${conf.dot}`} />
                   <span>{(threshold.confidence * 100).toFixed(0)}% Confidence</span>
                 </div>
               </div>
@@ -136,94 +130,94 @@ export function AIThresholdsTable({
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
                 {/* 1. Speculative Cache Latency */}
                 <div className="p-3.5 rounded-xl bg-[#070a13] border border-cyan-500/20 hover:border-cyan-500/40 transition-colors">
-                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-sans font-medium mb-1">
                     <Zap className="w-3.5 h-3.5 text-cyan-400" />
                     <span>Cache Threshold</span>
                   </div>
-                  <div className="text-lg sm:text-xl font-bold font-mono text-cyan-300">
+                  <div className="text-lg sm:text-xl font-semibold font-mono tabular-nums text-cyan-300">
                     {threshold.cache_latency_ms}
-                    <span className="text-xs text-slate-500 ml-1 font-normal">ms</span>
+                    <span className="text-xs text-slate-400 ml-1 font-normal font-sans">ms</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">Speculative trigger</div>
+                  <div className="text-[10px] text-slate-400 font-sans mt-0.5">Speculative trigger</div>
                 </div>
 
                 {/* 2. Circuit Breaker Error Rate */}
                 <div className="p-3.5 rounded-xl bg-[#070a13] border border-rose-500/20 hover:border-rose-500/40 transition-colors">
-                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-sans font-medium mb-1">
                     <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
                     <span>Circuit Breaker</span>
                   </div>
-                  <div className="text-lg sm:text-xl font-bold font-mono text-rose-300">
+                  <div className="text-lg sm:text-xl font-semibold font-mono tabular-nums text-rose-300">
                     {(threshold.circuit_breaker_error_rate * 100).toFixed(0)}
-                    <span className="text-xs text-slate-500 ml-1 font-normal">%</span>
+                    <span className="text-xs text-slate-400 ml-1 font-normal font-sans">%</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">Trip threshold</div>
+                  <div className="text-[10px] text-slate-400 font-sans mt-0.5">Trip threshold</div>
                 </div>
 
                 {/* 3. Queue Deferral RPM */}
                 <div className="p-3.5 rounded-xl bg-[#070a13] border border-violet-500/20 hover:border-violet-500/40 transition-colors">
-                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-sans font-medium mb-1">
                     <Layers className="w-3.5 h-3.5 text-violet-400" />
                     <span>Queue Deferral</span>
                   </div>
-                  <div className="text-lg sm:text-xl font-bold font-mono text-violet-300">
+                  <div className="text-lg sm:text-xl font-semibold font-mono tabular-nums text-violet-300">
                     {threshold.queue_deferral_rpm}
-                    <span className="text-xs text-slate-500 ml-1 font-normal">rpm</span>
+                    <span className="text-xs text-slate-400 ml-1 font-normal font-sans">rpm</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">Async buffer point</div>
+                  <div className="text-[10px] text-slate-400 font-sans mt-0.5">Async buffer point</div>
                 </div>
 
                 {/* 4. Load Shedding */}
                 <div className="p-3.5 rounded-xl bg-[#070a13] border border-amber-500/20 hover:border-amber-500/40 transition-colors">
-                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-sans font-medium mb-1">
                     <Flame className="w-3.5 h-3.5 text-amber-400" />
                     <span>Load Shedding</span>
                   </div>
-                  <div className="text-lg sm:text-xl font-bold font-mono text-amber-300">
+                  <div className="text-lg sm:text-xl font-semibold font-mono tabular-nums text-amber-300">
                     {threshold.load_shedding_rpm}
-                    <span className="text-xs text-slate-500 ml-1 font-normal">rpm</span>
+                    <span className="text-xs text-slate-400 ml-1 font-normal font-sans">rpm</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">Backpressure ceiling</div>
+                  <div className="text-[10px] text-slate-400 font-sans mt-0.5">Backpressure ceiling</div>
                 </div>
 
                 {/* 5. Rate Limit */}
                 <div className="p-3.5 rounded-xl bg-[#070a13] border border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
-                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-sans font-medium mb-1">
                     <Users className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Rate Limit</span>
                   </div>
-                  <div className="text-lg sm:text-xl font-bold font-mono text-emerald-300">
+                  <div className="text-lg sm:text-xl font-semibold font-mono tabular-nums text-emerald-300">
                     {threshold.rate_limit_customer_rpm}
-                    <span className="text-xs text-slate-500 ml-1 font-normal">rpm</span>
+                    <span className="text-xs text-slate-400 ml-1 font-normal font-sans">rpm</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">Per-customer quota</div>
+                  <div className="text-[10px] text-slate-400 font-sans mt-0.5">Per-customer quota</div>
                 </div>
 
                 {/* 6. Adaptive Timeout */}
                 <div className="p-3.5 rounded-xl bg-[#070a13] border border-orange-500/20 hover:border-orange-500/40 transition-colors">
-                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-mono mb-1">
+                  <div className="flex items-center gap-1.5 text-slate-400 text-xs font-sans font-medium mb-1">
                     <Clock className="w-3.5 h-3.5 text-orange-400" />
                     <span>Adaptive Timeout</span>
                   </div>
-                  <div className="text-lg sm:text-xl font-bold font-mono text-orange-300">
+                  <div className="text-lg sm:text-xl font-semibold font-mono tabular-nums text-orange-300">
                     {threshold.adaptive_timeout_latency_ms || 2000}
-                    <span className="text-xs text-slate-500 ml-1 font-normal">ms</span>
+                    <span className="text-xs text-slate-400 ml-1 font-normal font-sans">ms</span>
                   </div>
-                  <div className="text-[10px] text-slate-500 font-mono mt-0.5">P99 spike limit</div>
+                  <div className="text-[10px] text-slate-400 font-sans mt-0.5">P99 spike limit</div>
                 </div>
               </div>
 
               {/* AI Reasoning Container */}
-              <div className="p-4 rounded-xl bg-[#070a13]/80 border border-white/[0.08] relative">
+              <div className="p-4 rounded-xl bg-[#070a13]/80 border border-white/8 relative">
                 <div className="flex items-start gap-2.5">
                   <div className="p-1 rounded-md bg-cyan-500/10 text-cyan-400 shrink-0 mt-0.5">
-                    <Sparkles className="w-3.5 h-3.5" />
+                    <Brain className="w-3.5 h-3.5" />
                   </div>
                   <div>
-                    <div className="text-xs font-mono font-semibold text-cyan-300 mb-1">
+                    <div className="text-xs font-sans font-semibold text-cyan-300 mb-1">
                       AI Reasoning & Control Strategy
                     </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">
+                    <p className="text-xs text-slate-300 leading-relaxed font-sans">
                       {threshold.reasoning}
                     </p>
                   </div>
@@ -231,13 +225,13 @@ export function AIThresholdsTable({
               </div>
 
               {/* Card Footer */}
-              <div className="flex items-center justify-between pt-3 mt-3 border-t border-white/[0.04] text-[11px] font-mono text-slate-500">
+              <div className="flex items-center justify-between pt-3 mt-3 border-t border-white/4 text-xs font-sans text-slate-400">
                 <div className="flex items-center gap-1.5">
-                  <Clock className="w-3 h-3 text-slate-400" />
-                  <span>Optimized {formatDate(threshold.last_updated)}</span>
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Optimized <strong className="font-mono tabular-nums text-slate-300 font-normal">{formatDate(threshold.last_updated)}</strong></span>
                 </div>
-                <div className="flex items-center gap-1.5 text-emerald-400">
-                  <CheckCircle2 className="w-3 h-3" />
+                <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Enforced at Edge</span>
                 </div>
               </div>
