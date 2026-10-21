@@ -1,6 +1,5 @@
 import { Service } from "@/lib/types";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle,
   Zap,
@@ -135,14 +134,14 @@ export function ServiceCard({ service, onDelete }: ServiceCardProps) {
         )}
 
         <Link href={`/services/${service.name}`} className="block">
-          <Card className="h-full bg-[#0d1527]/80 backdrop-blur-xl border border-blue-500/15 hover:border-cyan-500/40 transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-500/10 hover:-translate-y-1 cursor-pointer overflow-hidden relative">
+          <Card className="h-full bg-[#0d1527] border border-blue-500/15 hover:border-cyan-500/40 transition-colors rounded-xl cursor-pointer overflow-hidden relative">
             <CardHeader className="relative p-5 pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2.5 text-lg font-mono">
+                <CardTitle className="flex items-center gap-2.5  font-mono text-2xl">
                   <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 group-hover:border-cyan-400/50 transition-colors">
                     <Server className="w-4 h-4" />
                   </div>
-                  <span className="group-hover:text-cyan-300 transition-colors text-white">
+                  <span className="group-hover:text-cyan-300 transition-colors text-white  ">
                     {service.name}
                   </span>
                 </CardTitle>

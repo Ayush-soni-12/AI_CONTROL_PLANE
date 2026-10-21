@@ -16,27 +16,36 @@ interface ErrorRateChartProps {
   signals?: {
     timestamp: string;
     latency_ms: number;
-    status: "success" | "error";
+    status: string;
   }[];
   limit?: number;
   windowSize?: number;
 }
 
+const isErrorStatus = (st?: string | number) => {
+  if (!st) return false;
+  if (typeof st === "number") return st >= 400 && ![402, 429].includes(st);
+  const s = String(st).toLowerCase().trim();
+  return s === "error" || s === "down" || s === "failed" || (s.startsWith("5") && s.length === 3);
+};
+
 export function ErrorRateChart({
   signals = [],
-  limit = 25,
+  limit,
   windowSize = 5,
 }: ErrorRateChartProps) {
   const hasSignals = signals && signals.length > 0;
   const now = new Date();
 
-  const viewSignals = signals.slice(0, limit);
+  const viewSignals = hasSignals
+    ? (limit ? signals.slice(-limit) : signals)
+    : [];
 
   const chartData = hasSignals
     ? viewSignals.map((signal, idx, arr) => {
         const endIdx = Math.min(idx + windowSize, arr.length);
         const window = arr.slice(idx, endIdx);
-        const errorCount = window.filter((s) => s.status === "error").length;
+        const errorCount = window.filter((s) => isErrorStatus(s.status)).length;
         const errorRate = window.length > 0 ? (errorCount / window.length) * 100 : 0;
         const date = new Date(signal.timestamp);
 
@@ -50,7 +59,13 @@ export function ErrorRateChart({
             second: "2-digit",
             hour12: false,
           }),
-          fullTimestamp: date.toLocaleString(),
+          fullTimestamp: date.toLocaleString("en-US", {
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
         };
       })
     : Array.from({ length: 12 }).map((_, i) => {
@@ -72,36 +87,30 @@ export function ErrorRateChart({
   const xAxisInterval = Math.max(0, Math.floor(chartData.length / 6));
 
   return (
-    <Card className="border border-blue-500/15 bg-[#0d1527]/85 backdrop-blur-xl shadow-2xl shadow-black/40">
-      <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-4 border-b border-slate-800/60">
+    <Card className="border border-amber-500/20 bg-[#0d1527] rounded-xl">
+      <CardHeader className="p-4 sm:p-5 border-b border-slate-800/80">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4">
-          <CardTitle className="flex items-center gap-2.5 text-base sm:text-lg text-white font-bold">
+          <CardTitle className="flex items-center gap-2.5 text-base font-semibold text-white tracking-tight">
             <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/25">
-              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+              <AlertTriangle className="w-4 h-4 shrink-0" />
             </div>
-            <span>Rolling Error Rate & Anomalies</span>
+            <span>Rolling Error Rate &amp; Anomalies</span>
           </CardTitle>
-          <div className="flex items-center gap-2 text-xs font-mono text-emerald-400">
-            <ShieldCheck className="w-4 h-4" />
-            <span>5-request sliding window</span>
+          <div className="flex items-center gap-1.5 text-xs font-mono text-emerald-400">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <span>{hasSignals ? `Last ${chartData.length} signals` : "5-request sliding window"}</span>
           </div>
         </div>
-        <p className="text-[11px] text-slate-400 mt-1">
+        <p className="text-xs text-slate-400 mt-1">
           Moving average error rate detection triggering adaptive mitigation thresholds
         </p>
       </CardHeader>
 
-      <CardContent className="p-4 sm:p-6 pt-4">
+      <CardContent className="p-4 sm:p-5 pt-4">
         <div className="overflow-x-auto overflow-y-hidden">
-          <div className="min-w-[550px] sm:min-w-0">
+          <div className="min-w-137.5 sm:min-w-0">
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="errorGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="#1e293b"
@@ -127,10 +136,9 @@ export function ErrorRateChart({
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: "#09101f",
+                    backgroundColor: "#091020",
                     borderColor: "rgba(245, 158, 11, 0.4)",
-                    borderRadius: "12px",
-                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.8)",
+                    borderRadius: "8px",
                     color: "#f8fafc",
                     fontSize: "12px",
                     fontFamily: "monospace",
@@ -144,27 +152,23 @@ export function ErrorRateChart({
                   }
                   cursor={{
                     stroke: "#f59e0b",
-                    strokeWidth: 1.5,
-                    strokeDasharray: "4 4",
+                    strokeWidth: 1,
+                    strokeDasharray: "3 3",
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="errorRate"
                   stroke="#f59e0b"
-                  strokeWidth={2.5}
-                  fill="url(#errorGradient)"
-                  dot={{
-                    fill: "#f59e0b",
-                    r: 3.5,
-                    strokeWidth: 2,
-                    stroke: "#070a13",
-                  }}
+                  strokeWidth={2}
+                  fill="#f59e0b"
+                  fillOpacity={0.08}
+                  dot={false}
                   activeDot={{
-                    r: 6,
-                    fill: "#fcd34d",
-                    stroke: "#f59e0b",
-                    strokeWidth: 2.5,
+                    r: 4,
+                    fill: "#f59e0b",
+                    stroke: "#070a13",
+                    strokeWidth: 2,
                   }}
                   isAnimationActive={false}
                 />
