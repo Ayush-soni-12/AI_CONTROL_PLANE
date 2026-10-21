@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef } from "react";
+import Link from "next/link";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -14,372 +15,221 @@ import {
   Timer,
   GitPullRequest,
   Flag,
+  ArrowRight,
   LucideIcon,
-  Sparkles,
 } from "lucide-react";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
+
+interface FeatureTheme {
+  iconColor: string;
+  iconBg: string;
+  iconBorder: string;
+  badgeColor: string;
+  badgeBg: string;
+  badgeBorder: string;
+  hoverBorder: string;
+}
 
 interface Feature {
   icon: LucideIcon;
   title: string;
   badge: string;
   description: string;
-  details: string[];
-  color: "cyan" | "amber" | "blue" | "violet" | "emerald" | "purple" | "sky" | "teal" | "rose";
-  floatDelay: string;
-  floatDuration: string;
+  keywords: string[];
+  theme: FeatureTheme;
 }
 
 const features: Feature[] = [
   {
     icon: Database,
     title: "Smart Caching",
-    badge: "SUB-MS STATE",
-    description:
-      "AI-driven response caching with automatic invalidation and Redis-backed high performance storage.",
-    details: [
-      "Redis-backed storage",
-      "Auto cache invalidation",
-      "Per-endpoint policies",
-    ],
-    color: "cyan",
-    floatDelay: "0s",
-    floatDuration: "4.5s",
+    badge: "SUB-MS CACHE",
+    description: "Returns hot read responses from in-memory cache & Redis with zero network hops on cache hit.",
+    keywords: ["Redis-backed", "Auto invalidation", "Per-route TTL", "<0.4ms hit"],
+    theme: {
+      iconColor: "text-emerald-400",
+      iconBg: "bg-emerald-500/10",
+      iconBorder: "border-emerald-500/30",
+      badgeColor: "text-emerald-300",
+      badgeBg: "bg-emerald-500/10",
+      badgeBorder: "border-emerald-500/30",
+      hoverBorder: "hover:border-emerald-500/40",
+    },
   },
   {
     icon: ShieldAlert,
     title: "Circuit Breaker",
     badge: "FAIL-OPEN TRIP",
-    description:
-      "Automatic failure detection with graceful degradation, adaptive tripping, and intelligent auto-recovery.",
-    details: [
-      "Failure threshold detection",
-      "Graceful degradation",
-      "Self-healing probes",
-    ],
-    color: "amber",
-    floatDelay: "0.6s",
-    floatDuration: "5.0s",
+    description: "Trips fail-open state when error thresholds exceed tolerance, preventing cascading downstream collapse.",
+    keywords: ["Error thresholds", "Graceful fallback", "Self-healing probes", "Fail-open"],
+    theme: {
+      iconColor: "text-amber-400",
+      iconBg: "bg-amber-500/10",
+      iconBorder: "border-amber-500/30",
+      badgeColor: "text-amber-300",
+      badgeBg: "bg-amber-500/10",
+      badgeBorder: "border-amber-500/30",
+      hoverBorder: "hover:border-amber-500/40",
+    },
   },
   {
     icon: Gauge,
     title: "Rate Limiting",
-    badge: "SLIDING WINDOW",
-    description:
-      "Intelligent per-user, per-IP and per-endpoint throttling with priority token bucket scheduling.",
-    details: [
-      "Per-user / IP limits",
-      "Priority-based access",
-      "Sliding window algorithm",
-    ],
-    color: "blue",
-    floatDelay: "1.2s",
-    floatDuration: "4.8s",
+    badge: "TOKEN BUCKET",
+    description: "Atomic sliding window counters enforce per-caller quotas across IP, tenant, and autonomous agent tiers.",
+    keywords: ["Token bucket", "Per-caller quotas", "x-agent-id tiers", "Zero locks"],
+    theme: {
+      iconColor: "text-amber-400",
+      iconBg: "bg-amber-500/10",
+      iconBorder: "border-amber-500/30",
+      badgeColor: "text-amber-300",
+      badgeBg: "bg-amber-500/10",
+      badgeBorder: "border-amber-500/30",
+      hoverBorder: "hover:border-amber-500/40",
+    },
   },
   {
     icon: Clock,
     title: "Queue Deferral",
-    badge: "AMQP DEFERRAL",
-    description:
-      "Smart asynchronous request queueing under heavy load with priority-based worker scheduling.",
-    details: [
-      "Request queuing",
-      "Priority scheduling",
-      "Backpressure handling",
-    ],
-    color: "violet",
-    floatDelay: "0.3s",
-    floatDuration: "5.2s",
+    badge: "AMQP BUFFERING",
+    description: "Smooths sudden traffic bursts by diverting asynchronous workloads to RabbitMQ priority queues.",
+    keywords: ["RabbitMQ routing", "Burst smoothing", "Backpressure", "Async AMQP"],
+    theme: {
+      iconColor: "text-blue-400",
+      iconBg: "bg-blue-500/10",
+      iconBorder: "border-blue-500/30",
+      badgeColor: "text-blue-300",
+      badgeBg: "bg-blue-500/10",
+      badgeBorder: "border-blue-500/30",
+      hoverBorder: "hover:border-blue-500/40",
+    },
   },
   {
     icon: ShieldOff,
     title: "Load Shedding",
     badge: "PRIORITY SHED",
-    description:
-      "Graceful overload protection that intelligently drops low-priority requests during traffic surges.",
-    details: [
-      "Overload protection",
-      "Smart request dropping",
-      "Core preservation",
-    ],
-    color: "emerald",
-    floatDelay: "0.9s",
-    floatDuration: "4.6s",
+    description: "Sheds lower-priority background tasks under heavy CPU/RAM pressure to preserve critical user SLAs.",
+    keywords: ["SLA preservation", "CPU/RAM triggers", "Drop policies", "Triage headers"],
+    theme: {
+      iconColor: "text-rose-400",
+      iconBg: "bg-rose-500/10",
+      iconBorder: "border-rose-500/30",
+      badgeColor: "text-rose-300",
+      badgeBg: "bg-rose-500/10",
+      badgeBorder: "border-rose-500/30",
+      hoverBorder: "hover:border-rose-500/40",
+    },
   },
   {
     icon: Brain,
     title: "AI Insights",
     badge: "GEMINI REASONING",
-    description:
-      "Gemini AI continuous analysis with dynamic threshold tuning, root cause localization, and anomaly alerts.",
-    details: ["Gemini AI analysis", "Dynamic thresholds", "Anomaly detection"],
-    color: "purple",
-    floatDelay: "1.5s",
-    floatDuration: "4.9s",
+    description: "Gemini 2.5 background workers evaluate cluster signals, flag anomaly drift, and suggest tuned thresholds.",
+    keywords: ["Gemini reasoning", "Latency drift alerts", "Dynamic thresholds", "Anomaly score"],
+    theme: {
+      iconColor: "text-violet-400",
+      iconBg: "bg-violet-500/10",
+      iconBorder: "border-violet-500/30",
+      badgeColor: "text-violet-300",
+      badgeBg: "bg-violet-500/10",
+      badgeBorder: "border-violet-500/30",
+      hoverBorder: "hover:border-violet-500/40",
+    },
   },
   {
     icon: Timer,
     title: "Adaptive Timeout",
-    badge: "LATENCY TAIL",
-    description:
-      "Dynamic request timeout that auto-adjusts based on real-time latency percentiles, preventing downstream hangs.",
-    details: ["Latency-aware", "Auto-adjust", "Graceful abort"],
-    color: "sky",
-    floatDelay: "0.4s",
-    floatDuration: "4.7s",
+    badge: "DYNAMIC P99",
+    description: "Calculates dynamic p99 deadline budgets with jitter calibration to abort hung requests immediately.",
+    keywords: ["Rolling p99", "Anti-hang guard", "Dynamic deadlines", "Instant abort"],
+    theme: {
+      iconColor: "text-cyan-400",
+      iconBg: "bg-cyan-500/10",
+      iconBorder: "border-cyan-500/30",
+      badgeColor: "text-cyan-300",
+      badgeBg: "bg-cyan-500/10",
+      badgeBorder: "border-cyan-500/30",
+      hoverBorder: "hover:border-cyan-500/40",
+    },
   },
   {
     icon: GitPullRequest,
     title: "Request Coalescing",
-    badge: "ZERO THUNDERING",
-    description:
-      "Combines identical concurrent in-flight requests to eliminate duplicate queries and reduce backend pressure.",
-    details: ["Deduplicate", "Batch responses", "Zero thundering herd"],
-    color: "teal",
-    floatDelay: "1.0s",
-    floatDuration: "5.1s",
+    badge: "SINGLE-FLIGHT",
+    description: "Collapses concurrent duplicate requests into a single-flight execution to kill thundering herds.",
+    keywords: ["Single-flight exec", "Deduplication", "Zero thundering herd", "Shared response"],
+    theme: {
+      iconColor: "text-cyan-400",
+      iconBg: "bg-cyan-500/10",
+      iconBorder: "border-cyan-500/30",
+      badgeColor: "text-cyan-300",
+      badgeBg: "bg-cyan-500/10",
+      badgeBorder: "border-cyan-500/30",
+      hoverBorder: "hover:border-cyan-500/40",
+    },
   },
   {
     icon: Flag,
     title: "Feature Flag Engine",
-    badge: "INSTANT TOGGLE",
-    description:
-      "Fine-grained rollout control for microservice capabilities with percentage-based targeting and instant kill-switches.",
-    details: ["Gradual rollout", "Targeted tenants", "Instant toggle"],
-    color: "rose",
-    floatDelay: "0.7s",
-    floatDuration: "4.4s",
+    badge: "RUNTIME TOGGLES",
+    description: "Dynamically flips kill-switches, rolls out canary traffic, and targets tenants without service redeployment.",
+    keywords: ["Instant kill-switch", "Canary rollouts", "Tenant targeting", "Zero redeploy"],
+    theme: {
+      iconColor: "text-violet-400",
+      iconBg: "bg-violet-500/10",
+      iconBorder: "border-violet-500/30",
+      badgeColor: "text-violet-300",
+      badgeBg: "bg-violet-500/10",
+      badgeBorder: "border-violet-500/30",
+      hoverBorder: "hover:border-violet-500/40",
+    },
   },
 ];
 
-const colorThemeMap = {
-  cyan: {
-    border: "border-cyan-500/25 group-hover:border-cyan-400/80",
-    glow: "rgba(0, 240, 255, 0.22)",
-    shadow: "shadow-[0_0_35px_rgba(0,240,255,0.22)]",
-    title: "group-hover:text-cyan-300",
-    iconBg: "bg-cyan-500/10 border-cyan-500/30 text-cyan-400",
-    badge: "bg-cyan-500/10 text-cyan-300 border-cyan-500/30",
-    pill: "border-slate-800 hover:border-cyan-500/40 hover:text-cyan-300",
-  },
-  amber: {
-    border: "border-amber-500/25 group-hover:border-amber-400/80",
-    glow: "rgba(245, 158, 11, 0.22)",
-    shadow: "shadow-[0_0_35px_rgba(245,158,11,0.22)]",
-    title: "group-hover:text-amber-300",
-    iconBg: "bg-amber-500/10 border-amber-500/30 text-amber-400",
-    badge: "bg-amber-500/10 text-amber-300 border-amber-500/30",
-    pill: "border-slate-800 hover:border-amber-500/40 hover:text-amber-300",
-  },
-  blue: {
-    border: "border-blue-500/25 group-hover:border-blue-400/80",
-    glow: "rgba(59, 130, 246, 0.22)",
-    shadow: "shadow-[0_0_35px_rgba(59,130,246,0.22)]",
-    title: "group-hover:text-blue-300",
-    iconBg: "bg-blue-500/10 border-blue-500/30 text-blue-400",
-    badge: "bg-blue-500/10 text-blue-300 border-blue-500/30",
-    pill: "border-slate-800 hover:border-blue-500/40 hover:text-blue-300",
-  },
-  violet: {
-    border: "border-violet-500/25 group-hover:border-violet-400/80",
-    glow: "rgba(139, 92, 246, 0.22)",
-    shadow: "shadow-[0_0_35px_rgba(139,92,246,0.22)]",
-    title: "group-hover:text-violet-300",
-    iconBg: "bg-violet-500/10 border-violet-500/30 text-violet-400",
-    badge: "bg-violet-500/10 text-violet-300 border-violet-500/30",
-    pill: "border-slate-800 hover:border-violet-500/40 hover:text-violet-300",
-  },
-  emerald: {
-    border: "border-emerald-500/25 group-hover:border-emerald-400/80",
-    glow: "rgba(16, 185, 129, 0.22)",
-    shadow: "shadow-[0_0_35px_rgba(16,185,129,0.22)]",
-    title: "group-hover:text-emerald-300",
-    iconBg: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
-    badge: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
-    pill: "border-slate-800 hover:border-emerald-500/40 hover:text-emerald-300",
-  },
-  purple: {
-    border: "border-purple-500/25 group-hover:border-purple-400/80",
-    glow: "rgba(168, 85, 247, 0.24)",
-    shadow: "shadow-[0_0_35px_rgba(168,85,247,0.24)]",
-    title: "group-hover:text-purple-300",
-    iconBg: "bg-purple-500/10 border-purple-500/30 text-purple-400",
-    badge: "bg-purple-500/10 text-purple-300 border-purple-500/30",
-    pill: "border-slate-800 hover:border-purple-500/40 hover:text-purple-300",
-  },
-  sky: {
-    border: "border-sky-500/25 group-hover:border-sky-400/80",
-    glow: "rgba(14, 165, 233, 0.22)",
-    shadow: "shadow-[0_0_35px_rgba(14,165,233,0.22)]",
-    title: "group-hover:text-sky-300",
-    iconBg: "bg-sky-500/10 border-sky-500/30 text-sky-400",
-    badge: "bg-sky-500/10 text-sky-300 border-sky-500/30",
-    pill: "border-slate-800 hover:border-sky-500/40 hover:text-sky-300",
-  },
-  teal: {
-    border: "border-teal-500/25 group-hover:border-teal-400/80",
-    glow: "rgba(20, 184, 166, 0.22)",
-    shadow: "shadow-[0_0_35px_rgba(20,184,166,0.22)]",
-    title: "group-hover:text-teal-300",
-    iconBg: "bg-teal-500/10 border-teal-500/30 text-teal-400",
-    badge: "bg-teal-500/10 text-teal-300 border-teal-500/30",
-    pill: "border-slate-800 hover:border-teal-500/40 hover:text-teal-300",
-  },
-  rose: {
-    border: "border-rose-500/25 group-hover:border-rose-400/80",
-    glow: "rgba(244, 63, 94, 0.22)",
-    shadow: "shadow-[0_0_35px_rgba(244,63,94,0.22)]",
-    title: "group-hover:text-rose-300",
-    iconBg: "bg-rose-500/10 border-rose-500/30 text-rose-400",
-    badge: "bg-rose-500/10 text-rose-300 border-rose-500/30",
-    pill: "border-slate-800 hover:border-rose-500/40 hover:text-rose-300",
-  },
-};
-
-function InteractiveFeatureCard({ feature }: { feature: Feature }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [tilt, setTilt] = useState({
-    rotateX: 0,
-    rotateY: 0,
-    translateX: 0,
-    translateY: 0,
-    isHovered: false,
-    mouseX: 50,
-    mouseY: 50,
-  });
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-
-    const rotateX = ((y - centerY) / centerY) * -12;
-    const rotateY = ((x - centerX) / centerX) * 12;
-
-    const translateX = ((x - centerX) / centerX) * 7;
-    const translateY = ((y - centerY) / centerY) * 7;
-
-    setTilt({
-      rotateX,
-      rotateY,
-      translateX,
-      translateY,
-      isHovered: true,
-      mouseX: x,
-      mouseY: y,
-    });
-  };
-
-  const handleMouseLeave = () => {
-    setTilt((prev) => ({
-      ...prev,
-      rotateX: 0,
-      rotateY: 0,
-      translateX: 0,
-      translateY: 0,
-      isHovered: false,
-    }));
-  };
-
+function FeatureCard({ feature }: { feature: Feature }) {
   const Icon = feature.icon;
-  const theme = colorThemeMap[feature.color];
 
   return (
     <div
-      className="feature-card perspective-[1000px] w-full"
-      style={{ opacity: 0 }}
+      className={`feature-card rounded-xl bg-[#090d16]/90 border border-white/10 ${feature.theme.hoverBorder} p-5 transition-all duration-200 flex flex-col justify-between shadow-md backdrop-blur-md group`}
     >
-      <div
-        ref={cardRef}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-        className={`group relative rounded-2xl p-6 select-none bg-[#091122]/90 backdrop-blur-xl border ${theme.border} transition-all ${
-          tilt.isHovered
-            ? `${theme.shadow} z-20`
-            : "border-blue-500/15 hover:border-cyan-500/40"
-        }`}
-        style={{
-          transformStyle: "preserve-3d",
-          transform: tilt.isHovered
-            ? `perspective(1000px) rotateX(${tilt.rotateX}deg) rotateY(${tilt.rotateY}deg) translate3d(${tilt.translateX}px, ${tilt.translateY}px, 20px) scale3d(1.03, 1.03, 1.03)`
-            : "perspective(1000px) rotateX(0deg) rotateY(0deg) translate3d(0px, 0px, 0px) scale3d(1, 1, 1)",
-          transition: tilt.isHovered
-            ? "transform 0.08s ease-out, border-color 0.2s, box-shadow 0.2s"
-            : "transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.4s, box-shadow 0.4s",
-          animation: !tilt.isHovered
-            ? `floatKeyframe ${feature.floatDuration} ease-in-out infinite`
-            : "none",
-          animationDelay: feature.floatDelay,
-        }}
-      >
-        {/* Dynamic Cursor-Tracking Holographic Radial Spotlight */}
-        <div
-          className="absolute inset-0 rounded-2xl pointer-events-none transition-opacity duration-300"
-          style={{
-            opacity: tilt.isHovered ? 1 : 0,
-            background: `radial-gradient(280px circle at ${tilt.mouseX}px ${tilt.mouseY}px, ${theme.glow}, transparent 75%)`,
-          }}
-        />
-
-        {/* Ambient Subtle Shimmer */}
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-500/5 via-transparent to-purple-500/5 pointer-events-none opacity-40 group-hover:opacity-100 transition-opacity duration-500" />
-
-        {/* Corner Cyber Crosshairs */}
-        <span className="absolute top-2.5 left-2.5 w-1.5 h-1.5 border-t border-l border-slate-600 group-hover:border-cyan-400 transition-colors pointer-events-none" />
-        <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 border-t border-r border-slate-600 group-hover:border-cyan-400 transition-colors pointer-events-none" />
-        <span className="absolute bottom-2.5 left-2.5 w-1.5 h-1.5 border-b border-l border-slate-600 group-hover:border-cyan-400 transition-colors pointer-events-none" />
-        <span className="absolute bottom-2.5 right-2.5 w-1.5 h-1.5 border-b border-r border-slate-600 group-hover:border-cyan-400 transition-colors pointer-events-none" />
-
-        {/* 3D Depth Layer */}
-        <div
-          className="relative z-10"
-          style={{
-            transform: tilt.isHovered ? "translateZ(30px)" : "translateZ(0px)",
-            transformStyle: "preserve-3d",
-            transition: "transform 0.25s ease-out",
-          }}
-        >
-          {/* Header with Icon and Category Badge */}
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div
-              className={`p-3 rounded-xl ${theme.iconBg} border shadow-inner group-hover:scale-110 transition-transform duration-300`}
-            >
-              <Icon className="w-5 h-5" />
-            </div>
-            <span
-              className={`text-[10px] font-mono font-semibold px-2.5 py-1 rounded-full border ${theme.badge} backdrop-blur-md`}
-            >
-              {feature.badge}
-            </span>
-          </div>
-
-          {/* Title & Description */}
-          <h3
-            className={`text-lg font-bold text-white mb-2 ${theme.title} transition-colors duration-200 font-mono`}
+      <div>
+        {/* Header with Icon and Category Badge */}
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div
+            className={`p-2 rounded-lg ${feature.theme.iconBg} ${feature.theme.iconBorder} border`}
           >
-            {feature.title}
-          </h3>
-          <p className="text-slate-400 text-xs sm:text-sm leading-relaxed mb-4">
-            {feature.description}
-          </p>
-
-          {/* Detail pills */}
-          <div className="feature-details flex flex-wrap gap-1.5 pt-1">
-            {feature.details.map((detail) => (
-              <span
-                key={detail}
-                className={`detail-pill text-[11px] font-mono font-medium px-2.5 py-1 rounded-lg bg-[#070d1a] text-slate-300 border ${theme.pill} transition-all duration-200`}
-                style={{ opacity: 0 }}
-              >
-                {detail}
-              </span>
-            ))}
+            <Icon className={`w-4 h-4 ${feature.theme.iconColor}`} />
           </div>
+          <span
+            className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded ${feature.theme.badgeBg} ${feature.theme.badgeBorder} border ${feature.theme.badgeColor}`}
+          >
+            {feature.badge}
+          </span>
         </div>
+
+        {/* Feature Title */}
+        <h3 className="text-base font-sans font-semibold text-white mb-1.5 tracking-tight">
+          {feature.title}
+        </h3>
+
+        {/* 1-Line Concrete Technical Description */}
+        <p className="text-xs font-sans text-slate-300 leading-relaxed mb-4">
+          {feature.description}
+        </p>
+      </div>
+
+      {/* Keywords / Technical Tags */}
+      <div className="flex flex-wrap gap-1.5 pt-3 border-t border-white/10">
+        {feature.keywords.map((kw) => (
+          <span
+            key={kw}
+            className="text-[10px] font-mono text-slate-300 bg-white/5 border border-white/10 px-2 py-0.5 rounded font-normal"
+          >
+            {kw}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -391,15 +241,15 @@ export function FeatureShowcase() {
 
   useGSAP(
     () => {
-      // Heading animation
+      // Subtle entrance for heading
       gsap.fromTo(
         headingRef.current,
-        { opacity: 0, y: 30 },
+        { opacity: 0, y: 8 },
         {
           opacity: 1,
           y: 0,
-          duration: 0.8,
-          ease: "power3.out",
+          duration: 0.4,
+          ease: "power2.out",
           scrollTrigger: {
             trigger: headingRef.current,
             start: "top 85%",
@@ -408,89 +258,65 @@ export function FeatureShowcase() {
         },
       );
 
-      // Cards stagger animation
+      // Subtle entrance for cards
       const cards = sectionRef.current?.querySelectorAll(".feature-card");
-      cards?.forEach((card, index) => {
-        const fromLeft = index % 2 === 0;
+      if (cards && cards.length > 0) {
         gsap.fromTo(
-          card,
-          {
-            opacity: 0,
-            x: fromLeft ? -30 : 30,
-            y: 20,
-          },
+          cards,
+          { opacity: 0, y: 8 },
           {
             opacity: 1,
-            x: 0,
             y: 0,
-            duration: 0.7,
-            ease: "power3.out",
+            duration: 0.35,
+            stagger: 0.04,
+            ease: "power2.out",
             scrollTrigger: {
-              trigger: card,
+              trigger: sectionRef.current,
               start: "top 85%",
               once: true,
             },
           },
         );
-      });
-
-      // Animate detail pills inside cards
-      const detailGroups =
-        sectionRef.current?.querySelectorAll(".feature-details");
-      detailGroups?.forEach((group) => {
-        const pills = group.querySelectorAll(".detail-pill");
-        gsap.fromTo(
-          pills,
-          { opacity: 0, scale: 0.8 },
-          {
-            opacity: 1,
-            scale: 1,
-            duration: 0.4,
-            stagger: 0.08,
-            ease: "back.out(1.5)",
-            scrollTrigger: {
-              trigger: group,
-              start: "top 90%",
-              once: true,
-            },
-          },
-        );
-      });
+      }
     },
     { scope: sectionRef },
   );
 
   return (
-    <div ref={sectionRef} className="mb-28 relative z-10">
+    <section ref={sectionRef} className="py-24 relative z-10 max-w-[1152px] mx-auto px-4 sm:px-6">
       {/* Section heading */}
-      <div
-        ref={headingRef}
-        className="text-center mb-14"
-        style={{ opacity: 0 }}
-      >
-        <span className="inline-block text-xs font-mono font-semibold text-cyan-400 bg-cyan-500/10 px-3.5 py-1 rounded-full mb-3 border border-cyan-500/30 shadow-[0_0_12px_rgba(0,240,255,0.15)]">
-          BUILT-IN RESILIENCE
-        </span>
-        <h2 className="text-3xl sm:text-5xl font-bold text-white mb-3 tracking-tight">
-          Everything You Need to{" "}
-          <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
-            Govern
-          </span>{" "}
-          Your Microservices
+      <div ref={headingRef} className="text-center mb-12" style={{ opacity: 0 }}>
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 mb-4 shadow-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs font-mono text-cyan-300 uppercase tracking-wider font-medium">
+            Decision Policies
+          </span>
+        </div>
+        <h2 className="text-2xl sm:text-4xl font-semibold font-sans text-white tracking-tight mb-3 text-balance">
+          Autonomous decisions for your runtime traffic.
         </h2>
-        <p className="text-slate-400 max-w-2xl mx-auto text-sm sm:text-base">
-          High precision traffic mitigation pipelines managed autonomously by AI and executed at sub-millisecond speeds
+        <p className="text-sm sm:text-base font-sans text-slate-300 max-w-2xl mx-auto leading-relaxed text-balance">
+          NeuralControl evaluates live telemetry signals to return instant, sub-millisecond execution decisions that your services act on directly.
         </p>
       </div>
 
-      {/* Features grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      {/* 9 Compact Features Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {features.map((feature) => (
-          <InteractiveFeatureCard key={feature.title} feature={feature} />
+          <FeatureCard key={feature.title} feature={feature} />
         ))}
       </div>
-    </div>
+
+      {/* Documentation link */}
+      <div className="mt-8 text-center">
+        <Link
+          href="/dashboard/docs"
+          className="inline-flex items-center gap-1.5 text-xs font-mono text-cyan-400 hover:text-cyan-300 transition-colors"
+        >
+          <span>See documentation for middleware integration &amp; policy rules</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+    </section>
   );
 }
-
-
