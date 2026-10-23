@@ -142,7 +142,7 @@ export default function AIInsightsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div className="p-4 rounded-xl bg-[#091020] border border-cyan-500/20">
               <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-sans font-medium text-slate-300">
+                <div className="flex items-center gap-1.5 text-xs font-mono font-medium tracking-wider uppercase text-slate-400">
                   <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
                   <span>Tuned Endpoints</span>
                 </div>
@@ -160,7 +160,7 @@ export default function AIInsightsPage() {
 
             <div className="p-4 rounded-xl bg-[#091020] border border-emerald-500/20">
               <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-sans font-medium text-slate-300">
+                <div className="flex items-center gap-1.5 text-xs font-mono font-medium tracking-wider uppercase text-slate-400">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Mean AI Confidence</span>
                 </div>
@@ -178,7 +178,7 @@ export default function AIInsightsPage() {
 
             <div className="p-4 rounded-xl bg-[#091020] border border-rose-500/20">
               <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-sans font-medium text-slate-300">
+                <div className="flex items-center gap-1.5 text-xs font-mono font-medium tracking-wider uppercase text-slate-400">
                   <Brain className="w-3.5 h-3.5 text-rose-400" />
                   <span>Cognitive Signals</span>
                 </div>
