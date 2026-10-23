@@ -31,42 +31,45 @@ export function ThresholdInput({
     <div
       className={`rounded-xl border p-3.5 transition-all duration-200 ${
         enabled
-          ? "border-cyan-500/40 bg-cyan-950/20 shadow-[0_0_15px_rgba(0,240,255,0.08)]"
-          : "border-white/[0.06] bg-black/40 hover:border-white/[0.12]"
+          ? "border-[#3f3f46] bg-[#141417]"
+          : "border-[#27272a] bg-[#111113] hover:border-[#3f3f46]"
       }`}
     >
       <div className="flex items-start justify-between gap-3 mb-2.5">
         <div>
           <div className="flex items-center gap-1.5">
-            <Sliders className={`w-3.5 h-3.5 ${enabled ? "text-cyan-400" : "text-slate-500"}`} />
+            <Sliders className={`w-3.5 h-3.5 ${enabled ? "text-[#fafafa]" : "text-[#71717a]"}`} />
             <p className="text-xs font-mono font-semibold text-slate-200">{label}</p>
           </div>
           <p className="text-[11px] font-mono text-slate-400 mt-0.5">{description}</p>
         </div>
 
         <label className="flex items-center gap-2 cursor-pointer shrink-0 mt-0.5 select-none">
-          <span className={`text-[10px] font-mono ${enabled ? "text-cyan-300 font-bold" : "text-slate-500"}`}>
+          <span className={`text-[10px] font-mono font-semibold ${enabled ? "text-[#22c55e]" : "text-[#71717a]"}`}>
             {enabled ? "ACTIVE" : "AI AUTO"}
           </span>
-          <div
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
             onClick={() => onChange(enabled ? null : min)}
             className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer border ${
               enabled
-                ? "bg-cyan-500/30 border-cyan-500/60 shadow-[0_0_10px_rgba(0,240,255,0.3)]"
-                : "bg-slate-800 border-white/[0.1]"
+                ? "bg-[#22c55e] border-[#22c55e]"
+                : "bg-[#27272a] border-[#3f3f46]"
             }`}
           >
             <div
-              className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full transition-all duration-200 ${
-                enabled ? "translate-x-4 bg-cyan-300 shadow-[0_0_8px_#00f0ff]" : "bg-slate-500"
+              className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all duration-200 shadow-sm ${
+                enabled ? "translate-x-4" : "translate-x-0"
               }`}
             />
-          </div>
+          </button>
         </label>
       </div>
 
       {enabled ? (
-        <div className="flex items-center gap-2.5 pt-2 border-t border-cyan-500/20 animate-in fade-in duration-200">
+        <div className="flex items-center gap-2.5 pt-2.5 border-t border-[#27272a] animate-in fade-in duration-200">
           <div className="relative">
             <input
               type="number"
@@ -78,18 +81,18 @@ export function ThresholdInput({
                 const v = parseFloat(e.target.value);
                 onChange(isNaN(v) ? min : v);
               }}
-              className="w-32 bg-black/60 border border-cyan-500/40 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-400 focus:shadow-[0_0_10px_rgba(0,240,255,0.2)] transition-all"
+              className="w-32 bg-[#18181b] border border-[#27272a] focus:border-[#3f3f46] rounded-lg px-2.5 py-1.5 text-xs text-[#fafafa] font-mono focus:outline-none transition-colors"
             />
           </div>
-          <span className="text-xs font-mono text-cyan-300 font-semibold">{unit}</span>
-          <span className="text-[10px] font-mono text-slate-500 ml-auto">
+          <span className="text-xs font-mono text-slate-300 font-semibold">{unit}</span>
+          <span className="text-[10px] font-mono text-[#71717a] ml-auto">
             AI Default: <span className="text-slate-400">{aiDefault}</span>
           </span>
         </div>
       ) : (
-        <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-500 pt-1">
-          <Brain className="w-3 h-3 text-purple-400" />
-          <span>NeuralControl AI calculates dynamically (default: {aiDefault})</span>
+        <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#71717a] pt-1">
+          <Brain className="w-3 h-3 text-slate-400" />
+          <span>NeuralControl AI dynamic limit (nominal: {aiDefault})</span>
         </div>
       )}
     </div>

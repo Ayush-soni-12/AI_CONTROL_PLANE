@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable react-hooks/purity */
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -87,9 +89,9 @@ export function TTLCountdownRing({
         glow: "0 0 8px rgba(245, 158, 11, 0.3)",
       };
     return {
-      stroke: "#10b981",
-      text: "text-emerald-400",
-      glow: "0 0 10px rgba(16, 185, 129, 0.3)",
+      stroke: "#22c55e",
+      text: "text-[#22c55e]",
+      glow: "none",
     };
   }, [isExpired, isExpiringSoon, percent]);
 
@@ -103,7 +105,7 @@ export function TTLCountdownRing({
           width={size}
           height={size}
           viewBox={`0 0 ${size} ${size}`}
-          className="rotate-[-90deg] transform"
+          className="-rotate-90 transform"
         >
           {/* Background circle */}
           <circle
@@ -111,7 +113,7 @@ export function TTLCountdownRing({
             cy={size / 2}
             r={radius}
             fill="transparent"
-            stroke="rgba(255, 255, 255, 0.08)"
+            stroke="#27272a"
             strokeWidth={strokeWidth}
           />
           {/* Animated remaining circle */}
