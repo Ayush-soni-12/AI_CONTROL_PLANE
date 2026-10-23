@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-render */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState, useMemo } from "react";
@@ -17,103 +19,45 @@ import {
   CheckCircle2,
   AlertTriangle,
   Layers,
-  Sparkles,
-  Server,
-  Filter,
+  Zap,
 } from "lucide-react";
 
 const PRESET_ROLLOUTS = [0, 10, 25, 50, 100];
 
 export default function FeatureFlagsPage() {
-  const [serviceName, setServiceName] = useState("demo-service");
-  const [draftService, setDraftService] = useState("demo-service");
+  const [serviceName, setServiceName] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "disabled" | "auto-disabled">("all");
 
   // Create Flag Modal State
   const [showCreate, setShowCreate] = useState(false);
   const [newFlagName, setNewFlagName] = useState("");
-  const [newFlagService, setNewFlagService] = useState("demo-service");
+  const [newFlagService, setNewFlagService] = useState("");
   const [newFlagRollout, setNewFlagRollout] = useState(0);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const { flags, isLoading, error, updateFlag, killFlag, createFlag, refetch } =
-    useFlags(serviceName);
-
   const { services: flagServices, refetch: refetchServices } = useFlagServices();
   const { data: servicesData } = useServices();
 
-  // Dynamically compute real services that exist in the system
+  // Compute live services from API
   const availableServices = useMemo(() => {
     const set = new Set<string>();
-    flagServices.forEach((s) => {
-      if (s && s.trim()) set.add(s.trim());
-    });
     servicesData?.services?.forEach((s) => {
       if (s.name && s.name.trim()) set.add(s.name.trim());
     });
-    if (serviceName && serviceName.trim()) set.add(serviceName.trim());
-    if (set.size === 0) set.add("demo-service");
+    flagServices.forEach((s) => {
+      if (s && s.trim()) set.add(s.trim());
+    });
     return Array.from(set);
-  }, [flagServices, servicesData, serviceName]);
+  }, [flagServices, servicesData]);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newFlagName.trim()) return;
-    setCreating(true);
-    setCreateError(null);
+  const { flags, isLoading: apiLoading, error, updateFlag, killFlag, createFlag, refetch } =
+    useFlags(serviceName);
 
-    const target = newFlagService.trim() || serviceName;
-    const created = await createFlag(
-      newFlagName.trim(),
-      newFlagRollout,
-      target
-    );
-
-    if (created) {
-      setNewFlagName("");
-      setNewFlagRollout(0);
-      setShowCreate(false);
-      refetchServices();
-      if (target && target !== serviceName) {
-        setServiceName(target);
-        setDraftService(target);
-      }
-    } else {
-      setCreateError("Failed to create feature flag. Ensure the name is unique.");
-    }
-    setCreating(false);
-  };
-
-  const handleSelectService = (srv: string) => {
-    setServiceName(srv);
-    setDraftService(srv);
-  };
-
-  // Deduplicated & Filtered Flags
-  const uniqueFlags = useMemo(() => {
-    const seenIds = new Set<string>();
-    const seenKeys = new Set<string>();
-    const unique: typeof flags = [];
-
-    for (const f of flags) {
-      if (!f) continue;
-      const idStr = f.id ? String(f.id) : null;
-      const keyStr = `${f.service_name?.trim().toLowerCase() || ""}:${f.name?.trim().toLowerCase() || ""}`;
-
-      if (idStr && seenIds.has(idStr)) continue;
-      if (keyStr && seenKeys.has(keyStr)) continue;
-
-      if (idStr) seenIds.add(idStr);
-      if (keyStr) seenKeys.add(keyStr);
-      unique.push(f);
-    }
-    return unique;
-  }, [flags]);
-
+  // Filter flags by search query and status
   const filteredFlags = useMemo(() => {
-    return uniqueFlags.filter((f) => {
+    return flags.filter((f) => {
       const matchesSearch =
         f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         f.service_name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -132,13 +76,53 @@ export default function FeatureFlagsPage() {
 
       return true;
     });
-  }, [uniqueFlags, searchQuery, statusFilter]);
+  }, [flags, searchQuery, statusFilter]);
 
-  // Summary Metrics
-  const totalFlags = uniqueFlags.length;
-  const activeCount = uniqueFlags.filter((f) => f.status === "enabled" && f.rollout_percent > 0).length;
-  const fullRolloutCount = uniqueFlags.filter((f) => f.rollout_percent === 100).length;
-  const autoDisabledCount = uniqueFlags.filter((f) => f.status === "auto-disabled").length;
+  // Live update handler
+  const handleUpdate = async (flagName: string, rolloutPercent: number, reason?: string): Promise<boolean> => {
+    return await updateFlag(flagName, rolloutPercent, reason);
+  };
+
+  // Live kill handler
+  const handleKill = async (flagName: string): Promise<boolean> => {
+    if (killFlag) {
+      return await killFlag(flagName);
+    }
+    return await updateFlag(flagName, 0, "Emergency operator kill switch");
+  };
+
+  // Create flag submission
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFlagName.trim()) return;
+    setCreating(true);
+    setCreateError(null);
+
+    const targetService = newFlagService.trim() || availableServices[0] || (serviceName !== "all" ? serviceName : "");
+    if (!targetService) {
+      setCreateError("Please select or enter a target service.");
+      setCreating(false);
+      return;
+    }
+
+    const created = await createFlag(newFlagName.trim(), newFlagRollout, targetService);
+    if (created) {
+      setNewFlagName("");
+      setNewFlagRollout(0);
+      setShowCreate(false);
+      refetch();
+      refetchServices();
+    } else {
+      setCreateError("Failed to create feature flag. Ensure the name is unique.");
+    }
+    setCreating(false);
+  };
+
+  // Summary Metrics calculated on live flags
+  const totalFlags = flags.length;
+  const activeCount = flags.filter((f) => f.status === "enabled" && f.rollout_percent > 0).length;
+  const fullRolloutCount = flags.filter((f) => f.rollout_percent === 100).length;
+  const autoDisabledCount = flags.filter((f) => f.status === "auto-disabled").length;
 
   return (
     <>
@@ -149,21 +133,20 @@ export default function FeatureFlagsPage() {
           <TopCommandHeader />
 
           {/* Hero Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-blue-500/15">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-[#27272a]">
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                    <span className="px-2.5 py-0.5 rounded-md text-[11px] font-mono font-medium bg-white/10 text-white border border-white/15">
                   FEATURE CONTROLLER
                 </span>
                 <span className="text-xs text-slate-400 font-mono">
                   Live Canary Rollouts
                 </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-2.5">
-                <span>Feature Flags & Canary Rollouts</span>
-                <Sparkles className="w-5 h-5 text-cyan-400" />
+              <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[#fafafa]">
+                Feature Flags &amp; Canary Rollouts
               </h1>
-              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+              <p className="text-sm text-slate-400 mt-1">
                 Progressive traffic distribution, emergency kill switches, and autonomous AI rollback governance
               </p>
             </div>
@@ -171,110 +154,117 @@ export default function FeatureFlagsPage() {
             <div className="flex items-center gap-2.5 shrink-0">
               <button
                 onClick={() => refetch()}
-                disabled={isLoading}
-                className="px-3.5 py-2 rounded-xl bg-[#091020]/80 hover:bg-[#091020] text-slate-300 hover:text-cyan-300 border border-white/[0.08] hover:border-cyan-500/30 text-xs font-mono font-semibold transition-all flex items-center gap-2 shadow-[0_0_10px_rgba(0,0,0,0.2)]"
+                disabled={apiLoading}
+                className="px-3.5 py-2 rounded-lg bg-[#18181b] hover:bg-[#27272a] text-[#a1a1aa] hover:text-[#fafafa] border border-[#27272a] hover:border-[#3f3f46] text-xs font-mono font-medium transition-colors flex items-center gap-2 cursor-pointer"
                 title="Refresh flag state"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-cyan-400" : ""}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${apiLoading ? "animate-spin text-[#fafafa]" : ""}`} />
                 <span>Sync Flags</span>
               </button>
 
               <button
                 onClick={() => {
-                  setNewFlagService(serviceName);
+                  setNewFlagService(serviceName !== "all" ? serviceName : (availableServices[0] || "payment-service"));
+                  setNewFlagName("");
+                  setNewFlagRollout(0);
+                  setCreateError(null);
                   setShowCreate(true);
                 }}
-                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition-all flex items-center gap-2 shadow-[0_0_20px_rgba(0,240,255,0.3)] hover:scale-105 active:scale-95"
+                className="px-4 py-2 rounded-lg bg-[#fafafa] hover:bg-[#e4e4e7] text-[#09090b] font-medium text-xs transition-colors flex items-center gap-2 cursor-pointer"
               >
-                <Plus className="w-4 h-4 text-black stroke-[3]" />
-                New Feature Flag
+                <Plus className="w-4 h-4 stroke-2" />
+                <span>New Feature Flag</span>
               </button>
             </div>
           </div>
 
           {/* Top Telemetry KPI Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div className="p-4 rounded-xl bg-[#091020]/80 border border-cyan-500/20 shadow-[0_4px_20px_rgba(0,240,255,0.05)]">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
-                  <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+            {/* Card 1: Total Scoped Flags */}
+            <div className="p-5 rounded-xl bg-[#0d1527] border border-[#27272a] hover:border-[#3f3f46] transition-colors">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-xs font-mono font-medium tracking-wider uppercase text-slate-400">
+                  <Sliders className="w-4 h-4 text-[#fafafa]" />
                   <span>Total Scoped Flags</span>
                 </div>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
-                  {serviceName}
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#18181b] text-[#a1a1aa] border border-[#27272a]">
+                  {serviceName === "all" ? "Fleet Wide" : serviceName}
                 </span>
               </div>
-              <div className="text-2xl sm:text-3xl font-bold font-mono text-cyan-300">
+              <div className="text-3xl font-semibold font-mono text-[#fafafa] tabular-nums">
                 {totalFlags}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">
-                Active for service: <span className="text-cyan-300 font-mono">{serviceName}</span>
+              <div className="text-xs text-slate-400 mt-1.5 font-mono">
+                Active scope: <span className="text-slate-400">{serviceName === "all" ? "All Microservices" : serviceName}</span>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-[#091020]/80 border border-emerald-500/20 shadow-[0_4px_20px_rgba(0,230,153,0.05)]">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            {/* Card 2: Active Canaries */}
+            <div className="p-5 rounded-xl bg-[#0d1527] border  border-[#27272a] hover:border-[#3f3f46] transition-colors">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-xs font-mono font-medium tracking-wider uppercase text-slate-400">
+                  <CheckCircle2 className="w-4 h-4 text-[#22c55e]" />
                   <span>Active Canaries</span>
                 </div>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#18181b] text-[#22c55e] border border-[#27272a]">
                   Routing
                 </span>
               </div>
-              <div className="text-2xl sm:text-3xl font-bold font-mono text-emerald-400">
+              <div className="text-3xl font-semibold font-mono text-[#22c55e] tabular-nums">
                 {activeCount}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">
+              <div className="text-xs text-slate-400 mt-1.5 font-mono">
                 Routing live traffic ({totalFlags > 0 ? ((activeCount / totalFlags) * 100).toFixed(0) : 0}%)
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-[#091020]/80 border border-teal-500/20 shadow-[0_4px_20px_rgba(20,184,166,0.05)]">
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
-                  <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+            {/* Card 3: 100% Full Rollout */}
+            <div className="p-5 rounded-xl bg-[#0d1527] border border-[#27272a] hover:border-[#3f3f46] transition-colors">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-xs font-mono font-medium tracking-wider uppercase text-slate-400">
+                  <Zap className="w-4 h-4 text-[#fafafa]" />
                   <span>100% Full Rollout</span>
                 </div>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-teal-500/10 text-teal-300 border border-teal-500/30">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#18181b] text-[#fafafa] border border-[#27272a]">
                   GA
                 </span>
               </div>
-              <div className="text-2xl sm:text-3xl font-bold font-mono text-teal-300">
+              <div className="text-3xl font-semibold font-mono text-[#fafafa] tabular-nums">
                 {fullRolloutCount}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">
+              <div className="text-xs text-slate-400 mt-1.5">
                 Production wide features
               </div>
             </div>
 
+            {/* Card 4: AI Auto-Disabled */}
             <div
-              className={`p-4 rounded-xl border shadow-[0_4px_20px_rgba(244,63,94,0.05)] transition-all ${
+              className={`p-5 rounded-xl border transition-colors ${
                 autoDisabledCount > 0
-                  ? "bg-rose-950/25 border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.15)]"
-                  : "bg-[#091020]/80 border-rose-500/20"
+                  ? "bg-[#0d1527] border-rose-500/40"
+                  : "bg-[#0d1527] border-[#27272a] hover:border-[#3f3f46]"
               }`}
             >
-              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-1.5 text-xs font-mono text-slate-300">
-                  <AlertTriangle className={`w-3.5 h-3.5 ${autoDisabledCount > 0 ? "text-rose-400 animate-pulse" : "text-slate-400"}`} />
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-xs font-mono font-medium tracking-wider uppercase text-slate-400">
+                  <AlertTriangle className={`w-4 h-4 ${autoDisabledCount > 0 ? "text-rose-400" : "text-[#71717a]"}`} />
                   <span>AI Auto-Disabled</span>
                 </div>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${autoDisabledCount > 0 ? "bg-rose-500/15 text-rose-300 border border-rose-500/30" : "bg-white/[0.04] text-slate-400 border border-white/[0.08]"}`}>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium ${autoDisabledCount > 0 ? "bg-rose-500/15 text-rose-300 border border-rose-500/30" : "bg-[#18181b] text-[#71717a] border border-[#27272a]"}`}>
                   {autoDisabledCount > 0 ? "Anomaly Locked" : "Nominal"}
                 </span>
               </div>
-              <div className={`text-2xl sm:text-3xl font-bold font-mono ${autoDisabledCount > 0 ? "text-rose-400" : "text-slate-100"}`}>
+              <div className={`text-3xl font-semibold font-mono tabular-nums ${autoDisabledCount > 0 ? "text-rose-400" : "text-[#fafafa]"}`}>
                 {autoDisabledCount}
               </div>
-              <div className="text-[11px] text-slate-400 mt-1">
+              <div className="text-xs text-slate-400 mt-1.5">
                 {autoDisabledCount > 0 ? "Automated anomaly rollbacks" : "Zero active anomaly locks"}
               </div>
             </div>
           </div>
 
           {/* Filters & Search Toolbar */}
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-2 rounded-2xl bg-[#091020]/60 border border-white/[0.08] backdrop-blur-xl">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 p-2 rounded-xl bg-[#091020] border border-cyan-500/20">
             {/* Status Filter Tabs */}
             <div className="flex flex-wrap items-center gap-1.5">
               {[
@@ -291,12 +281,12 @@ export default function FeatureFlagsPage() {
                 <button
                   key={tab.id}
                   onClick={() => setStatusFilter(tab.id as any)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-2 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors flex items-center gap-2 cursor-pointer ${
                     statusFilter === tab.id
                       ? tab.danger
-                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-[0_0_15px_rgba(244,63,94,0.2)]"
-                        : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_15px_rgba(0,240,255,0.15)]"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] border border-transparent"
+                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                        : "bg-[#18181b] text-[#fafafa] border border-[#3f3f46]"
+                      : "text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#18181b] border border-transparent"
                   }`}
                 >
                   {tab.label}
@@ -304,8 +294,8 @@ export default function FeatureFlagsPage() {
                     <span
                       className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                         tab.danger
-                          ? "bg-rose-500 text-white animate-pulse"
-                          : "bg-cyan-500/20 text-cyan-300"
+                          ? "bg-rose-500 text-white"
+                          : "bg-[#27272a] text-[#fafafa]"
                       }`}
                     >
                       {tab.count}
@@ -321,29 +311,30 @@ export default function FeatureFlagsPage() {
               <div className="w-full sm:w-auto flex items-center gap-1.5">
                 <select
                   value={serviceName}
-                  onChange={(e) => {
-                    setServiceName(e.target.value);
-                    setDraftService(e.target.value);
-                  }}
-                  className="w-full sm:w-44 px-3 py-2 rounded-xl bg-black/50 border border-white/[0.1] text-xs font-mono text-slate-300 focus:outline-none focus:border-cyan-500/50"
+                  onChange={(e) => setServiceName(e.target.value)}
+                  className="w-full sm:w-48 px-3 py-1.5 rounded-lg bg-[#18181b] border border-[#27272a] text-xs font-mono text-[#fafafa] focus:outline-none focus:border-[#3f3f46] cursor-pointer"
                 >
-                  {availableServices.map((svc) => (
-                    <option key={svc} value={svc}>
-                      {svc}
-                    </option>
-                  ))}
+                  <option value="all">All Services ({flags.length})</option>
+                  {availableServices.map((svc) => {
+                    const count = flags.filter((f) => f.service_name.toLowerCase() === svc.toLowerCase()).length;
+                    return (
+                      <option key={svc} value={svc}>
+                        {svc} ({count})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
-              {/* Search Input with standard cyber glass style */}
+              {/* Search Input */}
               <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-[#71717a] absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Filter flags by name..."
-                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-black/50 border border-white/[0.1] text-xs font-mono text-slate-200 placeholder-slate-400 focus:outline-none focus:border-cyan-500/50"
+                  className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-[#18181b] border border-[#27272a] text-xs font-mono text-[#fafafa] placeholder-[#71717a] focus:outline-none focus:border-[#3f3f46]"
                 />
               </div>
             </div>
@@ -358,104 +349,103 @@ export default function FeatureFlagsPage() {
           )}
 
           {/* Flags List / Grid */}
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-24 gap-3">
-              <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs font-mono text-cyan-300">
-                Synchronizing feature flags for {serviceName}...
-              </span>
-            </div>
-          ) : filteredFlags.length === 0 ? (
-            <div className="rounded-2xl bg-[#091020]/60 border border-white/[0.08] backdrop-blur-xl p-12 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mx-auto mb-3 text-slate-500">
-                <Flag className="w-6 h-6" />
+          {filteredFlags.length === 0 ? (
+            <div className="rounded-xl bg-[#0d1527] border border-[#27272a] p-12 text-center">
+              <div className="inline-flex p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/25 mb-4 text-cyan-400">
+                <Flag className="w-7 h-7" />
               </div>
-              <h3 className="text-base font-bold text-slate-200 mb-1">
-                No feature flags found
+              <h3 className="text-xl font-semibold mb-2 text-white tracking-tight">
+                No feature flags match your filters
               </h3>
-              <p className="text-xs text-slate-400 max-w-md mx-auto mb-5 leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-400 mb-6 max-w-md mx-auto leading-relaxed">
                 {searchQuery || statusFilter !== "all"
                   ? "No flags match the current search query and status filters."
+                  : serviceName === "all"
+                  ? "No feature flags are currently registered across your services. Create your first flag to start canary rollouts."
                   : `There are no feature flags registered under "${serviceName}". Create your first flag to start canary rollouts.`}
               </p>
               <button
                 onClick={() => {
-                  setNewFlagService(serviceName);
+                  setNewFlagService(serviceName !== "all" ? serviceName : (availableServices[0] || ""));
+                  setNewFlagName("");
+                  setNewFlagRollout(0);
+                  setCreateError(null);
                   setShowCreate(true);
                 }}
-                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-semibold text-xs transition-all shadow-[0_0_15px_rgba(0,240,255,0.25)] inline-flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-[#fafafa] hover:bg-[#e4e4e7] text-[#09090b] font-medium text-xs transition-colors inline-flex items-center gap-2 cursor-pointer"
               >
-                <Plus className="w-4 h-4 text-black stroke-[3]" />
-                Create New Flag
+                <Plus className="w-4 h-4 stroke-2" />
+                <span>Create New Flag</span>
               </button>
             </div>
           ) : (
-            <div className="grid gap-4">
+            <div className="grid gap-3.5">
               {filteredFlags.map((flag) => (
                 <FlagCard
                   key={flag.id ? `flag-id-${flag.id}` : `flag-key-${flag.service_name}-${flag.name}`}
                   flag={flag}
-                  onUpdate={updateFlag}
-                  onKill={killFlag}
+                  onUpdate={handleUpdate}
+                  onKill={handleKill}
+                  latestTraceId={flag.status === "auto-disabled" ? "tr-anomaly-rollback" : null}
                 />
               ))}
             </div>
           )}
 
           {/* Global Service Audit Trail */}
-          {!isLoading && (
-            <div className="pt-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
-                  <Layers className="w-4 h-4 text-cyan-400" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-slate-100">
-                    Service Audit Stream
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Chronological trace of all operator changes and autonomous AI rollbacks for {serviceName}
-                  </p>
-                </div>
+          <div className="pt-6 border-t border-[#27272a]">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="p-1.5 rounded-md bg-[#0d1527] border border-[#27272a] text-[#a1a1aa]">
+                <Layers className="w-7 h-7" />
               </div>
-
-              <div className="rounded-2xl bg-[#091020]/70 border border-white/[0.08] backdrop-blur-xl p-5 sm:p-6 shadow-[0_0_20px_rgba(0,0,0,0.3)]">
-                <FlagAuditLog serviceName={serviceName} />
+              <div>
+                <h2 className="text-base font-semibold text-[#fafafa]">
+                  Service Audit Stream
+                </h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  Chronological trace of all operator changes and autonomous AI rollbacks for {serviceName === "all" ? "all services" : serviceName}
+                </p>
               </div>
             </div>
-          )}
+
+            <div className="rounded-xl bg-[#0d1527] border border-[#27272a] p-5 sm:p-6">
+              <FlagAuditLog
+                serviceName={serviceName}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Create Flag Modal */}
       {showCreate && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
           onClick={() => setShowCreate(false)}
         >
           <div
-            className="relative w-full max-w-lg bg-[#091020]/95 border border-cyan-500/30 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden text-slate-100 p-6"
+            className="relative w-full max-w-lg bg-[#0d1527] border border-[#27272a] rounded-xl shadow-2xl overflow-hidden text-[#fafafa] p-6"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/[0.08]">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center">
-                  <Flag className="w-4 h-4 text-cyan-400" />
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#27272a]">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-md bg-[#0d1527] border border-[#27272a] text-[#fafafa]">
+                  <Flag className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold font-mono text-slate-100">
+                  <h3 className="text-base font-semibold text-[#fafafa]">
                     Create New Feature Flag
                   </h3>
-                  <p className="text-[11px] font-mono text-cyan-400">
-                    Target Service: {newFlagService || serviceName}
+                  <p className="text-[11px] font-mono text-[#a1a1aa]">
+                    Target Service: {newFlagService}
                   </p>
                 </div>
               </div>
 
               <button
                 onClick={() => setShowCreate(false)}
-                className="w-8 h-8 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.08] flex items-center justify-center text-slate-400 hover:text-slate-200 transition-colors"
+                className="w-7 h-7 rounded-md bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] flex items-center justify-center text-[#a1a1aa] hover:text-[#fafafa] transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -464,64 +454,62 @@ export default function FeatureFlagsPage() {
             {/* Form */}
             <form onSubmit={handleCreate} className="space-y-4">
               {createError && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
                   {createError}
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1.5 font-semibold">
-                  Flag Name <span className="text-cyan-400">*</span>
+                <label className="block text-xs font-mono text-[#fafafa] mb-1.5 font-medium">
+                  Flag Name <span className="text-[#22c55e]">*</span>
                 </label>
                 <input
                   value={newFlagName}
                   onChange={(e) => setNewFlagName(e.target.value)}
                   placeholder="e.g. smart-caching-v2"
                   required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/[0.1] text-sm font-mono text-slate-100 focus:outline-none focus:border-cyan-500/60 placeholder:text-slate-600"
+                  className="w-full px-3 py-2 rounded-lg bg-[#18181b] border border-[#27272a] text-sm font-mono text-[#fafafa] focus:outline-none focus:border-[#3f3f46] placeholder-[#71717a]"
                 />
-                <span className="text-[10px] font-mono text-slate-500 mt-1 block">
+                <span className="text-[11px] font-mono text-[#71717a] mt-1 block">
                   Lowercase alphanumeric with hyphens
                 </span>
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-slate-300 mb-1.5 font-semibold">
-                  Target Service
+                <label className="block text-xs font-mono text-[#fafafa] mb-1.5 font-medium">
+                  Target Service <span className="text-[#22c55e]">*</span>
                 </label>
-                <input
-                  value={newFlagService}
-                  onChange={(e) => setNewFlagService(e.target.value)}
-                  placeholder="service-name"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-white/[0.1] text-sm font-mono text-slate-100 focus:outline-none focus:border-cyan-500/60 mb-2"
-                />
-                {availableServices.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-mono text-slate-500">Existing:</span>
+                {availableServices.length > 0 ? (
+                  <select
+                    value={newFlagService}
+                    onChange={(e) => setNewFlagService(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[#18181b] border border-[#27272a] text-sm font-mono text-[#fafafa] focus:outline-none focus:border-[#3f3f46] cursor-pointer"
+                    required
+                  >
+                    <option value="" disabled>Select microservice</option>
                     {availableServices.map((srv) => (
-                      <button
-                        key={srv}
-                        type="button"
-                        onClick={() => setNewFlagService(srv)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all border ${
-                          newFlagService === srv
-                            ? "bg-cyan-500/20 text-cyan-200 border-cyan-500/40"
-                            : "bg-white/[0.03] text-slate-400 border-white/[0.06] hover:text-slate-200"
-                        }`}
-                      >
+                      <option key={srv} value={srv}>
                         {srv}
-                      </button>
+                      </option>
                     ))}
-                  </div>
+                  </select>
+                ) : (
+                  <input
+                    value={newFlagService}
+                    onChange={(e) => setNewFlagService(e.target.value)}
+                    placeholder="e.g. payment-service"
+                    className="w-full px-3 py-2 rounded-lg bg-[#18181b] border border-[#27272a] text-sm font-mono text-[#fafafa] focus:outline-none focus:border-[#3f3f46] placeholder-[#71717a]"
+                    required
+                  />
                 )}
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-mono text-slate-300 font-semibold">
+                  <label className="text-xs font-mono text-[#fafafa] font-medium">
                     Initial Canary Rollout:
                   </label>
-                  <span className="text-sm font-mono font-bold text-cyan-300 tabular-nums">
+                  <span className="text-sm font-mono font-semibold text-[#22c55e] tabular-nums">
                     {newFlagRollout}%
                   </span>
                 </div>
@@ -534,7 +522,7 @@ export default function FeatureFlagsPage() {
                   step={5}
                   value={newFlagRollout}
                   onChange={(e) => setNewFlagRollout(parseInt(e.target.value))}
-                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                  className="w-full h-2 bg-[#18181b] rounded-lg appearance-none cursor-pointer accent-[#22c55e]"
                 />
 
                 {/* Presets */}
@@ -544,10 +532,10 @@ export default function FeatureFlagsPage() {
                       key={pct}
                       type="button"
                       onClick={() => setNewFlagRollout(pct)}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-mono font-semibold transition-all border ${
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-medium transition-colors border cursor-pointer ${
                         newFlagRollout === pct
-                          ? "bg-cyan-500/20 text-cyan-200 border-cyan-500/40 shadow-[0_0_8px_rgba(0,240,255,0.2)]"
-                          : "bg-white/[0.03] text-slate-400 border-white/[0.06] hover:text-slate-200"
+                          ? "bg-[#fafafa] text-[#09090b] border-[#fafafa]"
+                          : "bg-[#18181b] text-[#a1a1aa] border-[#27272a] hover:text-[#fafafa] hover:border-[#3f3f46]"
                       }`}
                     >
                       {pct}%
@@ -557,18 +545,18 @@ export default function FeatureFlagsPage() {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/[0.08]">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#27272a]">
                 <button
                   type="button"
                   onClick={() => setShowCreate(false)}
-                  className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-400 hover:text-slate-200 text-xs font-mono transition-colors"
+                  className="px-3.5 py-2 rounded-lg bg-[#18181b] hover:bg-[#27272a] border border-[#27272a] text-[#a1a1aa] hover:text-[#fafafa] text-xs font-mono transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!newFlagName.trim() || creating}
-                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs transition-all shadow-[0_0_20px_rgba(0,240,255,0.25)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-lg bg-[#fafafa] hover:bg-[#e4e4e7] text-[#09090b] font-medium text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {creating ? "Creating Flag..." : "Create Feature Flag"}
                 </button>
@@ -580,4 +568,3 @@ export default function FeatureFlagsPage() {
     </>
   );
 }
-
